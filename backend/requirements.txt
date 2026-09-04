@@ -1,5 +1,6 @@
 agent-detector==2.0.0
 alembic==1.19.1
+aiosqlite==0.21.0
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.0
