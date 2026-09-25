@@ -72,4 +72,4 @@ async def register_user(user: CreateUserDTO, db: AsyncSession = Depends(get_db_s
               }
           })
 async def login_user(user:LoginUserRequestDTO, db: AsyncSession = Depends(get_db_session)) -> LoginUserResponseDTO:
-    pass
+    return await auth_service.login(user, db)
