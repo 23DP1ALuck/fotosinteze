@@ -14,6 +14,7 @@ from app.dto.create_user_response_dto import CreateUserResponseDTO
 from app.dto.login_user_request_dto import LoginUserRequestDTO
 from app.dto.login_user_response_dto import LoginUserResponseDTO
 
+from app.services import auth_service
 
 # inspired from
 # https://medium.com/@tclaitken/setting-up-a-fastapi-app-with-async-sqlalchemy-2-0-pydantic-v2-e6c540be4308
@@ -47,7 +48,7 @@ def read_root():
               }
           })
 async def register_user(user: CreateUserDTO, db: AsyncSession = Depends(get_db_session)) -> CreateUserResponseDTO:
-    pass
+    return await auth_service.register(user, db)
 
 
 @app.post("/auth/login",
