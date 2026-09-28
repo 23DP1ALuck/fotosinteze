@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
+from pydantic import Field
 
 class Settings(BaseSettings):
     database_url: str
@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     project_name: str = "Fotosinteze backend"
     oauth_token_secret: str = "my_dev_secret"
     log_level: str = "DEBUG"
+    client_url: str
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
