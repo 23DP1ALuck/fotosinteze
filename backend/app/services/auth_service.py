@@ -52,7 +52,7 @@ async def login(login_user_request: LoginUserRequestDTO, db: AsyncSession = Depe
     if not bcrypt.checkpw(login_user_request.password.encode(), exists.password.encode()):
         raise HTTPException(status_code=401, detail="Incorrect password")
     encoded = jwt.encode({
-        "sub": exists.user_id,
+        "sub": str(exists.user_id),
         "email": login_user_request.email,
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=60)
