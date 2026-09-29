@@ -1,6 +1,8 @@
+from uuid import uuid4
+
 from fastapi import HTTPException
 from fastapi import Depends
-from sqlalchemy import select, Select, or_
+from sqlalchemy import select, update, Select, or_
 import bcrypt
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -9,10 +11,12 @@ from app.database import get_db_session
 from app.dto.create_user_dto import CreateUserDTO
 from app.dto.create_user_response_dto import CreateUserResponseDTO
 from app.dto.login_user_request_dto import LoginUserRequestDTO
+from app.dto.access_token_response_dto import AccessTokenResponseDTO
 from app.dto.login_user_response_dto import LoginUserResponseDTO
 
 from app.database import AsyncSession
-from app.models import User
+from app.models.user import User
+from app.models.auth_sessions import AuthSession
 from app.config import settings
 
 
@@ -47,15 +51,158 @@ async def login(login_user_request: LoginUserRequestDTO, db: AsyncSession = Depe
     result = await db.execute(stmt)
     exists = result.scalar()
     if not exists:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(status_code=404, detail="User not found")
     # compare passwords only if user was found
     if not bcrypt.checkpw(login_user_request.password.encode(), exists.password.encode()):
         raise HTTPException(status_code=401, detail="Incorrect password")
-    encoded = jwt.encode({
+    refresh_jti = str(uuid4())
+    session = await create_session(exists.user_id, refresh_jti, db)
+    access_token = jwt.encode({
+        "sid": session.session_id,
         "sub": str(exists.user_id),
         "email": login_user_request.email,
+        "type": "access",
         "iat": datetime.now(timezone.utc),
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=60)
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=15)
     }, settings.jwt_secret, algorithm="HS256")
-    response = LoginUserResponseDTO(access_token=encoded)
+    refresh_token = jwt.encode({
+        "jti": refresh_jti,
+        "sid": session.session_id,
+        "sub": str(exists.user_id),
+        "email": login_user_request.email,
+        "type": "refresh",
+        "iat": datetime.now(timezone.utc),
+        "exp": session.expires_at.replace(tzinfo=timezone.utc)
+    }, settings.jwt_secret, algorithm="HS256")
+    response = LoginUserResponseDTO(access_token=access_token, refresh_token=refresh_token)
     return response
+
+async def create_session(user_id: int, jti: str, db: AsyncSession = Depends(get_db_session)) -> AuthSession:
+    session_id = str(uuid4())
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    auth_session = AuthSession(
+        session_id=session_id,
+        user_id=user_id,
+        jti=jti,
+        expires_at=expires_at
+    )
+    db.add(auth_session)
+    await db.commit()
+    await db.refresh(auth_session)
+    return auth_session
+
+async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db_session)) -> LoginUserResponseDTO:
+    try:
+        payload: dict = jwt.decode(
+            refresh_token, 
+            settings.jwt_secret, 
+            algorithms=["HS256"], 
+            options={"require": ["jti", "sub", "sid", "exp", "type"]}
+        )
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user_id = int(payload["sub"])
+        session_id = payload["sid"]
+        jti = payload["jti"]
+        if user_id is None or session_id is None or jti is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except (ValueError, jwt.PyJWTError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    stmt = select(AuthSession).where(
+        AuthSession.session_id == session_id,
+        AuthSession.user_id == user_id,
+        AuthSession.jti == jti,
+        AuthSession.expires_at > datetime.now(timezone.utc).replace(tzinfo=None),
+        AuthSession.revoked_at == None
+    )
+    result = await db.execute(stmt)
+    session = result.scalar()
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    stmt = select(User).where(User.user_id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_access_token = jwt.encode({
+        "sid": session.session_id,
+        "sub": str(user.user_id),
+        "email": user.email,
+        "type": "access",
+        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=15)
+    }, settings.jwt_secret, algorithm="HS256")
+
+    new_refresh_jti = str(uuid4())
+    
+    new_refresh_token = jwt.encode({
+        "jti": new_refresh_jti,
+        "sid": session.session_id,
+        "sub": str(user.user_id),
+        "email": user.email,
+        "type": "refresh",
+        "iat": datetime.now(timezone.utc),
+        "exp": session.expires_at.replace(tzinfo=timezone.utc)
+    }, settings.jwt_secret, algorithm="HS256")
+
+    # Only the request presenting the current refresh token may replace it.
+    result = await db.execute(
+        update(AuthSession).where(
+            AuthSession.session_id == session_id,
+            AuthSession.user_id == user_id,
+            AuthSession.jti == jti,
+            AuthSession.expires_at > datetime.now(timezone.utc).replace(tzinfo=None),
+            AuthSession.revoked_at.is_(None)
+        ).values(jti=new_refresh_jti)
+    )
+    if result.rowcount != 1:
+        await db.rollback()
+        raise HTTPException(status_code=401, detail="Invalid session")
+    await db.commit()
+    
+    return LoginUserResponseDTO(access_token=new_access_token, refresh_token=new_refresh_token)
+
+async def logout(refresh_token: str, db: AsyncSession = Depends(get_db_session)) -> dict:
+    try:
+        payload: dict = jwt.decode(
+            refresh_token,
+            settings.jwt_secret, 
+            algorithms=["HS256"], 
+            options={"require": ["jti", "sub", "sid", "exp", "type"]}
+        )
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user_id = int(payload["sub"])
+        session_id = payload["sid"]
+        if user_id is None or session_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except (ValueError, jwt.PyJWTError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    stmt = select(AuthSession).where(
+        AuthSession.session_id == session_id,
+        AuthSession.user_id == user_id,
+        AuthSession.expires_at > datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    result = await db.execute(stmt)
+    session = result.scalar()
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    if session.revoked_at is not None:
+        return {"detail": "Successfully logged out"}
+
+    # Revoke the session by setting revoked_at to current time
+    result = await db.execute(
+        update(AuthSession).where(
+            AuthSession.session_id == session_id,
+            AuthSession.user_id == user_id,
+            AuthSession.revoked_at.is_(None)
+        ).values(revoked_at=datetime.now(timezone.utc))
+    )
+
+    await db.commit()
+
+    return {"detail": "Successfully logged out"}
