@@ -12,7 +12,7 @@ from app.dto.login_user_request_dto import LoginUserRequestDTO
 from app.dto.login_user_response_dto import LoginUserResponseDTO
 
 from app.database import AsyncSession
-from app.models import User
+from app.models.user import User
 from app.config import settings
 
 

@@ -10,7 +10,7 @@ from app.database import AsyncSession
 from sqlalchemy import select, and_
 
 from app.database import get_db_session
-from app.models import User
+from app.models.user import User
 
 from fastapi import HTTPException
 
@@ -26,16 +26,13 @@ async def get_current_user(credentials: Annotated[HTTPAuthorizationCredentials, 
                                 detail="Could not validate credentials.",
                                 headers={"WWW-Authenticate": "Bearer"}
                               )
-    payload: dict = {}
     try:
         payload: dict = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])  # decode encoded data from bearer token
         user_id : str | None = payload.get("sub")
         if user_id is None:
-            raise HTTPException(status_code=401,
-                                detail="Could not validate credentials.",
-                                headers={"WWW-Authenticate": "Bearer"})
+            raise credentials_exception
     except (ValueError, PyJWTError):
-        raise HTTPException(status_code=401, detail="Could not validate credentials.")
+        raise credentials_exception
 
     stmt = select(User).where(User.user_id == int(payload.get("sub"))) # check if user with this id and email exists
     result = await db.execute(stmt)
@@ -43,4 +40,4 @@ async def get_current_user(credentials: Annotated[HTTPAuthorizationCredentials, 
 
     if not exists:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    return exists
+    return payload
