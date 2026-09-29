@@ -15,6 +15,7 @@ from app.database import AsyncSession
 from app.models.user import User
 from app.config import settings
 
+from app.models.workspace import Workspace, WorkspaceTypeEnum, WorkspaceUsers, WorkspaceRole
 
 
 async def register(create_user_request: CreateUserDTO, db: AsyncSession = Depends(get_db_session)) -> CreateUserResponseDTO:
@@ -30,9 +31,30 @@ async def register(create_user_request: CreateUserDTO, db: AsyncSession = Depend
             email=create_user_request.email,
             password=hashed_password.decode('UTF-8')
         )
+
         db.add(user)
-        await db.commit()
+        await db.flush()
+
+        personal_workspace = Workspace( # user has his own personal workspace after successful registration
+            name=f"{user.display_name} Personal Workspace",
+            type=WorkspaceTypeEnum.personal,
+            )
+
+        db.add(personal_workspace)
+
+        await db.flush()
+
+        workspace_users = WorkspaceUsers(
+            user_id=user.user_id,
+            workspace_id=personal_workspace.workspace_id,
+            role=WorkspaceRole.owner, # user is an owner in its personal workspace by default
+        )
+        db.add(workspace_users)
+
+        await db.commit() # commit the transaction with all 3 inserts
+
         await db.refresh(user)
+
         user_response = CreateUserResponseDTO(
             id = user.user_id,
             display_name = user.display_name,
