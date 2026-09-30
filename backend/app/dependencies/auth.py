@@ -10,8 +10,8 @@ from app.database import AsyncSession
 from sqlalchemy import select, and_
 
 from app.database import get_db_session
-from app.models.user import User
-from app.models.auth_sessions import AuthSession
+
+from app.models import User,AuthSession
 
 from fastapi import HTTPException
 

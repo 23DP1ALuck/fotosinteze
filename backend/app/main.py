@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import sessionmanager
 
-from app.api.routes import auth, wallets
+from app.api.routes import auth
 
 
 # inspired from
