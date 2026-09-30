@@ -11,10 +11,13 @@ from sqlalchemy import select, and_
 
 from app.database import get_db_session
 from app.models.user import User
+from app.models.auth_sessions import AuthSession
 
 from fastapi import HTTPException
 
 from jwt import PyJWTError
+
+from datetime import datetime, timezone
 
 #get the authorization bearer token
 bearer_scheme = HTTPBearer()
@@ -27,14 +30,36 @@ async def get_current_user(credentials: Annotated[HTTPAuthorizationCredentials, 
                                 headers={"WWW-Authenticate": "Bearer"}
                               )
     try:
-        payload: dict = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])  # decode encoded data from bearer token
-        user_id : str | None = payload.get("sub")
-        if user_id is None:
+        payload: dict = jwt.decode(
+            token, 
+            settings.jwt_secret, 
+            algorithms=["HS256"], 
+            options={"require": ["sub", "sid", "exp", "type"]}
+        )  # decode encoded data from bearer token
+        if payload.get("type") != "access": # ensure that the token is an access token and not a refresh token
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        
+        user_id = int(payload["sub"])
+        session_id = payload["sid"]
+        if user_id is None or session_id is None:
             raise credentials_exception
     except (ValueError, PyJWTError):
         raise credentials_exception
 
-    stmt = select(User).where(User.user_id == int(payload.get("sub"))) # check if user with this id and email exists
+    # check if session ist't revoked or expired
+    stmt = select(AuthSession).where(
+        and_(
+            AuthSession.session_id == session_id,
+            AuthSession.user_id == user_id,
+            AuthSession.expires_at > datetime.now(timezone.utc).replace(tzinfo=None),
+            AuthSession.revoked_at == None
+        )
+    )
+    result = await db.execute(stmt)
+    session = result.scalar()
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    stmt = select(User).where(User.user_id == user_id) # check if user with this id and email exists
     result = await db.execute(stmt)
     exists = result.scalar()
 
