@@ -29,7 +29,6 @@ async def get_current_user(credentials: Annotated[HTTPAuthorizationCredentials, 
                                 detail="Could not validate credentials.",
                                 headers={"WWW-Authenticate": "Bearer"}
                               )
-    payload: dict = {}
     try:
         payload: dict = jwt.decode(
             token, 
@@ -66,4 +65,4 @@ async def get_current_user(credentials: Annotated[HTTPAuthorizationCredentials, 
 
     if not exists:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    return exists
+    return payload
