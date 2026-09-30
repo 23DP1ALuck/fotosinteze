@@ -6,13 +6,13 @@ import jwt
 
 from app.config import settings
 
-from app.dto.create_user_response_dto import CreateUserResponseDTO
-from app.dto.create_user_dto import CreateUserDTO
-from app.dto.login_user_response_dto import LoginUserResponseDTO
 from app.services import auth_service
 from app.database import AsyncSession, get_db_session
-from app.dto.login_user_request_dto import LoginUserRequestDTO
-from app.dto.access_token_response_dto import AccessTokenResponseDTO
+
+from app.dto import (LoginUserRequestDTO,
+                     AccessTokenResponseDTO,
+                     CreateUserDTO,
+                     CreateUserResponseDTO)
 
 router = APIRouter()
 

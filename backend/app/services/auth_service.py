@@ -8,15 +8,15 @@ import jwt
 from datetime import datetime, timedelta, timezone
 
 from app.database import get_db_session
-from app.dto.create_user_dto import CreateUserDTO
-from app.dto.create_user_response_dto import CreateUserResponseDTO
-from app.dto.login_user_request_dto import LoginUserRequestDTO
-from app.dto.access_token_response_dto import AccessTokenResponseDTO
-from app.dto.login_user_response_dto import LoginUserResponseDTO
+
+from app.dto import (CreateUserResponseDTO,
+                     LoginUserRequestDTO,
+                     CreateUserDTO,
+                     LoginUserResponseDTO)
 
 from app.database import AsyncSession
 from app.models.user import User
-from app.models.auth_sessions import AuthSession
+from app.models import AuthSession
 from app.config import settings
 
 from app.models.workspace import Workspace, WorkspaceTypeEnum, WorkspaceUsers, WorkspaceRole
