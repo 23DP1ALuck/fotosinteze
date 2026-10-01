@@ -83,6 +83,7 @@ async def login(login_user_request: LoginUserRequestDTO, db: AsyncSession = Depe
         "sid": session.session_id,
         "sub": str(exists.user_id),
         "email": login_user_request.email,
+        "display_name": exists.display_name,
         "type": "access",
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=15)
@@ -114,6 +115,7 @@ async def create_session(user_id: int, jti: str, db: AsyncSession = Depends(get_
     return auth_session
 
 async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db_session)) -> LoginUserResponseDTO:
+    # Validate the refresh token and extract the payload
     try:
         payload: dict = jwt.decode(
             refresh_token, 
@@ -131,6 +133,7 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db_se
     except (ValueError, jwt.PyJWTError):
         raise HTTPException(status_code=401, detail="Invalid token")
 
+    # Check if the session is valid and not revoked
     stmt = select(AuthSession).where(
         AuthSession.session_id == session_id,
         AuthSession.user_id == user_id,
@@ -149,17 +152,20 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db_se
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Generate new access tokens
     new_access_token = jwt.encode({
         "sid": session.session_id,
         "sub": str(user.user_id),
         "email": user.email,
+        "display_name": user.display_name,
         "type": "access",
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=15)
     }, settings.jwt_secret, algorithm="HS256")
 
-    new_refresh_jti = str(uuid4())
-    
+    new_refresh_jti = str(uuid4()) # Generate a new jti for the refresh token
+
+    # Generate a new refresh token with the same session_id and user_id, but a new jti
     new_refresh_token = jwt.encode({
         "jti": new_refresh_jti,
         "sid": session.session_id,
@@ -178,7 +184,7 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db_se
             AuthSession.jti == jti,
             AuthSession.expires_at > datetime.now(timezone.utc).replace(tzinfo=None),
             AuthSession.revoked_at.is_(None)
-        ).values(jti=new_refresh_jti)
+        ).values(jti=new_refresh_jti) # New jti is set for the refresh token, so that the old one is invalidated
     )
     if result.rowcount != 1:
         await db.rollback()

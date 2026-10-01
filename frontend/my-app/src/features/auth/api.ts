@@ -46,7 +46,30 @@ export async function loginUser(input: {
 }): Promise<LoginResponse> {
   return request<LoginResponse>('/auth/login', {
     method: 'POST',
+    credentials: 'include',
     body: JSON.stringify(input),
+  })
+}
+
+let refreshInFlight: Promise<LoginResponse> | null = null
+
+export function refreshAccessToken(): Promise<LoginResponse> {
+  // React Strict Mode can mount twice; share one request so the cookie rotates only once.
+  if (!refreshInFlight) {
+    refreshInFlight = request<LoginResponse>('/auth/refresh', {
+      method: 'POST',
+      credentials: 'include',
+    }).finally(() => {
+      refreshInFlight = null
+    })
+  }
+  return refreshInFlight
+}
+
+export async function logoutUser(): Promise<void> {
+  await request<{ detail: string }>('/auth/logout', {
+    method: 'POST',
+    credentials: 'include',
   })
 }
 

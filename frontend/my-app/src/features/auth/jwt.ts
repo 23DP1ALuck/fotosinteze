@@ -1,6 +1,7 @@
 type JwtPayload = {
   sub?: string
   email?: string
+  display_name?: string
   exp?: number
 }
 

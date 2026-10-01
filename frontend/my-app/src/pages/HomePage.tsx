@@ -1,9 +1,20 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { useAuth } from '@/features/auth/auth-context'
+import { useAuth } from '@/features/auth/use-auth'
 
 function HomePage() {
   const { user, logout } = useAuth()
+  const [logoutError, setLogoutError] = useState<string | null>(null)
+
+  async function handleLogout() {
+    setLogoutError(null)
+    try {
+      await logout()
+    } catch {
+      setLogoutError('Could not log out. Please try again.')
+    }
+  }
 
   return (
     <div className="flex min-h-svh flex-col bg-[#f9f9f6]">
@@ -21,13 +32,19 @@ function HomePage() {
           </span>
           <button
             type="button"
-            onClick={logout}
+            onClick={handleLogout}
             className="rounded-lg border border-[#d1d5db] bg-white px-3 py-1.5 text-sm font-medium text-[#1a3c34] hover:bg-[#f3f4f6]"
           >
             Log out
           </button>
         </div>
       </header>
+
+      {logoutError && (
+        <p role="alert" className="px-6 py-2 text-sm text-red-700">
+          {logoutError}
+        </p>
+      )}
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-16 text-left">
         <h1 className="text-3xl font-semibold tracking-tight text-[#1a2e2a]">
