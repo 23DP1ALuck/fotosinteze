@@ -3,8 +3,7 @@ import os
 from logging.config import fileConfig
 from alembic import context
 from app.database import Base
-from app.models.user import User
-from app.models.workspace import Workspace
+from app.models import User, Workspace, Category, RevolutConnection
 from asyncpg import Connection
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
