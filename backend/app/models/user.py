@@ -6,8 +6,10 @@ from typing import TYPE_CHECKING, List
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, DateTime
 
-if TYPE_CHECKING: # need specify for runtime because modules imports each other
-    from app.models.workspace import WorkspaceUsers
+
+
+if TYPE_CHECKING: # need specify to prevent circular import error
+    from app.models import WorkspaceUsers, RevolutConnection
 
 class User(Base):
     __tablename__ = "users"
@@ -23,3 +25,5 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+    revolut_connection: Mapped["RevolutConnection"] = relationship(back_populates="connected_by")

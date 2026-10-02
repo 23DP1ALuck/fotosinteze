@@ -1,10 +1,13 @@
+from typing import TYPE_CHECKING
+
 from app.database import Base
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Text, DateTime, ForeignKey
 
 from datetime import datetime
 
-from app.models import User
+if TYPE_CHECKING: # need specify to prevent circular import error
+    from app.models import User
 
 
 class RevolutConnection(Base):
@@ -21,8 +24,8 @@ class RevolutConnection(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
 
     connected_by_id: Mapped[int] = mapped_column(
-        "connected_by",
         ForeignKey("users.user_id"),
         nullable=False
     )
-    connected_by: Mapped["User"] = relationship("User", back_populates="connections")
+
+    connected_by: Mapped["User"] = relationship("User", back_populates="revolut_connection")
