@@ -7,7 +7,7 @@ from sqlalchemy import String, Text, DateTime, ForeignKey
 from datetime import datetime
 
 if TYPE_CHECKING: # need specify to prevent circular import error
-    from app.models import User
+    from app.models import User, Account
 
 
 class RevolutConnection(Base):
@@ -18,8 +18,8 @@ class RevolutConnection(Base):
     access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=True)
     refresh_token_encrypted: Mapped[str] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
-    last_sync_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
 
@@ -28,4 +28,7 @@ class RevolutConnection(Base):
         nullable=False
     )
 
-    connected_by: Mapped["User"] = relationship("User", back_populates="revolut_connection")
+    connected_by: Mapped["User"] = relationship("User", back_populates="revolut_connections")
+    account: Mapped["Account"] = relationship("Account",
+                                              back_populates="connection",
+                                              cascade="all, delete-orphan")
