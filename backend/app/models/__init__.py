@@ -5,6 +5,8 @@ from app.models.category import Category
 from app.models.revolut_connection import RevolutConnection
 from app.models.departments import Department
 from app.models.account import Account
+from app.models.projects import Project
+from app.models.expenses import Expense
 
 __all__ = [
     "User",
@@ -14,5 +16,7 @@ __all__ = [
     "RevolutConnection",
     "Department",
     "WorkspaceUsers",
-    "Account"
+    "Account",
+    "Project",
+    "Expense",
 ]
