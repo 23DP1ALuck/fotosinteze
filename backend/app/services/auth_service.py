@@ -1,7 +1,6 @@
 from uuid import uuid4
 
-from fastapi import HTTPException
-from fastapi import Depends
+from fastapi import HTTPException, Depends
 from sqlalchemy import select, update, Select, or_
 import bcrypt
 import jwt
@@ -15,8 +14,7 @@ from app.dto import (CreateUserResponseDTO,
                      LoginUserResponseDTO)
 
 from app.database import AsyncSession
-from app.models.user import User
-from app.models import AuthSession
+from app.models import User, AuthSession
 from app.config import settings
 
 from app.models.workspace import Workspace, WorkspaceTypeEnum, WorkspaceUsers, WorkspaceRole

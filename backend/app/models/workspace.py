@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
-    from app.models import User, Category
+    from app.models import User, Category, Department
 
 
 class WorkspaceTypeEnum(enum.Enum):
@@ -30,6 +30,10 @@ class Workspace(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
 
+    departments: Mapped[List["Department"]] = relationship(
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+    )
     memberships: Mapped[List["WorkspaceUsers"]] = relationship(
         back_populates="workspace",
         cascade="all, delete-orphan",
