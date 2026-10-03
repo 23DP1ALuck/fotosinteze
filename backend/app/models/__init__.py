@@ -4,7 +4,7 @@ from app.models.auth_sessions import AuthSession
 from app.models.category import Category
 from app.models.revolut_connection import RevolutConnection
 from app.models.departments import Department
-from app.models.workspace import WorkspaceUsers
+from app.models.account import Account
 
 __all__ = [
     "User",
@@ -14,4 +14,5 @@ __all__ = [
     "RevolutConnection",
     "Department",
     "WorkspaceUsers",
+    "Account"
 ]

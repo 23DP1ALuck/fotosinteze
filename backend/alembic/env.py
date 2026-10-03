@@ -3,7 +3,7 @@ import os
 from logging.config import fileConfig
 from alembic import context
 from app.database import Base
-from app.models import User, Workspace, Category, RevolutConnection
+from app.models import User, Workspace, Category, RevolutConnection, Account
 from asyncpg import Connection
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -50,7 +50,7 @@ def run_migrations_offline():
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)
 
     with context.begin_transaction():
         context.run_migrations()

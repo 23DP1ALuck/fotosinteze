@@ -24,4 +24,7 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
-    revolut_connection: Mapped["RevolutConnection"] = relationship(back_populates="connected_by")
+    revolut_connections: Mapped[List["RevolutConnection"]] = relationship(
+        back_populates="connected_by",
+        cascade="all, delete-orphan",
+    )
