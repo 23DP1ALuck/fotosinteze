@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, DateTime
 
 if TYPE_CHECKING: # need specify to prevent circular import error
-    from app.models import WorkspaceUsers, RevolutConnection
+    from app.models import WorkspaceUsers, RevolutConnection, Expense
 
 class User(Base):
     __tablename__ = "users"
@@ -27,4 +27,12 @@ class User(Base):
     revolut_connections: Mapped[List["RevolutConnection"]] = relationship(
         back_populates="connected_by",
         cascade="all, delete-orphan",
+    )
+    submitted_expenses: Mapped[List["Expense"]] = relationship(
+        foreign_keys="Expense.submitted_by",
+        back_populates="submitted_by_user",
+    )
+    reviewed_expenses: Mapped[List["Expense"]] = relationship(
+        foreign_keys="Expense.reviewed_by",
+        back_populates="reviewed_by_user",
     )

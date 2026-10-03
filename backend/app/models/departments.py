@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey, String, DateTime, UniqueConstraint
 
 if TYPE_CHECKING:
-    from app.models import Workspace, Project
+    from app.models import Workspace, Project, Expense
 
 class Department(Base):
     __tablename__ = "departments"
@@ -21,6 +21,5 @@ class Department(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="departments")
-    projects: Mapped[List["Project"]] = relationship(
-        back_populates="department",
-    )
+    projects: Mapped[List["Project"]] = relationship(back_populates="department")
+    expenses: Mapped[List["Expense"]] = relationship(back_populates="department")

@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from app.database import Base
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey, String, DateTime, UniqueConstraint
 
 if TYPE_CHECKING:
-    from app.models import Department, Workspace
+    from app.models import Department, Workspace, Expense
 
 class Project(Base):
     __tablename__ = "projects"
@@ -28,3 +28,4 @@ class Project(Base):
 
     department: Mapped["Department | None"] = relationship(back_populates="projects")
     workspace: Mapped["Workspace"] = relationship(back_populates="projects")
+    expenses: Mapped[List["Expense"]] = relationship(back_populates="project")
