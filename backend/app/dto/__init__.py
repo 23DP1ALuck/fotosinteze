@@ -3,6 +3,7 @@ from app.dto.create_user_dto import CreateUserDTO
 from app.dto.create_user_response_dto import CreateUserResponseDTO
 from app.dto.login_user_response_dto import LoginUserResponseDTO
 from app.dto.login_user_request_dto import LoginUserRequestDTO
+from app.dto.create_department_request import CreateDepartmentRequest
 
 __all__ = [
     "AccessTokenResponseDTO",
@@ -10,4 +11,5 @@ __all__ = [
     "CreateUserResponseDTO",
     "LoginUserResponseDTO",
     "LoginUserRequestDTO",
+    "CreateDepartmentRequest",
 ]

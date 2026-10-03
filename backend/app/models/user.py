@@ -6,8 +6,6 @@ from typing import TYPE_CHECKING, List
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, DateTime
 
-
-
 if TYPE_CHECKING: # need specify to prevent circular import error
     from app.models import WorkspaceUsers, RevolutConnection
 
