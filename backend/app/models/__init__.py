@@ -7,6 +7,7 @@ from app.models.departments import Department
 from app.models.account import Account
 from app.models.projects import Project
 from app.models.expenses import Expense
+from app.models.transaction import Transaction
 
 __all__ = [
     "User",
@@ -19,4 +20,5 @@ __all__ = [
     "Account",
     "Project",
     "Expense",
+    "Transaction",
 ]

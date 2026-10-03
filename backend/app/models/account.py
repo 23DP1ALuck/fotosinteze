@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import BigInteger, CHAR, String, DECIMAL, ForeignKey
 
 if TYPE_CHECKING:
-    from app.models import Workspace, RevolutConnection
+    from app.models import Workspace, RevolutConnection, Transaction
 
 
 class Account(Base):
@@ -25,4 +25,12 @@ class Account(Base):
         nullable=True,
         unique=True,
     )
+
+
+
     connection: Mapped["RevolutConnection"] = relationship(back_populates="account")
+
+    transactions: Mapped["Transaction"] = relationship(
+        back_populates="account",
+        cascade="all, delete-orphan"
+    )
