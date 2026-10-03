@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
-    from app.models import User, Category, Account, Department
+    from app.models import User, Category, Account, Department, Project
 
 
 class WorkspaceTypeEnum(enum.Enum):
@@ -42,6 +42,9 @@ class Workspace(Base):
         back_populates="workspace", cascade="all, delete-orphan",
     )
     accounts: Mapped[List["Account"]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan",
+    )
+    projects: Mapped[List["Project"]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan",
     )
 
