@@ -25,4 +25,4 @@ class Category(Base):
     workspace: Mapped["Workspace"] = relationship(back_populates="categories")
     expenses: Mapped[List["Expense"]] = relationship(back_populates="category")
 
-    transaction: Mapped["Transaction"] = relationship(back_populates="account")
+    transactions: Mapped[List["Transaction"]] = relationship(back_populates="category")

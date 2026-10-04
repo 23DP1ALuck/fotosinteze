@@ -13,7 +13,7 @@ async def create_department(create_department_request: CreateDepartmentRequest, 
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
     # Check if the workspace is of type "business"
-    if workspace.type != WorkspaceTypeEnum.business:
+    if workspace.type != WorkspaceTypeEnum.BUSINESS:
         raise HTTPException(status_code=400, detail="Cannot create department in a personal workspace")
 
     # Create a new department

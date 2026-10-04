@@ -7,6 +7,7 @@ from app.config import settings
 from app.database import sessionmanager
 
 from app.api.routes import auth
+from app.api.routes import transactions
 
 
 # inspired from
@@ -24,6 +25,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan, title=settings.project_name)
 app.include_router(auth.router)
+app.include_router(transactions.router)
 
 app.add_middleware(
     CORSMiddleware,

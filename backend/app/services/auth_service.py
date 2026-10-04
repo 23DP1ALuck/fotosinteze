@@ -39,7 +39,7 @@ async def register(create_user_request: CreateUserDTO, db: AsyncSession = Depend
 
         personal_workspace = Workspace( # user has his own personal workspace after successful registration
             name=f"{user.display_name} Personal Workspace",
-            type=WorkspaceTypeEnum.personal,
+            type=WorkspaceTypeEnum.PERSONAL,
             )
 
         db.add(personal_workspace)
@@ -49,7 +49,7 @@ async def register(create_user_request: CreateUserDTO, db: AsyncSession = Depend
         workspace_users = WorkspaceUsers(
             user_id=user.user_id,
             workspace_id=personal_workspace.workspace_id,
-            role=WorkspaceRole.owner, # user is an owner in its personal workspace by default
+            role=WorkspaceRole.OWNER, # user is an owner in its personal workspace by default
         )
         db.add(workspace_users)
 
