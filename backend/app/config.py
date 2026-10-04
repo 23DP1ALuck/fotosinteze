@@ -1,0 +1,17 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
+
+class Settings(BaseSettings):
+    database_url: str
+    echo_sql: bool = True
+    test: bool = False
+    jwt_secret: str
+    project_name: str = "Fotosinteze backend"
+    oauth_token_secret: str = "my_dev_secret"
+    log_level: str = "DEBUG"
+    client_url: str
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+
+settings = Settings()  # type: ignore
