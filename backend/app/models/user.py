@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, DateTime
 
 if TYPE_CHECKING: # need specify to prevent circular import error
-    from app.models import WorkspaceUsers, RevolutConnection, Expense
+    from app.models import WorkspaceUsers, RevolutConnection, Expense, WorkspaceRole
 
 class User(Base):
     __tablename__ = "users"
@@ -36,3 +36,10 @@ class User(Base):
         foreign_keys="Expense.reviewed_by",
         back_populates="reviewed_by_user",
     )
+
+    def owns_workspace(self, workspace_id: int) -> bool:
+        return any(
+            membership.workspace_id == workspace_id
+            and membership.role == WorkspaceRole.owner
+            for membership in self.workspace_memberships
+        )
