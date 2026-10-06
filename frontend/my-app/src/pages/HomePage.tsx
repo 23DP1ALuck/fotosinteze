@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { BrandMark } from '@/components/brand/BrandMark'
 import { useAuth } from '@/features/auth/use-auth'
 
 function HomePage() {
@@ -20,11 +21,8 @@ function HomePage() {
     <div className="flex min-h-svh flex-col bg-[#f9f9f6]">
       <header className="flex items-center justify-between border-b border-[#e5e7eb] px-6 py-4">
         <div className="flex items-center gap-2 text-[#1a3c34]">
-          <span
-            className="inline-block size-4 rounded-full border border-[#1a3c34]/80 bg-[linear-gradient(180deg,#fff_50%,#1a3c34_50%)]"
-            aria-hidden
-          />
-          <span className="font-medium">finance manager</span>
+          <BrandMark />
+          <span className="font-medium">fotosinteze</span>
         </div>
         <div className="flex items-center gap-3">
           <span className="hidden text-sm text-[#6b7280] sm:inline">
