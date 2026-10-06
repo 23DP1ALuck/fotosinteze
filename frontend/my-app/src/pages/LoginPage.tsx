@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowRight } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { AuthBackLink, AuthShell } from '@/components/auth/AuthShell'
 import { FormAlert } from '@/components/auth/FormAlert'
@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 
 function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
   const [serverError, setServerError] = useState<string | null>(null)
 
@@ -35,7 +36,8 @@ function LoginPage() {
     setServerError(null)
     try {
       await login(values.email, values.password)
-      navigate('/', { replace: true })
+      const from = (location.state as { from?: string } | null)?.from
+      navigate(from && from !== '/' ? from : '/app', { replace: true })
     } catch (error) {
       setServerError(
         error instanceof ApiError

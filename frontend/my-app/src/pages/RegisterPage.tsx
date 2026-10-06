@@ -43,7 +43,7 @@ function RegisterPage() {
         values.email,
         values.password,
       )
-      navigate('/', { replace: true })
+      navigate('/app', { replace: true })
     } catch (error) {
       setServerError(
         error instanceof ApiError

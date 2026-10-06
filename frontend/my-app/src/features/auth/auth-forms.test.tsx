@@ -13,7 +13,7 @@ function renderAt(path: string) {
     <AuthProvider>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/app" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
         </Routes>
