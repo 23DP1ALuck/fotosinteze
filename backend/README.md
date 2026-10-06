@@ -50,7 +50,7 @@ The SQLite URL is already supported by the installed dependencies. The `touch`/`
 With the virtual environment active and `.env` configured, run from `backend`:
 
 ```bash
-python -m alembic upgrade head
+alembic upgrade head
 ```
 
 The current migration creates the `users` table.
@@ -101,11 +101,11 @@ For example, the frontend can call `POST http://localhost:8000/auth/login` and `
 uvicorn app.main:app --reload
 
 # Check migration status
-python -m alembic current
+alembic current
 
 # Apply pending migrations
-python -m alembic upgrade head
+alembic upgrade head
 
 # Roll back the latest migration
-python -m alembic downgrade -1
+alembic downgrade -1
 ```

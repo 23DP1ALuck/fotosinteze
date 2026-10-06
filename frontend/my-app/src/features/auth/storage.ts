@@ -1,30 +1,29 @@
-import type { AuthUser } from '@/features/auth/types'
+let accessToken: string | null = null
+const listeners = new Set<(token: string | null) => void>()
 
-const TOKEN_KEY = 'fm_access_token'
-const USER_KEY = 'fm_user'
-
-export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+// Access tokens live only in this tab's JavaScript memory; refresh is handled by the HttpOnly cookie.
+export function getAccessToken(): string | null {
+  return accessToken
 }
 
-export function getStoredUser(): AuthUser | null {
-  const raw = localStorage.getItem(USER_KEY)
-  if (!raw) {
-    return null
-  }
-  try {
-    return JSON.parse(raw) as AuthUser
-  } catch {
-    return null
-  }
+export function setAccessToken(token: string): void {
+  accessToken = token
+  listeners.forEach((listener) => listener(token))
 }
 
-export function persistSession(token: string, user: AuthUser): void {
-  localStorage.setItem(TOKEN_KEY, token)
-  localStorage.setItem(USER_KEY, JSON.stringify(user))
+export function subscribeAccessToken(listener: (token: string | null) => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+export function clearLegacySession(): void {
+  // Remove tokens saved by earlier versions of the app.
+  localStorage.removeItem('fm_access_token')
+  localStorage.removeItem('fm_user')
 }
 
 export function clearSession(): void {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(USER_KEY)
+  accessToken = null
+  clearLegacySession()
+  listeners.forEach((listener) => listener(null))
 }

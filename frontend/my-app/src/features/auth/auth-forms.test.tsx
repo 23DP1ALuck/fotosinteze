@@ -72,13 +72,14 @@ describe('auth forms', () => {
     ).toHaveTextContent('Invalid email or password.')
   })
 
-  it('registers, stores the session, and lands on home', async () => {
+  it('registers, keeps the access token in memory, and lands on home', async () => {
     const user = userEvent.setup()
     const tokenPayload = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
     const tokenBody = btoa(
       JSON.stringify({
         sub: '42',
         email: 'new@example.com',
+        display_name: 'New User',
         exp: Math.floor(Date.now() / 1000) + 3600,
       }),
     )
@@ -88,6 +89,11 @@ describe('auth forms', () => {
       'fetch',
       vi
         .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: async () => ({ detail: 'Refresh token missing' }),
+        })
         .mockResolvedValueOnce({
           ok: true,
           status: 201,
@@ -116,8 +122,8 @@ describe('auth forms', () => {
       expect(screen.getByText(/welcome back, new user/i)).toBeInTheDocument()
     })
 
-    expect(localStorage.getItem('fm_access_token')).toBe(accessToken)
-    expect(localStorage.getItem('fm_user')).toContain('new@example.com')
+    expect(localStorage.getItem('fm_access_token')).toBeNull()
+    expect(localStorage.getItem('fm_user')).toBeNull()
   })
 
   it('disables submit while a login request is in flight', async () => {
@@ -140,6 +146,7 @@ describe('auth forms', () => {
                 JSON.stringify({
                   sub: '1',
                   email: 'user@example.com',
+                  display_name: 'A User',
                   exp: Math.floor(Date.now() / 1000) + 3600,
                 }),
               ),
