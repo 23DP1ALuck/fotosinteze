@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { BrandMark } from '@/components/brand/BrandMark'
 import { useAuth } from '@/features/auth/use-auth'
 
 function HomePage() {
