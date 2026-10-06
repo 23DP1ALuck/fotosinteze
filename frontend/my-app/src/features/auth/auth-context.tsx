@@ -1,74 +1,39 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react'
 
-import { loginUser, registerUser } from '@/features/auth/api'
-import { decodeJwtPayload, isTokenExpired } from '@/features/auth/jwt'
+import { loginUser, logoutUser, refreshAccessToken, registerUser } from '@/features/auth/api'
+import { decodeJwtPayload } from '@/features/auth/jwt'
 import {
+  clearLegacySession,
   clearSession,
-  getStoredToken,
-  getStoredUser,
-  persistSession,
+  getAccessToken,
+  setAccessToken,
+  subscribeAccessToken,
 } from '@/features/auth/storage'
 import type { AuthUser } from '@/features/auth/types'
+import { AuthContext, type AuthStatus } from '@/features/auth/use-auth'
 
-type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated'
-
-type AuthContextValue = {
-  status: AuthStatus
-  user: AuthUser | null
-  token: string | null
-  login: (email: string, password: string) => Promise<void>
-  register: (
-    displayName: string,
-    email: string,
-    password: string,
-  ) => Promise<void>
-  logout: () => void
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null)
-
-function userFromToken(token: string, fallback?: AuthUser | null): AuthUser | null {
+function userFromToken(token: string): AuthUser | null {
   const payload = decodeJwtPayload(token)
-  if (!payload?.sub || !payload.email) {
-    return fallback ?? null
+  if (!payload?.sub || !payload.email || !payload.display_name) {
+    return null
   }
 
   const id = Number.parseInt(payload.sub, 10)
   if (Number.isNaN(id)) {
-    return fallback ?? null
+    return null
   }
 
   return {
     id,
     email: payload.email,
-    displayName: fallback?.displayName ?? payload.email.split('@')[0] ?? 'User',
+    displayName: payload.display_name,
   }
-}
-
-function restoreSession(): { token: string; user: AuthUser } | null {
-  const token = getStoredToken()
-  if (!token || isTokenExpired(token)) {
-    clearSession()
-    return null
-  }
-
-  const storedUser = getStoredUser()
-  const user = userFromToken(token, storedUser)
-  if (!user) {
-    clearSession()
-    return null
-  }
-
-  persistSession(token, user)
-  return { token, user }
 }
 
 function AuthProvider({ children }: { children: ReactNode }) {
@@ -77,62 +42,95 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null)
 
   useEffect(() => {
-    const session = restoreSession()
-    if (session) {
-      setUser(session.user)
-      setToken(session.token)
-      setStatus('authenticated')
-    } else {
-      setStatus('unauthenticated')
+    let cancelled = false
+    clearLegacySession()
+
+    // Keep route state in sync when a protected request refreshes or loses its token.
+    const unsubscribe = subscribeAccessToken((nextToken) => {
+      const nextUser = nextToken ? userFromToken(nextToken) : null
+      if (nextToken && !nextUser) {
+        clearSession()
+        return
+      }
+      setToken(nextToken)
+      setUser(nextUser)
+      setStatus(nextUser ? 'authenticated' : 'unauthenticated')
+    })
+
+    // A page reload loses the in-memory access token; the cookie restores it through the API.
+    refreshAccessToken()
+      .then(({ access_token }) => {
+        if (cancelled) return
+        setAccessToken(access_token)
+      })
+      .catch(() => {
+        if (cancelled) return
+        clearSession()
+      })
+
+    return () => {
+      cancelled = true
+      unsubscribe()
     }
   }, [])
 
-  const applySession = useCallback((accessToken: string, nextUser: AuthUser) => {
-    persistSession(accessToken, nextUser)
-    setToken(accessToken)
-    setUser(nextUser)
-    setStatus('authenticated')
+  useEffect(() => {
+    if (status !== 'authenticated' || !token) return
+    const expiresAt = decodeJwtPayload(token)?.exp
+    if (!expiresAt) return
+
+    // Refresh one minute early; a suspended tab will run this when it wakes.
+    const delay = Math.max(0, expiresAt * 1000 - Date.now() - 60_000)
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      refreshAccessToken()
+        .then(({ access_token }) => {
+          if (!cancelled && getAccessToken() === token) setAccessToken(access_token)
+        })
+        .catch(() => {
+          if (!cancelled && getAccessToken() === token) clearSession()
+        })
+    }, delay)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [status, token])
+
+  const applySession = useCallback((accessToken: string) => {
+    setAccessToken(accessToken)
   }, [])
 
   const login = useCallback(
     async (email: string, password: string) => {
       const { access_token } = await loginUser({ email, password })
-      const storedUser = getStoredUser()
-      const nextUser =
-        storedUser?.email === email
-          ? storedUser
-          : userFromToken(access_token) ?? {
-              id: 0,
-              email,
-              displayName: email.split('@')[0] ?? 'User',
-            }
-      applySession(access_token, nextUser)
+      const nextUser = userFromToken(access_token)
+      if (!nextUser) throw new Error('Login response is missing user details')
+      applySession(access_token)
     },
     [applySession],
   )
 
   const register = useCallback(
     async (displayName: string, email: string, password: string) => {
-      const created = await registerUser({
+      await registerUser({
         email,
         display_name: displayName,
         password,
       })
       const { access_token } = await loginUser({ email, password })
-      applySession(access_token, {
-        id: created.id,
-        email: created.email,
-        displayName: created.display_name,
-      })
+      const nextUser = userFromToken(access_token)
+      if (!nextUser) throw new Error('Login response is missing user details')
+      applySession(access_token)
     },
     [applySession],
   )
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Keep the current session visible if revocation fails, so logout can be retried.
+    await logoutUser()
     clearSession()
-    setToken(null)
-    setUser(null)
-    setStatus('unauthenticated')
   }, [])
 
   const value = useMemo(
@@ -150,12 +148,4 @@ function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
-  return context
-}
-
-export { AuthProvider, useAuth }
+export { AuthProvider }
