@@ -5,6 +5,7 @@ from app.dto.login_user_response_dto import LoginUserResponseDTO
 from app.dto.login_user_request_dto import LoginUserRequestDTO
 from app.dto.create_department_request import CreateDepartmentRequest
 from app.dto.department_response import DepartmentResponseDTO
+from app.dto.create_transaction_request import CreateTransactionRequest
 
 __all__ = [
     "AccessTokenResponseDTO",
@@ -13,5 +14,6 @@ __all__ = [
     "LoginUserResponseDTO",
     "LoginUserRequestDTO",
     "CreateDepartmentRequest",
+    "CreateTransactionRequest",
     "DepartmentResponseDTO"
 ]

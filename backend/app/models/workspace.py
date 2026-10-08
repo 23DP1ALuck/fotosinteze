@@ -12,20 +12,20 @@ if TYPE_CHECKING:
 
 
 class WorkspaceTypeEnum(enum.Enum):
-    personal = "PERSONAL"
-    business = "BUSINESS"
+    PERSONAL = "PERSONAL"
+    BUSINESS = "BUSINESS"
 
 
 class WorkspaceRole(enum.Enum):
-    owner = "OWNER"
-    employee = "EMPLOYEE"
+    OWNER = "OWNER"
+    EMPLOYEE = "EMPLOYEE"
 
 class Workspace(Base):
     __tablename__ = "workspaces"
 
     workspace_id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(unique=True)
-    type: Mapped[WorkspaceTypeEnum] = mapped_column(Enum(WorkspaceTypeEnum), default=WorkspaceTypeEnum.personal)
+    type: Mapped[WorkspaceTypeEnum] = mapped_column(Enum(WorkspaceTypeEnum), default=WorkspaceTypeEnum.PERSONAL)
     base_currency: Mapped[str] = mapped_column(String(3), default="EUR")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
@@ -51,7 +51,7 @@ class Workspace(Base):
         back_populates="workspace", cascade="all, delete-orphan",
     )
     transactions: Mapped["Transaction"] = relationship(
-        back_populates="account",
+        back_populates="workspace",
         cascade="all, delete-orphan"
     )
 
@@ -61,7 +61,7 @@ class WorkspaceUsers(Base):
 
     user_id: Mapped[int] = mapped_column("user_id", ForeignKey("users.user_id"), primary_key=True)
     workspace_id: Mapped[int] = mapped_column("workspace_id", ForeignKey("workspaces.workspace_id"), primary_key=True)
-    role: Mapped[WorkspaceRole] = mapped_column("role", Enum(WorkspaceRole), default=WorkspaceRole.owner, nullable=False)
+    role: Mapped[WorkspaceRole] = mapped_column("role", Enum(WorkspaceRole), default=WorkspaceRole.OWNER, nullable=False)
     joined_at: Mapped[datetime] = mapped_column("joined_at", DateTime, default=datetime.now, nullable=False)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="memberships")

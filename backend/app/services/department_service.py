@@ -58,7 +58,7 @@ async def get_department_by_id(department_id: int, current_user: dict, db: Async
     department = await db.get(Department, department_id)
     if not department:
         raise HTTPException(status_code=404, detail="Department not found")
-    
+
     # Check if the user can manage the department
     await can_manage_department(current_user, department.workspace_id, db)
 
@@ -73,7 +73,7 @@ async def update_department(department_id: int, name: str, current_user: dict, d
     department = await db.get(Department, department_id)
     if not department:
         raise HTTPException(status_code=404, detail="Department not found")
-    
+
     # Check if the user can manage the department
     await can_manage_department(current_user, department.workspace_id, db)
 
@@ -104,7 +104,7 @@ async def delete_department(department_id: int, current_user: dict, db: AsyncSes
     department = await db.get(Department, department_id)
     if not department:
         raise HTTPException(status_code=404, detail="Department not found")
-    
+
     # Check if the user can manage the department
     await can_manage_department(current_user, department.workspace_id, db)
 
@@ -124,9 +124,9 @@ async def can_manage_department(current_user: dict, workspace_id: int, db: Async
     # Check if the user is a member and owner of the workspace
     if not user.owns_workspace(workspace_id):
         raise HTTPException(status_code=403, detail="User does not have access to this workspace or is not an owner")
-    
+
     # Check if the workspace is of type "business"
-    if workspace.type != WorkspaceTypeEnum.business:
+    if workspace.type != WorkspaceTypeEnum.BUSINESS:
         raise HTTPException(status_code=400, detail="Cannot create department in a personal workspace")
 
     return True

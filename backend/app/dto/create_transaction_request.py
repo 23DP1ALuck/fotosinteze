@@ -1,12 +1,14 @@
+from decimal import Decimal
+
 from pydantic import BaseModel
 
 class CreateTransactionRequest(BaseModel):
-    amount: float
+    amount: Decimal
     description: str
     currency: str
-    status: str
-    account_id: int | None
-    category_id: int | None
-    project_id: int | None
-    department_id: int | None
+    account_id: int
+    category_id: int
+    project_id: int | None = None
+    expense_id: int | None = None
+    department_id: int | None = None
     workspace_id: int
