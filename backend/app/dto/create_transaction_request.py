@@ -9,5 +9,6 @@ class CreateTransactionRequest(BaseModel):
     account_id: int
     category_id: int
     project_id: int | None = None
+    expense_id: int | None = None
     department_id: int | None = None
     workspace_id: int
