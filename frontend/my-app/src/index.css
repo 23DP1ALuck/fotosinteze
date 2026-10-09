@@ -132,10 +132,6 @@ h2 {
   font-weight: 500;
 }
 
-p {
-  margin: 0;
-}
-
 code,
 .counter {
   font-family: var(--mono);
@@ -240,15 +236,27 @@ code {
   color-scheme: light;
 }
 
-.landing-page h1,
-.landing-page h2 {
-  color: #1a2e2a;
-}
+/* Layered so Tailwind utilities on the landing page can override these. */
+@layer base {
+  html:has(.landing-page) {
+    scroll-behavior: smooth;
+  }
 
-.landing-page h1 {
-  margin: 0;
-  font-size: clamp(2.6rem, 6vw, 4.25rem);
-  letter-spacing: -0.04em;
-  line-height: 1.08;
-  font-weight: 500;
+  .landing-page a:focus-visible {
+    outline: 2px solid #213d33;
+    outline-offset: 3px;
+  }
+
+  .landing-page h1,
+  .landing-page h2 {
+    color: #213d33;
+  }
+
+  .landing-page h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 6vw, 4.25rem);
+    letter-spacing: -0.04em;
+    line-height: 1.08;
+    font-weight: 500;
+  }
 }
