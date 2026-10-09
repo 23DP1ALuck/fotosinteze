@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 class Project(Base):
     __tablename__ = "projects"
     __table_args__ = (
-        UniqueConstraint('department_id', 'name', name='uq_department_project_name'),
+        UniqueConstraint('workspace_id', 'name', name='uq_workspace_project_name'),
     )
 
     project_id: Mapped[int] = mapped_column(primary_key=True, index=True)

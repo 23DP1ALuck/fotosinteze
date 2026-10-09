@@ -3,10 +3,9 @@ from sqlalchemy import and_, select
 from app.database import AsyncSession
 
 from app.database import get_db_session
-from app.models import Workspace, Department, WorkspaceRole
+from app.models import Workspace, Department, User
 from app.models.workspace import WorkspaceTypeEnum
 from app.dto import DepartmentResponseDTO
-from app.models import User
 from sqlalchemy.orm import selectinload
 
 
@@ -122,7 +121,7 @@ async def can_manage_department(current_user: dict, workspace_id: int, db: Async
         raise HTTPException(status_code=404, detail="Workspace not found")
 
     # Check if the user is a member and owner of the workspace
-    if not user.owns_workspace(workspace_id):
+    if not user.is_member_of_workspace(workspace_id, needs_to_be_owner=True):
         raise HTTPException(status_code=403, detail="User does not have access to this workspace or is not an owner")
 
     # Check if the workspace is of type "business"

@@ -6,7 +6,7 @@ from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.dto import DepartmentResponseDTO
 from app.models import Department, Workspace
-from app.dependencies.department import get_current_workspace
+from app.dependencies.workspace import get_current_workspace
 
 
 router = APIRouter()
