@@ -1,12 +1,10 @@
-from fastapi import Depends, HTTPException
-from sqlalchemy import and_, select
+from fastapi import HTTPException
+from sqlalchemy import select
 from app.database import AsyncSession
 
-from app.database import get_db_session
-from app.models import Workspace, Department, User
-from app.models.workspace import WorkspaceTypeEnum
-from app.dto import DepartmentResponseDTO
-from sqlalchemy.orm import selectinload
+from app.models import Department, WorkspaceUsers, WorkspaceRole
+from app.dto import DepartmentResponseDTO, EmployeeDepartmentResponseDTO
+from app.services.workspace_access import get_workspace_membership, assert_department_access
 
 
 async def create_department(workspace_id: int, name: str, current_user: dict, db: AsyncSession) -> DepartmentResponseDTO:
@@ -38,11 +36,12 @@ async def create_department(workspace_id: int, name: str, current_user: dict, db
     )
 
 async def get_departments(workspace_id: int, current_user: dict, db: AsyncSession) -> list[DepartmentResponseDTO]:
-    # Check if the user can manage the department
-    await can_manage_department(current_user, workspace_id, db)
+    membership = await get_workspace_membership(current_user, workspace_id, db)
 
-    # Retrieve all departments for the specified workspace
+    # Retrieve visible departments for the specified workspace
     stmt = select(Department).where(Department.workspace_id == workspace_id)
+    if membership.role != WorkspaceRole.OWNER:
+        stmt = stmt.where(Department.department_id == membership.department_id)
     result = await db.execute(stmt)
     departments = result.scalars().all()
 
@@ -59,7 +58,8 @@ async def get_department_by_id(department_id: int, current_user: dict, db: Async
         raise HTTPException(status_code=404, detail="Department not found")
 
     # Check if the user can manage the department
-    await can_manage_department(current_user, department.workspace_id, db)
+    membership = await get_workspace_membership(current_user, department.workspace_id, db)
+    assert_department_access(membership, department_id)
 
     return DepartmentResponseDTO(
         id=department.department_id,
@@ -107,25 +107,35 @@ async def delete_department(department_id: int, current_user: dict, db: AsyncSes
     # Check if the user can manage the department
     await can_manage_department(current_user, department.workspace_id, db)
 
-    # Delete the department
+    assigned_employee = await db.scalar(select(WorkspaceUsers.user_id).where(
+        WorkspaceUsers.department_id == department_id,
+        WorkspaceUsers.workspace_id == department.workspace_id,
+    ).limit(1))
+    if assigned_employee is not None:
+        raise HTTPException(status_code=409, detail="Reassign employees before deleting this department")
+
+    # Delete the department; many-to-many links are removed without deleting projects.
     await db.delete(department)
     await db.commit()
 
 async def can_manage_department(current_user: dict, workspace_id: int, db: AsyncSession) -> bool:
-    user = await db.get(User, int(current_user.get("sub")), options={selectinload(User.workspace_memberships)})
-    if user is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    # Check if the workspace exists
-    workspace = await db.get(Workspace, workspace_id)
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace not found")
-
-    # Check if the user is a member and owner of the workspace
-    if not user.is_member_of_workspace(workspace_id, needs_to_be_owner=True):
-        raise HTTPException(status_code=403, detail="User does not have access to this workspace or is not an owner")
-
-    # Check if the workspace is of type "business"
-    if workspace.type != WorkspaceTypeEnum.BUSINESS:
-        raise HTTPException(status_code=400, detail="Cannot create department in a personal workspace")
-
+    await get_workspace_membership(current_user, workspace_id, db, owner_only=True)
     return True
+
+
+async def assign_employee_department(department_id: int, user_id: int, current_user: dict, db: AsyncSession) -> EmployeeDepartmentResponseDTO:
+    department = await db.get(Department, department_id)
+    if department is None:
+        raise HTTPException(status_code=404, detail="Department not found")
+    await get_workspace_membership(current_user, department.workspace_id, db, owner_only=True)
+    employee = await db.scalar(select(WorkspaceUsers).where(
+        WorkspaceUsers.user_id == user_id,
+        WorkspaceUsers.workspace_id == department.workspace_id,
+    ).execution_options(populate_existing=True))
+    if employee is None:
+        raise HTTPException(status_code=404, detail="Employee is not a member of this workspace")
+    if employee.role != WorkspaceRole.EMPLOYEE:
+        raise HTTPException(status_code=400, detail="Only employees can be assigned to a department")
+    employee.department_id = department_id
+    await db.commit()
+    return EmployeeDepartmentResponseDTO(user_id=user_id, workspace_id=department.workspace_id, department_id=department_id)

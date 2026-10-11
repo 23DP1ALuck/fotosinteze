@@ -8,6 +8,8 @@ from app.dependencies.auth import get_current_user
 
 async def get_current_workspace( workspace_id: int = Header(alias="Workspace-ID"), current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db_session), ) -> Workspace:
     user = await db.get(User, int(current_user.get("sub")))
+    if user is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     result = await db.execute(
         select(Workspace)
         .join(WorkspaceUsers)
