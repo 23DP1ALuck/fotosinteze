@@ -1,10 +1,12 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowDown, ArrowUp, Menu, Plus, X } from 'lucide-react'
+import { Menu, Plus, X } from 'lucide-react'
 
 import { BrandMark } from '@/components/brand/BrandMark'
 import { useAuth } from '@/features/auth/use-auth'
+import { CategoryManager } from '@/features/categories/CategoryManager'
+import { initialCategories } from '@/features/categories/types'
 
 type Transaction = { id: number; name: string; category: string; source: string; date: string; amount: number }
 const initialTransactions: Transaction[] = [
@@ -30,6 +32,7 @@ const formClasses =
 
 function HomePage() {
   const { user, logout } = useAuth()
+  const [categories, setCategories] = useState(initialCategories)
   const [view, setView] = useState<string>('Dashboard')
   const [mobileMenu, setMobileMenu] = useState(false)
   const [transactions, setTransactions] = useState(initialTransactions)
@@ -128,7 +131,7 @@ function HomePage() {
       </section><div className="my-[25px] grid grid-cols-[minmax(0,1.92fr)_minmax(270px,1fr)] gap-6 max-[1200px]:grid-cols-[minmax(0,1.6fr)_minmax(235px,1fr)] max-[1200px]:gap-[18px] max-[900px]:grid-cols-1 min-[1600px]:my-[30px] min-[1600px]:gap-[30px]">{renderChart()}{renderBudgets()}</div></>}
       {(view === 'Dashboard' || view === 'Transactions') && renderTransactions(view === 'Transactions')}
       {view === 'Budgets' && renderBudgets()}
-      {view === 'Categories' && <section className={cardClasses}><h2>Your spending categories</h2><p className="text-xs text-[#7d877f]">Categories available for your manual transactions.</p><div className="mt-[25px] grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-4 [&>div]:grid [&>div]:gap-3 [&>div]:rounded-xl [&>div]:bg-[#f3f6ed] [&>div]:p-5 [&_span]:text-xs [&_span]:text-[#7d877f]">{['Groceries', 'Transport', 'Subscriptions', 'Shopping', 'Other'].map((category) => <div key={category}><ArrowDown size={18} /><strong>{category}</strong><span>{transactions.filter((item) => item.category === category).length} listed transactions</span></div>)}</div><h3 className="mt-6 flex items-center gap-2 text-sm font-semibold"><ArrowUp size={18} />Income: Salary, Other income</h3></section>}
+      {view === 'Categories' && <CategoryManager categories={categories} onChange={setCategories} />}
       {(view === 'Dashboard' || view === 'Revolut') && <section className="mt-[25px] flex items-center justify-between gap-5 rounded-[15px] bg-[#eaf0e5] px-[26px] py-[17px] max-sm:flex-col max-sm:items-start max-sm:gap-3 max-sm:p-[18px] [&_h2]:m-0 [&_h2]:text-base [&_h2]:leading-[1.3] [&_h2]:font-semibold [&_h2]:tracking-[-.025em] [&_p]:mt-[5px] [&_p]:text-xs [&_p]:text-[#7d877f]"><div><h2>Revolut preview</h2><p>Sample imported transactions · connect your account when integration is available</p></div><span className="whitespace-nowrap rounded-full border border-[#cbd6c3] px-[10px] py-1 text-xs">Not connected</span></section>}
     </main>
     <dialog ref={dialog} className="m-auto max-h-[calc(100svh-40px)] w-[min(460px,calc(100%_-_32px))] overflow-y-auto rounded-[18px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/35 backdrop:backdrop-blur-[3px] [&_h2]:m-0 [&_h2]:text-[23px] [&_h2]:font-semibold" aria-labelledby="dashboard-dialog-title">
