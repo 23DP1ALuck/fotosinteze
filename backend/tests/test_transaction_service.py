@@ -147,20 +147,18 @@ class TransactionServiceTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual((await self.db.get(Account, 1)).balance, Decimal("80"))
                 self.assertEqual((await self.db.get(Transaction, 1)).amount, Decimal("20"))
 
-    async def test_business_update_validates_project_and_department(self):
+    async def test_business_helpers_scope_project_and_department(self):
+        # Full business update/permission coverage lives in test_department_access.
         self.workspace.type = WorkspaceTypeEnum.BUSINESS
-        for changes in [dict(project_id=3), dict(department_id=2),
-                        dict(project_id=2, department_id=1)]:
-            with self.subTest(changes=changes):
-                with self.assertRaises(HTTPException) as raised:
-                    await transaction_service.update_transaction(1, self.request(**changes), {}, self.workspace, self.db)
-                self.assertEqual(raised.exception.status_code, 404)
-                self.assertEqual((await self.db.get(Account, 1)).balance, Decimal("80"))
-        result = await transaction_service.update_transaction(
-            1, self.request(project_id=1, department_id=1), {}, self.workspace, self.db)
-        self.assertEqual(result.project_id, 1)
-        self.assertEqual(result.department_id, 1)
-        result = await transaction_service.update_transaction(1, self.request(), {}, self.workspace, self.db)
-        self.assertIsNone(result.project_id)
-        self.assertIsNone(result.department_id)
-        self.assertEqual((await self.db.get(Account, 1)).balance, Decimal("70"))
+        for operation, resource_id in [(transaction_service.find_project_by_id, 3),
+                                        (transaction_service.find_department_by_id, 2)]:
+            with self.assertRaises(HTTPException) as raised:
+                if operation == transaction_service.find_project_by_id:
+                    await operation(resource_id, self.workspace, False, self.db)
+                else:
+                    await operation(resource_id, self.workspace, self.db)
+            self.assertEqual(raised.exception.status_code, 404)
+        department = await transaction_service.find_department_by_id(1, self.workspace, self.db)
+        project = await transaction_service.find_project_by_id(1, self.workspace, False, self.db)
+        self.assertEqual(department.department_id, 1)
+        self.assertEqual(project.project_id, 1)

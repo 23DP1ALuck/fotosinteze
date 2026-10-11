@@ -20,4 +20,8 @@ __all__ = [
     "DepartmentResponseDTO",
     "CreateProjectRequest",
     "ProjectResponseDTO",
+    "UpdateProjectRequest",
+    "EmployeeDepartmentResponseDTO",
 ]
+from app.dto.update_project_request import UpdateProjectRequest
+from app.dto.employee_department_response import EmployeeDepartmentResponseDTO

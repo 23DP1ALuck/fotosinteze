@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class ProjectResponseDTO(BaseModel):
     id: int
@@ -6,5 +6,5 @@ class ProjectResponseDTO(BaseModel):
     status: str | None = None
     start_date: str | None = None
     end_date: str | None = None
-    department_id: int | None = None
+    department_ids: list[int] = Field(default_factory=list)
     workspace_id: int
