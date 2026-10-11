@@ -61,8 +61,7 @@ function LandingPage() {
       <header className="sticky top-0 z-20 border-b border-[#e6e3d8]/70 bg-[#f6f5ee]/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
         <Link to="/" className="flex items-center gap-2 text-[15px] tracking-tight">
-          <BrandMark />
-          <span>fotosinteze</span>
+          Fotosinteze
         </Link>
         <nav className="hidden items-center gap-8 text-sm text-[#6d756f] md:flex">
           {navLinks.map((link) => (
