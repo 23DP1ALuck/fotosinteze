@@ -11,4 +11,3 @@ class CreateTransactionRequest(BaseModel):
     project_id: int | None = None
     expense_id: int | None = None
     department_id: int | None = None
-    workspace_id: int

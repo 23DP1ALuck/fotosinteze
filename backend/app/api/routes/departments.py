@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services import department_service
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
-from app.dto import DepartmentResponseDTO
+from app.dto import DepartmentResponseDTO, EmployeeDepartmentResponseDTO
 from app.models import Department, Workspace
-from app.dependencies.department import get_current_workspace
+from app.dependencies.workspace import get_current_workspace
 
 
 router = APIRouter()
@@ -83,3 +83,8 @@ async def update_department(department_id: int, name: str, db: AsyncSession = De
             })
 async def delete_department(department_id: int, db: AsyncSession = Depends(get_db_session), current_user: dict = Depends(get_current_user)) -> None:
     return await department_service.delete_department(department_id, current_user, db)
+
+@router.put("/departments/{department_id}/employees/{user_id}", response_model=EmployeeDepartmentResponseDTO,
+            summary="Assign or reassign an employee (workspace owner only)")
+async def assign_employee_department(department_id: int, user_id: int, db: AsyncSession = Depends(get_db_session), current_user: dict = Depends(get_current_user)) -> EmployeeDepartmentResponseDTO:
+    return await department_service.assign_employee_department(department_id, user_id, current_user, db)

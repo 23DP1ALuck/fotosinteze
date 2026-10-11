@@ -109,3 +109,64 @@ alembic upgrade head
 # Roll back the latest migration
 alembic downgrade -1
 ```
+
+## Department assignments and shared projects
+
+Run migrations from `backend` before starting the updated API:
+
+```bash
+.venv/bin/alembic upgrade head
+```
+
+Revision `b72f90c1de64` preserves existing project IDs and department links,
+then replaces the single project department with a many-to-many association.
+It adds a department foreign key to each workspace membership. Existing
+employees remain unassigned until an owner assigns them. Invalid legacy
+cross-workspace project links must be repaired before upgrade. Downgrade
+refuses shared projects and existing employee assignments to avoid data loss.
+
+An authenticated workspace owner assigns an existing employee with:
+
+```http
+PUT /departments/12/employees/42
+Authorization: Bearer <access_token>
+```
+
+The employee must already have an `EMPLOYEE` membership in the department's
+workspace. Assignment is per workspace and takes effect on the next request.
+Only owners can assign employees or create, rename and delete departments.
+Reassign employees before deleting their department.
+
+Employees can list/read only their assigned department and its linked
+projects. Unassigned employees cannot access department/project operations.
+Employees can edit shared project details; these edits change the same project
+record visible to every linked department. Only owners can change department
+links or delete projects globally. Removing a department link or deleting a
+department does not delete its projects.
+
+`POST /projects` accepts `department_ids` instead of `department_id`:
+
+```json
+{
+  "name": "Shared launch",
+  "department_ids": [12, 15],
+  "status": "Active"
+}
+```
+
+Owners may link any departments in the selected workspace, or create a project
+with no links. Employees may specify only their assigned department, or omit
+the list to use that department automatically. POST/list requests require the
+`Workspace-ID` header. Direct-ID routes authorize against the resource's own
+workspace.
+
+`PUT /projects/{project_id}` replaces name, status and dates; omitted nullable
+details become null. Omit `department_ids` to preserve links. Owners may send
+an empty list to remove all links. Employees cannot send this field on update.
+Explicit null and duplicate department IDs are rejected. Project responses
+contain `department_ids`; employees receive only their own department ID,
+while owners receive every linked department ID.
+
+Business transactions validate project/department links and apply the same
+employee department restrictions. SQLite connections enforce foreign keys,
+including workspace-aware assignment and association constraints.

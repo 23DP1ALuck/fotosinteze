@@ -8,7 +8,7 @@ from app.database import sessionmanager
 
 from app.api.routes import auth
 from app.api.routes import transactions
-from app.api.routes import departments
+from app.api.routes import departments, projects
 
 
 # inspired from
@@ -28,6 +28,7 @@ app = FastAPI(lifespan=lifespan, title=settings.project_name)
 app.include_router(auth.router)
 app.include_router(transactions.router)
 app.include_router(departments.router)
+app.include_router(projects.router)
 
 app.add_middleware(
     CORSMiddleware,

@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from typing import List, TYPE_CHECKING
 
-from sqlalchemy import Enum, String, DateTime, ForeignKey
+from sqlalchemy import Enum, String, DateTime, ForeignKey, ForeignKeyConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -58,11 +58,22 @@ class Workspace(Base):
 
 class WorkspaceUsers(Base):
     __tablename__ = "workspace_users"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["department_id", "workspace_id"],
+            ["departments.department_id", "departments.workspace_id"],
+            name="fk_workspace_users_department",
+        ),
+    )
 
     user_id: Mapped[int] = mapped_column("user_id", ForeignKey("users.user_id"), primary_key=True)
     workspace_id: Mapped[int] = mapped_column("workspace_id", ForeignKey("workspaces.workspace_id"), primary_key=True)
     role: Mapped[WorkspaceRole] = mapped_column("role", Enum(WorkspaceRole), default=WorkspaceRole.OWNER, nullable=False)
+    department_id: Mapped[int | None] = mapped_column(nullable=True, index=True)
     joined_at: Mapped[datetime] = mapped_column("joined_at", DateTime, default=datetime.now, nullable=False)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="memberships")
     user: Mapped["User"] = relationship(back_populates="workspace_memberships")
+    department: Mapped["Department | None"] = relationship(
+        primaryjoin="and_(foreign(WorkspaceUsers.department_id) == Department.department_id, WorkspaceUsers.workspace_id == Department.workspace_id)",
+    )
