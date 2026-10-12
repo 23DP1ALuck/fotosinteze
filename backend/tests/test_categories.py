@@ -80,6 +80,20 @@ class CategoryEndpointTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(response.status_code, 404, response.text)
 
+    async def test_create_category_uses_active_workspace(self):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/categories",
+                headers={"Workspace-ID": "1"},
+                json={"name": "Rent", "type": "EXPENSE"},
+            )
+
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["name"], "Rent")
+        self.assertEqual(response.json()["workspace_id"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

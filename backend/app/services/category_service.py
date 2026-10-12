@@ -117,7 +117,7 @@ async def create_category(request: CreateCategoryRequest,
     ) #in business workspace only owner can create a category, so owner_only = True
     if len(request.name.strip()) == 0:
         raise HTTPException(status_code=400, detail="Name cannot be empty")
-    if request.type != CategoryType.income or request.type != CategoryType.expense:
+    if request.type not in (CategoryType.income, CategoryType.expense):
         raise HTTPException(status_code=400, detail="Invalid type")
     category = Category(
         name=request.name.strip(),
