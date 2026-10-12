@@ -110,8 +110,9 @@ function CategoryDialog({ action, workspace, categories, onChange, onClose, onSu
   )
 }
 
-export function CategoryManager({ categories, onChange }: Props) {
-  const [workspace, setWorkspace] = useState<WorkspaceKind>('personal')
+export function CategoryManager({ categories, onChange, workspaceKind }: Props & { workspaceKind?: WorkspaceKind }) {
+  const [selectedWorkspace, setWorkspace] = useState<WorkspaceKind>('personal')
+  const workspace = workspaceKind ?? selectedWorkspace
   const [action, setAction] = useState<Action | null>(null)
   const [notice, setNotice] = useState('')
   const workspaceLabel = workspace === 'personal' ? 'Personal' : 'Business'
@@ -131,9 +132,9 @@ export function CategoryManager({ categories, onChange }: Props) {
         <div><h2 className="m-0 text-[22px] font-semibold!">Your categories</h2><p className="mt-2 text-xs text-[#7d877f]">Organise income and expenses with categories and subcategories.</p></div>
         <button type="button" onClick={() => setAction({ kind: 'create' })} className={primaryButton}><Plus size={17} />Create category</button>
       </div>
-      <div role="group" aria-label="Category workspace" className="mt-6 inline-flex gap-1 rounded-xl bg-[#f3f6ed] p-1">
+      {!workspaceKind && <div role="group" aria-label="Category workspace" className="mt-6 inline-flex gap-1 rounded-xl bg-[#f3f6ed] p-1">
         {(['personal', 'business'] as const).map((kind) => <button type="button" key={kind} aria-pressed={workspace === kind} onClick={() => { setWorkspace(kind); setNotice('') }} className={`rounded-lg px-4 py-2 text-sm ${workspace === kind ? 'bg-[#193f33] text-white' : 'text-[#7d877f] hover:bg-[#eaf0e6]'}`}>{kind === 'personal' ? 'Personal' : 'Business'}</button>)}
-      </div>
+      </div>}
       <p className="mt-3 text-xs text-[#7d877f]">{workspaceLabel} workspace · Sample data, changes last for this session</p>
       {notice && <p role="status" className="mt-4 rounded-lg bg-[#eaf0e5] px-4 py-3 text-sm">{notice}</p>}
       {roots.length === 0 ? (
