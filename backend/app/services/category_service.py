@@ -7,14 +7,20 @@ from sqlalchemy import select, Select
 from app.dto import CategoryResponseDTO, CreateCategoryRequest, UpdateCategoryRequest
 from app.services.workspace_access import get_workspace_membership
 from app.models.category import CategoryType
+from app.models.workspace import WorkspaceTypeEnum
 
 
 async def get_categories(current_user: dict[str, str], active_workspace: Workspace, db: AsyncSession)-> list[CategoryResponseDTO]:
-    membership = await get_workspace_membership(
-        current_user, active_workspace.workspace_id,db, False
-    )
+    membership = {}
+    if active_workspace.type == WorkspaceTypeEnum.BUSINESS:
+        membership = await get_workspace_membership(
+            current_user, active_workspace.workspace_id, db, True
+        )  # in business workspace only owner can create a category, so owner_only = True
     categories_stmt: Select = (select(Category)
-                               .where(Category.workspace_id == membership.workspace_id))
+                               .where(
+        Category.workspace_id == membership.workspace_id
+        if membership else Category.workspace_id == active_workspace.workspace_id)
+    )
     categories_result = await db.execute(categories_stmt)
     categories = categories_result.scalars().all()
 
@@ -32,13 +38,16 @@ async def get_category_by_id(
     active_workspace: Workspace,
     db: AsyncSession,
 ) -> CategoryResponseDTO:
-    membership = await get_workspace_membership(
-        current_user, active_workspace.workspace_id, db
-    )
+    membership = {}
+    if active_workspace.type == WorkspaceTypeEnum.BUSINESS:
+        membership = await get_workspace_membership(
+            current_user, active_workspace.workspace_id, db, True
+        )  # in business workspace only owner can create a category, so owner_only = True
+    workspace_id = membership.workspace_id if membership else active_workspace.workspace_id
     category = await db.scalar(
         select(Category).where(
             Category.category_id == category_id,
-            Category.workspace_id == membership.workspace_id,
+            Category.workspace_id == workspace_id,
         )
     )
     if category is None:
@@ -59,13 +68,16 @@ async def update_category(
     active_workspace: Workspace,
     db: AsyncSession,
 ) -> CategoryResponseDTO:
-    membership = await get_workspace_membership(
-        current_user, active_workspace.workspace_id, db, owner_only=True
-    )
+    membership = {}
+    if active_workspace.type == WorkspaceTypeEnum.BUSINESS:
+        membership = await get_workspace_membership(
+            current_user, active_workspace.workspace_id, db, True
+        )  # in business workspace only owner can create a category, so owner_only = True
+    workspace_id = membership.workspace_id if membership else active_workspace.workspace_id
     category = await db.scalar(
         select(Category).where(
             Category.category_id == category_id,
-            Category.workspace_id == membership.workspace_id,
+            Category.workspace_id == workspace_id,
         )
     )
     if category is None:
@@ -92,13 +104,16 @@ async def delete_category(
     active_workspace: Workspace,
     db: AsyncSession,
 ) -> None:
-    membership = await get_workspace_membership(
-        current_user, active_workspace.workspace_id, db, owner_only=True
-    )
+    membership = {}
+    if active_workspace.type == WorkspaceTypeEnum.BUSINESS:
+        membership = await get_workspace_membership(
+            current_user, active_workspace.workspace_id, db, True
+        )  # in business workspace only owner can delete a category
+    workspace_id = membership.workspace_id if membership else active_workspace.workspace_id
     category = await db.scalar(
         select(Category).where(
             Category.category_id == category_id,
-            Category.workspace_id == membership.workspace_id,
+            Category.workspace_id == workspace_id,
         )
     )
     if category is None:
@@ -112,9 +127,13 @@ async def create_category(request: CreateCategoryRequest,
                           current_user: dict[str, str],
                           active_workspace: Workspace,
                           db: AsyncSession) -> CategoryResponseDTO:
-    membership = await get_workspace_membership(
-        current_user, active_workspace.workspace_id, db, True
-    ) #in business workspace only owner can create a category, so owner_only = True
+    membership = {}
+    if active_workspace.type == WorkspaceTypeEnum.BUSINESS:
+        membership = await get_workspace_membership(
+            current_user, active_workspace.workspace_id, db, True
+        ) #in business workspace only owner can create a category, so owner_only = True
+    workspace_id = membership.workspace_id if membership else active_workspace.workspace_id
+
     if len(request.name.strip()) == 0:
         raise HTTPException(status_code=400, detail="Name cannot be empty")
     if request.type not in (CategoryType.income, CategoryType.expense):
@@ -122,7 +141,7 @@ async def create_category(request: CreateCategoryRequest,
     category = Category(
         name=request.name.strip(),
         type=request.type,
-        workspace_id=membership.workspace_id,
+        workspace_id=workspace_id,
     )
     db.add(category)
     await db.commit()
