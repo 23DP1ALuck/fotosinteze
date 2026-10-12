@@ -21,13 +21,16 @@ class CategoryEndpointTests(unittest.IsolatedAsyncioTestCase):
             User(user_id=1, email="owner@test.com", display_name="Owner", password="unused"),
             Workspace(workspace_id=1, name="One", type=WorkspaceTypeEnum.BUSINESS),
             Workspace(workspace_id=2, name="Two", type=WorkspaceTypeEnum.BUSINESS),
+            Workspace(workspace_id=3, name="Personal", type=WorkspaceTypeEnum.PERSONAL),
         ])
         await self.db.flush()
         self.db.add_all([
             WorkspaceUsers(user_id=1, workspace_id=1, role=WorkspaceRole.OWNER),
             WorkspaceUsers(user_id=1, workspace_id=2, role=WorkspaceRole.OWNER),
+            WorkspaceUsers(user_id=1, workspace_id=3, role=WorkspaceRole.OWNER),
             Category(category_id=1, name="Food", type=CategoryType.expense, workspace_id=1),
             Category(category_id=2, name="Salary", type=CategoryType.income, workspace_id=2),
+            Category(category_id=3, name="Personal food", type=CategoryType.expense, workspace_id=3),
         ])
         await self.db.commit()
 
@@ -93,6 +96,42 @@ class CategoryEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 201, response.text)
         self.assertEqual(response.json()["name"], "Rent")
         self.assertEqual(response.json()["workspace_id"], 1)
+
+    async def test_personal_workspace_supports_category_crud(self):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                "/categories", headers={"Workspace-ID": "3"}
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual([category["name"] for category in response.json()], ["Personal food"])
+
+            response = await client.post(
+                "/categories",
+                headers={"Workspace-ID": "3"},
+                json={"name": "Personal income", "type": "INCOME"},
+            )
+            self.assertEqual(response.status_code, 201, response.text)
+            self.assertEqual(response.json()["workspace_id"], 3)
+
+            response = await client.get(
+                "/categories/3", headers={"Workspace-ID": "3"}
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+
+            response = await client.put(
+                "/categories/3",
+                headers={"Workspace-ID": "3"},
+                json={"name": "Personal groceries", "type": "EXPENSE"},
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["name"], "Personal groceries")
+
+            response = await client.delete(
+                "/categories/3", headers={"Workspace-ID": "3"}
+            )
+            self.assertEqual(response.status_code, 204, response.text)
 
 
 if __name__ == "__main__":
