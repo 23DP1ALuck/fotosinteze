@@ -8,7 +8,7 @@ from app.models import BudgetPeriod
 
 
 class CreateBudgetRequest(BaseModel):
-    category_id: int
+    category_id: int | None = None
     project_id: int | None = None
     department_id: int | None = None
     name: str = Field(..., max_length=100, description="Name of the budget")
