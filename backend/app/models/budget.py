@@ -22,7 +22,9 @@ class Budget(Base):
     __tablename__ = "budgets"
 
     budget_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    category_id: Mapped[int] = mapped_column(ForeignKey("category.category_id"), nullable=False)
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("category.category_id"), nullable=True
+    )
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.project_id"), nullable=True)
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.department_id"), nullable=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -34,6 +36,6 @@ class Budget(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
 
-    category: Mapped["Category"] = relationship(back_populates="budgets")
+    category: Mapped["Category | None"] = relationship(back_populates="budgets")
     project: Mapped["Project | None"] = relationship(back_populates="budgets")
     department: Mapped["Department | None"] = relationship(back_populates="budgets")
