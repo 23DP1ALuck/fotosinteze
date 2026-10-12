@@ -3,7 +3,7 @@ import { MoreHorizontal, Search, X } from 'lucide-react'
 
 export type WorkspaceTransaction = {
   id: number; name: string; category: string; source: string; date: string; amount: number
-  department?: string; project?: string; createdBy?: string
+  department?: string; project?: string; createdBy?: string; departmentId?: number; projectId?: number
 }
 const euro = (value: number) => new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR' }).format(value)
 const selectClass = 'min-w-0 rounded-[10px] border-0 bg-[#eaf0e6] px-4 py-3 text-sm text-[#193f33]'

@@ -8,9 +8,10 @@ import { useAuth } from '@/features/auth/use-auth'
 import { CategoryManager } from '@/features/categories/CategoryManager'
 import { WorkspaceSwitcher, CreateBusinessDialog, type Workspace } from '@/features/workspaces/WorkspaceControls'
 import { TeamManager } from '@/features/workspaces/TeamManager'
+import { ProjectManager, ProjectFields } from '@/features/projects/ProjectManager'
+import { useProjectCatalog } from '@/features/projects/use-project-catalog'
 import type { TeamData, TeamSection } from '@/features/workspaces/team-types'
 import { TransactionsView, type WorkspaceTransaction } from '@/features/workspaces/TransactionsView'
-import { initialCategories } from '@/features/categories/types'
 
 type Transaction = WorkspaceTransaction
 const initialTransactions: Transaction[] = [
@@ -41,7 +42,13 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   const workspaceNavigation = isBusiness ? ['Dashboard', 'Transactions', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics', 'Settings'] : navigation
   const { user, logout } = useAuth()
   const [team, setTeam] = useState<TeamData>({ departments: [], employees: [], projects: [] })
-  const [categories, setCategories] = useState(isBusiness ? [] : initialCategories)
+  const [backendWorkspaceId, setBackendWorkspaceId] = useState<number>()
+  const projectCatalog = useProjectCatalog(backendWorkspaceId, isBusiness && active)
+  const canManageProjects = workspace.role !== 'EMPLOYEE'
+  const [transactionDepartmentId, setTransactionDepartmentId] = useState('')
+  const [transactionProjectId, setTransactionProjectId] = useState('')
+  const [budgetTargets, setBudgetTargets] = useState<Record<string, { departmentId: string; projectId: string }>>({})
+  const [budgetDraft, setBudgetDraft] = useState<typeof budgetTargets>({})
   const [view, setView] = useState<string>('Dashboard')
   const [mobileMenu, setMobileMenu] = useState(false)
   const [transactions, setTransactions] = useState<Transaction[]>(isBusiness ? [] : initialTransactions)
@@ -60,8 +67,18 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   const chartData = history.map((item) => item.month === 'Sep' ? { ...item, income, expenses } : isBusiness ? { ...item, income: 0, expenses: 0 } : item)
 
   function navigate(next: string) { setView(next); setMobileMenu(false) }
+  function connectBackendWorkspace(id: number | undefined) {
+    setBackendWorkspaceId(id)
+    setTransactionDepartmentId('')
+    setTransactionProjectId('')
+    setBudgetTargets({})
+    setBudgetDraft({})
+  }
   function openDialog(type: typeof dialogType, entry: typeof entryType = 'income') {
-    setDialogType(type); setEntryType(entry); dialog.current?.showModal()
+    setDialogType(type); setEntryType(entry)
+    if (type === 'transaction') { setTransactionDepartmentId(''); setTransactionProjectId('') }
+    if (type === 'budget') setBudgetDraft(budgetTargets)
+    dialog.current?.showModal()
   }
   function saveTransaction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -70,7 +87,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
     if (!Number.isFinite(amount) || amount <= 0) return
     const item: Transaction = {
       id: Date.now(), createdBy: displayName, name: String(data.get('name')).trim(), category: String(data.get('category')),
-      source: 'Manual', department: String(data.get('department') || ''), project: String(data.get('project') || ''), date: String(data.get('date')), amount: entryType === 'income' ? amount : -amount,
+      source: 'Manual', department: projectCatalog.departments.find(item => String(item.id) === data.get('department_id'))?.name || '', project: projectCatalog.projects.find(item => String(item.id) === data.get('project_id'))?.name || '', departmentId: Number(data.get('department_id')) || undefined, projectId: Number(data.get('project_id')) || undefined, date: String(data.get('date')), amount: entryType === 'income' ? amount : -amount,
     }
     if (!item.name) return
     setTransactions((current) => [item, ...current].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id))
@@ -93,8 +110,8 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   function renderBudgets() {
     return <section className={`${cardClasses} min-w-0 [&>p]:mt-2`}><h2>{isBusiness ? 'Every budget, in view.' : 'Stay within your plans.'}</h2><p className="text-xs text-[#7d877f]">September budget progress</p>
       {Object.keys(budgets).map((category) => {
-        const spent = (isBusiness ? 0 : category === 'Groceries' ? 217 : 92) + additions.filter((item) => item.category === category).reduce((sum, item) => sum + Math.max(-item.amount, 0), 0)
-        return <div className="mt-6 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:mt-1 [&_p]:text-[13px] [&_p]:text-[#7d877f]" key={category}><h3>{category === 'Groceries' ? 'Food & groceries' : category}</h3><p>{euro(spent)} of {euro(budgets[category])}</p><progress className="mt-[10px] block h-[7px] w-full appearance-none overflow-hidden rounded-md border-0 bg-[#dce4d8] [&::-webkit-progress-bar]:rounded-md [&::-webkit-progress-bar]:bg-[#dce4d8] [&::-webkit-progress-value]:rounded-md [&::-webkit-progress-value]:bg-[#193f33] [&::-moz-progress-bar]:rounded-md [&::-moz-progress-bar]:bg-[#193f33]" aria-label={`${category} budget used`} value={spent} max={budgets[category]} /><span className="sr-only">{Math.round(spent / budgets[category] * 100)}% used</span></div>
+        const spent = (isBusiness ? 0 : category === 'Groceries' ? 217 : 92) + additions.filter((item) => item.category === category && (!budgetTargets[category]?.projectId || String(item.projectId) === budgetTargets[category].projectId) && (!budgetTargets[category]?.departmentId || String(item.departmentId) === budgetTargets[category].departmentId)).reduce((sum, item) => sum + Math.max(-item.amount, 0), 0)
+        return <div className="mt-6 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:mt-1 [&_p]:text-[13px] [&_p]:text-[#7d877f]" key={category}><h3>{category === 'Groceries' ? 'Food & groceries' : category}</h3><p>{euro(spent)} of {euro(budgets[category])}</p>{isBusiness && budgetTargets[category]?.projectId && <p className="text-xs!">Project: {projectCatalog.projects.find(item => String(item.id) === budgetTargets[category].projectId)?.name || `Project ${budgetTargets[category].projectId}`}</p>}<progress className="mt-[10px] block h-[7px] w-full appearance-none overflow-hidden rounded-md border-0 bg-[#dce4d8] [&::-webkit-progress-bar]:rounded-md [&::-webkit-progress-bar]:bg-[#dce4d8] [&::-webkit-progress-value]:rounded-md [&::-webkit-progress-value]:bg-[#193f33] [&::-moz-progress-bar]:rounded-md [&::-moz-progress-bar]:bg-[#193f33]" aria-label={`${category} budget used`} value={spent} max={budgets[category]} /><span className="sr-only">{Math.round(spent / budgets[category] * 100)}% used</span></div>
       })}
       <button className="mt-10 border-0 bg-transparent p-0 text-[13px] text-[#193f33] hover:text-[#60815b]" onClick={() => openDialog('budget')}>Manage budgets</button>
     </section>
@@ -134,7 +151,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       <div className="mt-7 flex items-center justify-between gap-[22px] max-[1200px]:flex-col max-[1200px]:items-start max-sm:mt-[25px] [&_h1]:m-0 [&_h1]:text-[clamp(25px,2.45vw,40px)] [&_h1]:leading-[1.2] [&_h1]:font-semibold [&_h1]:tracking-[-.035em] max-sm:[&_h1]:max-w-[330px] max-sm:[&_h1]:text-[29px] [&_p]:mt-3 [&_p]:text-[15px] [&_p]:text-[#7d877f] max-sm:[&_p]:text-[13px]"><div><h1>{view === 'Dashboard' ? isBusiness ? 'Your business, at a glance.' : 'A little clarity for your everyday.' : view === 'Transactions' ? 'Every transaction, in its place.' : view}</h1><p>{isBusiness ? view === 'Transactions' ? 'Search, organise and follow the details behind your business.' : 'Track the money. Give every plan room to grow.' : view === 'Dashboard' ? 'Your balance, spending and goals — all in their own place.' : 'A clearer picture of your personal finances.'}</p></div>
         <div className="flex shrink-0 gap-[13px] max-sm:w-full max-sm:gap-[10px] max-sm:[&_button]:flex-1 max-sm:[&_button]:text-[13px]"><button className="inline-flex min-h-12 items-center justify-center gap-[6px] whitespace-nowrap rounded-[10px] border-0 bg-[#eaf0e6] px-[18px] py-3 text-[#193f33] hover:bg-[#dce6d4]" onClick={() => openDialog('transaction', 'income')}><Plus size={18} />Add income</button><button className={primaryButtonClasses} onClick={() => openDialog('transaction', 'expense')}><span aria-hidden>−</span>Add expense</button></div>
       </div>
-      <div className="mt-6 mb-[19px] flex flex-wrap items-center gap-[15px] text-xs text-[#7d877f] max-sm:mt-5 max-sm:gap-2"><span>1–30 September 2026</span><span className="rounded-[5px] bg-[#edf0e8] px-[7px] py-[3px] text-[10px]">Sample workspace · changes last for this session</span></div>
+      <div className="mt-6 mb-[19px] flex flex-wrap items-center gap-[15px] text-xs text-[#7d877f] max-sm:mt-5 max-sm:gap-2">{view === 'Categories' || (isBusiness && view === 'Projects') ? <span>{view} are saved to your connected backend workspace.</span> : <><span>1–30 September 2026</span><span className="rounded-[5px] bg-[#edf0e8] px-[7px] py-[3px] text-[10px]">Sample workspace · changes last for this session</span></>}</div>
       {notice && <p role="status" className="mb-[18px] flex items-center justify-between rounded-[10px] bg-[#eaf0e5] px-4 py-3 text-[13px] [&_button]:border-0 [&_button]:bg-transparent">{notice}<button aria-label="Dismiss notification" onClick={() => setNotice('')}><X size={16} /></button></p>}
       {(view === 'Dashboard' || view === 'Statistics') && <><section className="grid grid-cols-4 gap-[17px] max-[900px]:grid-cols-2 max-sm:gap-[10px]" aria-label="Monthly overview">
         {(isBusiness ? [{ label: 'Revenue', value: income, note: 'Income across your business workspace' }, { label: 'Expenses', value: expenses, note: `${income ? (expenses / income * 100).toFixed(1) : '0.0'}% of revenue` }, { label: 'Net profit', value: income - expenses, note: `${income ? ((income - expenses) / income * 100).toFixed(1) : '0.0'}% profit margin` }, { label: 'Current balance', value: balance, note: 'Across your business workspace' }] : [{ label: 'Current balance', value: balance, note: 'Opening balance + this month’s activity' }, { label: 'Income this month', value: income, note: 'Salary and other income' }, { label: 'Expenses this month', value: expenses, note: `${(expenses / income * 100).toFixed(1)}% of monthly income` }, { label: 'Saved this month', value: income - expenses, note: `${((income - expenses) / income * 100).toFixed(1)}% savings rate` }]).map((item) => <article className={`min-w-0 rounded-2xl ${item.label === (isBusiness ? 'Net profit' : 'Saved this month') ? 'bg-[#d5f579]' : 'bg-white'} px-[23px] pt-5 pb-[23px] max-[1200px]:px-[15px] max-[1200px]:py-[18px] min-[1600px]:px-7 min-[1600px]:py-[25px]  [&_p]:text-sm [&_p]:text-[#7d877f] max-sm:[&_p]:text-xs [&_strong]:mt-3 [&_strong]:mb-[11px] [&_strong]:block [&_strong]:text-[clamp(24px,2.35vw,36px)] [&_strong]:leading-[1.3] [&_strong]:font-[650] [&_strong]:tracking-[-.035em] max-sm:[&_strong]:text-[25px] [&_span]:text-[11px] [&_span]:text-[#7d877f] max-sm:[&_span]:text-[10px] data-[highlight=true]:[&_p]:text-[#688044] data-[highlight=true]:[&_span]:text-[#688044]`} data-highlight={item.label === (isBusiness ? 'Net profit' : 'Saved this month')} key={item.label}><p>{item.label}</p><strong>{euro(item.value)}</strong><span>{item.note}</span></article>)}
@@ -142,16 +159,17 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       {view === 'Dashboard' && renderTransactions()}
       {view === 'Transactions' && <TransactionsView transactions={transactions} income={income} expenses={expenses} workspaceName={workspace.name} workspaceKind={workspace.kind} />}
       {view === 'Budgets' && renderBudgets()}
-      {view === 'Categories' && <CategoryManager categories={categories} onChange={setCategories} workspaceKind={workspace.kind} />}
+      {view === 'Categories' && <CategoryManager workspaceName={workspace.name} workspaceKind={workspace.kind} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} />}
       {!isBusiness && (view === 'Dashboard' || view === 'Revolut') && <section className="mt-[25px] flex items-center justify-between gap-5 rounded-[15px] bg-[#eaf0e5] px-[26px] py-[17px] max-sm:flex-col max-sm:items-start max-sm:gap-3 max-sm:p-[18px] [&_h2]:m-0 [&_h2]:text-base [&_h2]:leading-[1.3] [&_h2]:font-semibold [&_h2]:tracking-[-.025em] [&_p]:mt-[5px] [&_p]:text-xs [&_p]:text-[#7d877f]"><div><h2>Revolut preview</h2><p>Sample imported transactions · connect your account when integration is available</p></div><span className="whitespace-nowrap rounded-full border border-[#cbd6c3] px-[10px] py-1 text-xs">Not connected</span></section>}
       {isBusiness && view === 'Dashboard' && <section className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-[#eaf0e5] p-5"><div><h2 className="text-base font-semibold!">Built for your team. Kept in your control.</h2><p className="mt-2 text-xs text-[#68796e]">Owners manage the workspace. Employees can view finances and add expenses.</p></div><button className="text-sm" onClick={() => navigate('Employees')}>Employees</button></section>}
-      {isBusiness && ['Departments', 'Projects', 'Employees'].includes(view) && <TeamManager key={view} section={view as TeamSection} data={team} onChange={setTeam} ownerName={displayName} />}
+      {isBusiness && view === 'Projects' && <ProjectManager key={backendWorkspaceId ?? 'unconnected'} catalog={projectCatalog} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} canManage={canManageProjects} />}
+      {isBusiness && ['Departments', 'Employees'].includes(view) && <TeamManager key={view} section={view as TeamSection} data={team} onChange={setTeam} ownerName={displayName} />}
       {isBusiness && view === 'Settings' && <section className={cardClasses}><h2>{workspace.name}</h2><p className="mt-3 text-sm text-[#68796e]">Business workspace · You are the Owner · Currency: EUR</p></section>}
     </main>
     <dialog ref={dialog} className="m-auto max-h-[calc(100svh-40px)] w-[min(460px,calc(100%_-_32px))] overflow-y-auto rounded-[18px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/35 backdrop:backdrop-blur-[3px] [&_h2]:m-0 [&_h2]:text-[23px] [&_h2]:font-semibold" aria-labelledby="dashboard-dialog-title">
       <div className="flex items-center justify-between gap-[15px]"><h2 id="dashboard-dialog-title">{dialogType === 'transaction' ? `Add ${entryType}` : dialogType === 'budget' ? 'Manage your budgets' : dialogType === 'profile' ? 'Your account' : 'Your account'}</h2><button className="rounded-full border-0 bg-[#eff2e9] p-[6px]" aria-label="Close dialog" onClick={() => dialog.current?.close()}><X size={20} /></button></div>
-      {dialogType === 'transaction' && <form key={entryType} onSubmit={saveTransaction} className={formClasses}><p className="text-xs text-[#7d877f]">Add a transaction to the September sample workspace.</p><label>Description<input name="name" placeholder={entryType === 'income' ? 'e.g. Freelance project' : 'e.g. Weekly groceries'} required maxLength={80} autoFocus /></label><label>Amount (€)<input name="amount" type="number" min="0.01" max="999999999" step="0.01" placeholder="0.00" required /></label><label>Category<select name="category">{(entryType === 'income' ? isBusiness ? ['Services', 'Other income'] : ['Salary', 'Other income'] : isBusiness ? ['Marketing', 'Software', 'Office', 'Travel', 'Equipment', 'Other'] : ['Groceries', 'Transport', 'Subscriptions', 'Shopping', 'Other']).map((category) => <option key={category}>{category}</option>)}</select></label>{isBusiness && <><label>Department<input name="department" placeholder="Optional" maxLength={100} list={`${workspace.id}-departments`} /><datalist id={`${workspace.id}-departments`}>{team.departments.map((department) => <option key={department.id} value={department.name} />)}</datalist></label><label>Project<input name="project" placeholder="Optional" maxLength={100} list={`${workspace.id}-projects`} /><datalist id={`${workspace.id}-projects`}>{team.projects.map((project) => <option key={project.id} value={project.name} />)}</datalist></label></>}<label>Date<input name="date" type="date" min="2026-09-01" max="2026-09-30" defaultValue="2026-09-22" required /></label><button className={primaryButtonClasses} type="submit">Save {entryType}</button></form>}
-      {dialogType === 'budget' && <form className={formClasses} onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); setBudgets(Object.fromEntries(Object.keys(budgets).map((name) => [name, Number(data.get(name))]))); setNotice('Sample budgets updated.'); dialog.current?.close() }}><p className="text-xs text-[#7d877f]">Set your monthly spending limits.</p>{Object.keys(budgets).map((category) => <label key={category}>{category} (€)<input name={category} type="number" min="1" max="999999999" step="0.01" defaultValue={budgets[category]} required /></label>)}<button className={primaryButtonClasses}>Save budgets</button></form>}
+      {dialogType === 'transaction' && <form key={entryType} onSubmit={saveTransaction} className={formClasses}><p className="text-xs text-[#7d877f]">Add a transaction to the September sample workspace.</p><label>Description<input name="name" placeholder={entryType === 'income' ? 'e.g. Freelance project' : 'e.g. Weekly groceries'} required maxLength={80} autoFocus /></label><label>Amount (€)<input name="amount" type="number" min="0.01" max="999999999" step="0.01" placeholder="0.00" required /></label><label>Category<select name="category">{(entryType === 'income' ? isBusiness ? ['Services', 'Other income'] : ['Salary', 'Other income'] : isBusiness ? ['Marketing', 'Software', 'Office', 'Travel', 'Equipment', 'Other'] : ['Groceries', 'Transport', 'Subscriptions', 'Shopping', 'Other']).map((category) => <option key={category}>{category}</option>)}</select></label>{isBusiness && <ProjectFields catalog={projectCatalog} departmentId={transactionDepartmentId} projectId={transactionProjectId} onDepartmentChange={setTransactionDepartmentId} onProjectChange={setTransactionProjectId} />}<label>Date<input name="date" type="date" min="2026-09-01" max="2026-09-30" defaultValue="2026-09-22" required /></label><button className={primaryButtonClasses} type="submit">Save {entryType}</button></form>}
+      {dialogType === 'budget' && <form className={formClasses} onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); setBudgets(Object.fromEntries(Object.keys(budgets).map((name) => [name, Number(data.get(name))]))); setBudgetTargets(Object.fromEntries(Object.keys(budgets).map((name, index) => [name, { departmentId: String(data.get(`budget-${index}-department_id`) || ''), projectId: String(data.get(`budget-${index}-project_id`) || '') }]))); setNotice('Sample budgets updated.'); dialog.current?.close() }}><p className="text-xs text-[#7d877f]">Set your monthly spending limits.</p>{Object.keys(budgets).map((category, index) => <fieldset key={category} className="grid gap-4 rounded-xl border border-[#dce4d8] p-4"><legend className="px-1 text-sm font-medium">{category}</legend><label>{category} (€)<input name={category} type="number" min="1" max="999999999" step="0.01" defaultValue={budgets[category]} required /></label>{isBusiness && <ProjectFields catalog={projectCatalog} namePrefix={`budget-${index}-`} departmentId={budgetDraft[category]?.departmentId || ''} projectId={budgetDraft[category]?.projectId || ''} onDepartmentChange={departmentId => setBudgetDraft(previous => ({ ...previous, [category]: { ...previous[category], departmentId, projectId: previous[category]?.projectId || '' } }))} onProjectChange={projectId => setBudgetDraft(previous => ({ ...previous, [category]: { departmentId: previous[category]?.departmentId || '', projectId } }))} />}</fieldset>)}<button className={primaryButtonClasses}>Save budgets</button></form>}
       {dialogType === 'profile' && <div className={formClasses}><strong>{displayName}</strong><p>{user?.email}</p><p className="text-xs text-[#7d877f]">{workspace.name} workspace</p><button className={primaryButtonClasses} onClick={handleLogout}>Log out</button>{logoutError && <p role="alert">{logoutError}</p>}</div>}
     </dialog>
   </div>
@@ -162,7 +180,7 @@ function HomePage() {
   const [activeId, setActiveId] = useState('personal')
   const [creating, setCreating] = useState(false)
   function createWorkspace(name: string) {
-    const workspace: Workspace = { id: crypto.randomUUID(), name, kind: 'business' }
+    const workspace: Workspace = { id: crypto.randomUUID(), name, kind: 'business', role: 'OWNER' }
     setWorkspaces((current) => [...current, workspace])
     setActiveId(workspace.id)
   }

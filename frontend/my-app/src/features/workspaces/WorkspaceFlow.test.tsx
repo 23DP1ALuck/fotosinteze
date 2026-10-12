@@ -1,16 +1,17 @@
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext } from '@/features/auth/use-auth'
 import HomePage from '@/pages/HomePage'
+import { clearSession, setAccessToken } from '@/features/auth/storage'
 import { TransactionsView } from './TransactionsView'
 
 beforeEach(() => {
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value() { this.setAttribute('open', '') } })
   Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value() { this.removeAttribute('open') } })
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); clearSession() })
 function renderWorkspace() {
   render(<AuthContext.Provider value={{ status: 'authenticated', user: { id: 1, displayName: 'Ada', email: 'ada@example.com' }, token: null, login: async () => {}, register: async () => {}, logout: async () => {} }}><MemoryRouter><HomePage /></MemoryRouter></AuthContext.Provider>)
 }
@@ -61,12 +62,12 @@ describe('business workspaces', () => {
     modal = within(screen.getByRole('dialog'))
     await user.type(modal.getByLabelText('Description'), 'Client project')
     await user.type(modal.getByLabelText('Amount (€)'), '900')
-    await user.type(modal.getByLabelText('Department'), 'Development')
-    await user.type(modal.getByLabelText('Project'), 'Launch')
+    expect(modal.getByLabelText('Department')).toBeDisabled()
+    expect(modal.getByLabelText('Project')).toBeDisabled()
     await user.click(modal.getByRole('button', { name: 'Save income' }))
     await user.click(screen.getByRole('button', { name: 'Transactions' }))
     const main = within(screen.getByRole('main'))
-    expect(main.getByRole('row', { name: /Client project Services Development Launch Ada/ })).toBeInTheDocument()
+    expect(main.getByRole('row', { name: /Client project Services — — Ada/ })).toBeInTheDocument()
     await user.type(main.getByRole('textbox', { name: 'Search business transactions' }), 'unmatched')
     expect(main.getByText('No transactions match these filters.')).toBeInTheDocument()
 
@@ -134,4 +135,43 @@ describe('business workspaces', () => {
     await user.click(screen.getByRole('button', { name: 'Expenses' }))
     expect(screen.getByText('No transactions match these filters.')).toBeInTheDocument()
   })
+})
+
+
+it('uses API project IDs in business transaction and budget selectors', async () => {
+  setAccessToken(`header.${btoa(JSON.stringify({ exp: Date.now()/1000+3600 }))}.signature`)
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    expect(new Headers(init.headers).get('Workspace-ID')).toBe('42')
+    return Response.json(String(url).endsWith('/departments')
+      ? [{ id: 7, workspace_id: 42, name: 'Development' }]
+      : [{ id: 10, workspace_id: 42, name: 'Website', status: 'Active', department_ids: [7], start_date: null, end_date: null }])
+  }))
+  const user = userEvent.setup()
+  renderWorkspace()
+  await user.click(screen.getByRole('button', { name: 'Create business workspace from workspace switcher' }))
+  let modal = within(screen.getByRole('dialog'))
+  await user.type(modal.getByLabelText('Workspace name'), 'Acme Studio')
+  await user.click(modal.getByRole('button', { name: 'Create business workspace' }))
+  await user.click(within(screen.getByRole('navigation', { name: 'Workspace' })).getByRole('button', { name: 'Projects' }))
+  await user.type(screen.getByLabelText('Workspace ID'), '42')
+  await user.click(screen.getByRole('button', { name: 'Load projects' }))
+  await screen.findByRole('button', { name: 'Edit Website' })
+  await user.click(screen.getByRole('button', { name: 'Add expense' }))
+  modal = within(screen.getByRole('dialog'))
+  await user.type(modal.getByLabelText('Description'), 'Website promotion')
+  await user.type(modal.getByLabelText('Amount (€)'), '900')
+  await user.selectOptions(modal.getByLabelText('Department'), '7')
+  await user.selectOptions(modal.getByLabelText('Project'), '10')
+  await user.click(modal.getByRole('button', { name: 'Save expense' }))
+  await user.click(screen.getByRole('button', { name: /^Budgets$/ }))
+  await user.click(screen.getByRole('button', { name: 'Manage budgets' }))
+  modal = within(screen.getByRole('dialog'))
+  const marketing = within(modal.getByRole('group', { name: 'Marketing' }))
+  await user.selectOptions(marketing.getByLabelText('Department'), '7')
+  await user.selectOptions(marketing.getByLabelText('Project'), '10')
+  await user.click(modal.getByRole('button', { name: 'Save budgets' }))
+  expect(within(screen.getByRole('main')).getByText('Project: Website')).toBeInTheDocument()
+  expect(screen.getByRole('progressbar', { name: 'Marketing budget used' })).toHaveAttribute('value', '900')
+  await user.click(screen.getByRole('button', { name: 'Transactions' }))
+  expect(screen.getByRole('row', { name: /Website promotion Marketing Development Website Ada/ })).toBeInTheDocument()
 })
