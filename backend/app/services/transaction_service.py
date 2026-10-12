@@ -19,6 +19,7 @@ async def create_transaction(request: CreateTransactionRequest,
                              db: AsyncSession
                              ):
 
+    # Validate the request before creating a transaction or changing the balance.
     if request.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
 
@@ -31,6 +32,7 @@ async def create_transaction(request: CreateTransactionRequest,
     if len(request.description.strip()) == 0:
         raise HTTPException(status_code=400, detail="Description must not be empty")
 
+    # The selected account must belong to the active workspace.
     account_stmt = (select(Account)
                     .where(Account.account_id == request.account_id)
                     .where(Account.workspace_id == active_workspace.workspace_id))
@@ -51,6 +53,7 @@ async def create_transaction(request: CreateTransactionRequest,
         )
         db.add(transaction)
 
+        # Income adds to the account balance; expenses subtract from it.
         if category.type == CategoryType.income:
             account.balance += request.amount
         else:
@@ -60,6 +63,7 @@ async def create_transaction(request: CreateTransactionRequest,
         await db.refresh(transaction)
         return transaction
     elif active_workspace.type == WorkspaceTypeEnum.BUSINESS:
+        # Check business membership and related records before saving or changing the balance.
         membership = await get_workspace_membership(current_user, active_workspace.workspace_id, db)
         if category.workspace_id != active_workspace.workspace_id:
             raise HTTPException(status_code=400, detail="Category must belong to this workspace")
@@ -67,6 +71,7 @@ async def create_transaction(request: CreateTransactionRequest,
             request.department_id, request.project_id, request.expense_id,
             active_workspace, membership, db,
         )
+        # Use the validated department, including the employee's default assignment.
         transaction_data = request.model_dump(exclude_unset=True)
         transaction_data['department_id'] = department_id
         transaction = Transaction(**transaction_data,
@@ -156,6 +161,7 @@ async def delete_transaction(transaction_id: int,
 
 
 async def find_transaction_by_id(transaction_id: int, workspace: Workspace, db: AsyncSession) -> Transaction:
+    # Scope the lookup to the active workspace, even when the transaction ID exists elsewhere.
     result = await db.execute(
         select(Transaction).where(
             Transaction.transaction_id == transaction_id,
@@ -169,6 +175,7 @@ async def find_transaction_by_id(transaction_id: int, workspace: Workspace, db: 
 
 
 async def find_account_by_id(account_id: int, workspace: Workspace, db: AsyncSession) -> Account:
+    # Prevent balance updates to an account in another workspace.
     result = await db.execute(
         select(Account).where(
             Account.account_id == account_id,
@@ -195,6 +202,7 @@ async def find_department_by_id(department_id: int, workspace: Workspace, db: As
 async def find_project_by_id(project_id: int,workspace: Workspace, preload_department: bool, db: AsyncSession) -> Project:
     project_stmt = (select(Project).where(Project.project_id == project_id)
                     .where(Project.workspace_id == workspace.workspace_id))
+    # Load department links only when the caller needs them for validation.
     if preload_department:
         project_stmt = project_stmt.options(selectinload(Project.departments))
     project_result = await db.execute(project_stmt)
@@ -206,12 +214,14 @@ async def find_project_by_id(project_id: int,workspace: Workspace, preload_depar
 
 async def validate_business_assignments(department_id: int | None, project_id: int | None, expense_id: int | None,
                                         workspace: Workspace, membership: WorkspaceUsers, db: AsyncSession) -> int | None:
+    # Employees use their assigned department when the request omits it.
     if membership.role != WorkspaceRole.OWNER and department_id is None:
         department_id = membership.department_id
     if department_id is not None:
         assert_department_access(membership, department_id)
         await find_department_by_id(department_id, workspace, db)
     if project_id is not None:
+        # A shared project must be accessible and linked to the selected department.
         project = await load_project(project_id, db)
         if project.workspace_id != workspace.workspace_id:
             raise HTTPException(status_code=400, detail="Project does not belong to this workspace")
@@ -219,6 +229,7 @@ async def validate_business_assignments(department_id: int | None, project_id: i
         if department_id is not None and not any(d.department_id == department_id for d in project.departments):
             raise HTTPException(status_code=400, detail="Project is not linked to this department")
     if expense_id is not None:
+        # Expenses must belong to this workspace and, for employees, their department.
         expense = await db.get(Expense, expense_id)
         if expense is None:
             raise HTTPException(status_code=404, detail="Expense not found")
@@ -231,6 +242,7 @@ async def validate_business_assignments(department_id: int | None, project_id: i
 
 async def authorize_transaction(transaction: Transaction, current_user: dict,
                                 workspace: Workspace, db: AsyncSession) -> WorkspaceUsers | None:
+    # Personal workspace membership is checked by the route dependency.
     if workspace.type != WorkspaceTypeEnum.BUSINESS:
         return None
     membership = await get_workspace_membership(current_user, workspace.workspace_id, db)
