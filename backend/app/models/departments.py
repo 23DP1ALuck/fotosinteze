@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey, String, DateTime, UniqueConstraint
 
 if TYPE_CHECKING:
-    from app.models import Workspace, Project, Expense, Transaction
+    from app.models import Budget, Workspace, Project, Expense, Transaction
 
 class Department(Base):
     __tablename__ = "departments"
@@ -30,3 +30,4 @@ class Department(Base):
     )
     expenses: Mapped[List["Expense"]] = relationship(back_populates="department")
     transactions: Mapped[List["Transaction"]] = relationship(back_populates="department")
+    budgets: Mapped[List["Budget"]] = relationship(back_populates="department")
