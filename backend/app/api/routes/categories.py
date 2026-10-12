@@ -5,7 +5,7 @@ from app.dependencies.workspace import get_current_workspace
 
 from app.services import category_service
 from app.database import get_db_session, AsyncSession
-from app.dto import CategoryResponseDTO, UpdateCategoryRequest
+from app.dto import CategoryResponseDTO, CreateCategoryRequest, UpdateCategoryRequest
 from app.models import Workspace
 
 router = APIRouter()
@@ -39,6 +39,21 @@ async def update_category(
 ):
     return await category_service.update_category(
         category_id, request, current_user, workspace, db
+    )
+@router.post(
+    "/categories",
+    status_code=201,
+    response_model=CategoryResponseDTO,
+    tags=["categories"],
+)
+async def create_category(
+    request: CreateCategoryRequest,
+    current_user: dict = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await category_service.create_category(
+        request, current_user, workspace, db
     )
 
 
