@@ -11,7 +11,7 @@ export type ProjectInput = Pick<ApiProject, 'name' | 'status' | 'start_date' | '
 async function request(workspaceId: number, path: string, init: RequestInit): Promise<Response> {
   if (!Number.isSafeInteger(workspaceId) || workspaceId < 1) throw new Error('Enter a valid workspace ID.')
   let response: Response
-  try { response = await authenticatedFetch(path, { ...init, headers: { 'Workspace-ID': String(workspaceId) } }) }
+  try { response = await authenticatedFetch(path, init, { workspaceId }) }
   catch { throw new Error('Cannot reach the server. Check that the backend is running and try again.') }
   if (!response.ok) {
     if (response.status === 401) throw new Error('Your session has expired. Please log in again.')

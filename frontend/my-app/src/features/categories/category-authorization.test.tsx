@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { cleanup, render, screen, within, waitFor } from '@testing-library/react'
+import { render } from '@/test/render'
+import { useEffect, useState } from 'react'
+import { act, cleanup, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
 import { AuthProvider } from '@/features/auth/auth-context'
@@ -60,4 +61,27 @@ it('sends the exact access token returned by login on every category GET, POST, 
   await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete category' }))
   await waitFor(() => expect(screen.queryByText('Groceries')).not.toBeInTheDocument())
   expect(methods).toEqual(new Set(['GET', 'POST', 'PUT', 'DELETE']))
+})
+
+it('does not repopulate workspace cache when a create response arrives after logout',async()=>{
+  clearSession()
+  const {useQueryClient}=await import('@tanstack/react-query')
+  let client: ReturnType<typeof useQueryClient> | undefined
+  function CacheProbe(){ const value=useQueryClient(); useEffect(()=>{client=value},[value]); return null }
+  const token=`h.${btoa(JSON.stringify({sub:'3',email:'category-test@example.test',display_name:'Category test',exp:Math.floor(Date.now()/1000)+3600}))}.s`
+  let resolveSave:(response:Response)=>void=()=>{}
+  vi.stubGlobal('fetch',vi.fn(async(url,init)=>{
+    if(String(url).endsWith('/auth/refresh'))return Response.json({}, {status:401})
+    if(String(url).endsWith('/auth/login'))return Response.json({access_token:token})
+    if(String(url).endsWith('/workspaces'))return Response.json([{id:7,name:'Personal',type:'PERSONAL',role:'OWNER'}])
+    if(init.method==='POST')return new Promise<Response>(resolve=>{resolveSave=resolve})
+    return Response.json([])
+  }))
+  const user=userEvent.setup();render(<AuthProvider><CacheProbe /><LoginCategories /></AuthProvider>)
+  await user.click(await screen.findByRole('button',{name:'Sign in'}));await screen.findByText('No categories yet')
+  await user.click(screen.getByRole('button',{name:'Create category'}));const dialog=within(screen.getByRole('dialog'))
+  await user.type(dialog.getByLabelText('Name'),'Food');await user.click(dialog.getByRole('button',{name:'Create category'}))
+  clearSession();await screen.findByRole('button',{name:'Sign in'})
+  await act(async()=>{resolveSave(Response.json({category_id:11,workspace_id:7,name:'Food',type:'EXPENSE'},{status:201}))})
+  await waitFor(()=>expect(client!.getQueryCache().findAll({queryKey:['categories',3]})).toHaveLength(0))
 })

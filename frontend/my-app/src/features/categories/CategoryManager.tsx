@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { authAccountId, workspaceQueryKey } from '@/features/workspaces/workspace-state'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -64,23 +66,21 @@ function CategoryDialog({ action, categories, workspaceId, onClose, onSaved }: {
 }
 
 function ConnectedCategories({ workspaceId, workspaceKind, onConnect }: ConnectionProps & { workspaceId: number }) {
-  const [categories, setCategories] = useState<Category[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [revision, setRevision] = useState(0)
+  const client = useQueryClient()
+  const key = workspaceQueryKey('categories',workspaceId)
+  const query = useQuery({ queryKey: key, queryFn: ({signal}) => listCategories(workspaceId,signal) })
+  const categories = query.isError ? [] : query.data ?? []
+  const loading = query.isPending || query.isFetching
+  const error = query.error instanceof Error ? query.error.message : ''
   const [action, setAction] = useState<Action | null>(null)
   const [notice, setNotice] = useState('')
-  useEffect(() => {
-    const controller = new AbortController()
-    let cancelled = false
-    listCategories(workspaceId, controller.signal).then(data => { if (!cancelled) { setCategories(data); setError('') } })
-      .catch(failure => { if (!cancelled) setError(errorMessage(failure)) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true; controller.abort() }
-  }, [workspaceId, revision])
-  function reload() { setLoading(true); setError(''); setRevision(value => value + 1) }
+  function reload() { void client.invalidateQueries({ queryKey:key, exact:true }) }
   function saved(category: Category, deleted: boolean) {
-    setCategories(previous => deleted ? previous.filter(item => item.id !== category.id) : previous.some(item => item.id === category.id) ? previous.map(item => item.id === category.id ? category : item) : [...previous, category])
+    if (authAccountId() !== key[1]) return
+    client.setQueryData<Category[]>(key, previous => {
+      const rows = previous ?? []
+      return deleted ? rows.filter(item=>item.id!==category.id) : rows.some(item=>item.id===category.id) ? rows.map(item=>item.id===category.id?category:item) : [...rows,category]
+    })
     setNotice(deleted ? 'Category deleted.' : action?.kind === 'create' ? 'Category created.' : 'Category updated.')
     reload()
   }
