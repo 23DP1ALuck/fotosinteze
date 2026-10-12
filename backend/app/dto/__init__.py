@@ -11,6 +11,7 @@ from app.dto.project_response import ProjectResponseDTO
 from app.dto.category_response_dto import CategoryResponseDTO
 from app.dto.create_category_request import CreateCategoryRequest
 from app.dto.update_category_request import UpdateCategoryRequest
+from app.dto.workspace_list_response import WorkspaceListResponse
 
 __all__ = [
     "AccessTokenResponseDTO",
@@ -27,7 +28,8 @@ __all__ = [
     "EmployeeDepartmentResponseDTO",
     "CategoryResponseDTO",
     "CreateCategoryRequest",
-    "UpdateCategoryRequest"
+    "UpdateCategoryRequest",
+    "WorkspaceListResponse"
 ]
 from app.dto.update_project_request import UpdateProjectRequest
 from app.dto.employee_department_response import EmployeeDepartmentResponseDTO

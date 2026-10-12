@@ -10,6 +10,7 @@ from app.api.routes import auth
 from app.api.routes import transactions
 from app.api.routes import departments, projects
 from app.api.routes import categories
+from app.api.routes import workspaces
 
 # inspired from
 # https://medium.com/@tclaitken/setting-up-a-fastapi-app-with-async-sqlalchemy-2-0-pydantic-v2-e6c540be4308
@@ -30,7 +31,7 @@ app.include_router(transactions.router)
 app.include_router(departments.router)
 app.include_router(projects.router)
 app.include_router(categories.router)
-
+app.include_router(workspaces.router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.client_url],
