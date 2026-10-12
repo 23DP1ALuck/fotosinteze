@@ -1,7 +1,10 @@
 import { readApiErrorMessage } from '@/features/auth/api-error'
 import type { LoginResponse, RegisterResponse } from '@/features/auth/types'
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+// Use Vite's same-origin proxy locally so hostname/port changes do not break CORS.
+const API_URL = import.meta.env.DEV
+  ? '/api'
+  : (import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') || 'http://localhost:8000')
 
 class ApiError extends Error {
   constructor(message: string) {
@@ -14,13 +17,18 @@ async function request<T>(
   path: string,
   init: RequestInit,
 ): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...init.headers,
-    },
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...init.headers,
+      },
+    })
+  } catch {
+    throw new ApiError('Cannot reach the server. Check that the backend is running and try again.')
+  }
 
   if (!response.ok) {
     throw new ApiError(await readApiErrorMessage(response))

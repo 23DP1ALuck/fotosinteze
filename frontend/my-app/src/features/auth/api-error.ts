@@ -9,6 +9,9 @@ const DETAIL_MESSAGES: Record<string, string> = {
 }
 
 export async function readApiErrorMessage(response: Response): Promise<string> {
+  if (response.status >= 500) {
+    return `The server returned an error (HTTP ${response.status}). Please check the backend logs.`
+  }
   try {
     const body: unknown = await response.json()
     if (
