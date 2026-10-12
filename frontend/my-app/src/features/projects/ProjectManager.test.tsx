@@ -1,0 +1,117 @@
+import { useState } from 'react'
+import { cleanup, render, screen, within, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { setAccessToken, clearSession } from '@/features/auth/storage'
+import { ProjectManager, ProjectFields } from './ProjectManager'
+import { useProjectCatalog } from './use-project-catalog'
+
+beforeEach(() => {
+  setAccessToken(`header.${btoa(JSON.stringify({ exp: Date.now()/1000+3600 }))}.signature`)
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value() { this.setAttribute('open', '') } })
+})
+afterEach(() => { cleanup(); clearSession(); vi.unstubAllGlobals() })
+const project = { id: 10, workspace_id: 42, name: 'Website', status: 'Active', department_ids: [7,8], start_date: '2026-09-01T00:00:00', end_date: null }
+const departments = [{ id: 7, workspace_id: 42, name: 'Development' }, { id: 8, workspace_id: 42, name: 'Marketing' }]
+function Harness({ id = 42, owner = true }: { id?: number; owner?: boolean }) {
+  const catalog = useProjectCatalog(id, true)
+  const [departmentId, setDepartment] = useState('')
+  const [projectId, setProject] = useState('')
+  return <><ProjectManager catalog={catalog} workspaceId={id} onConnect={() => {}} canManage={owner} /><form aria-label="Business transaction"><ProjectFields catalog={catalog} departmentId={departmentId} projectId={projectId} onDepartmentChange={setDepartment} onProjectChange={setProject} /></form></>
+}
+it('creates, edits and deletes real projects with multiple departments and ISO dates', async () => {
+  let rows = [project]
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+    expect(new Headers(init.headers).get('Workspace-ID')).toBe('42')
+    expect(new Headers(init.headers).get('Authorization')).toMatch(/^Bearer /)
+    if (url === '/api/departments') return Response.json(departments)
+    if (init.method === 'POST') {
+      expect(JSON.parse(String(init.body))).toEqual({ name: 'Launch', status: 'Planned', department_ids: [7,8], start_date: '2026-10-01T00:00:00', end_date: null })
+      const next = { ...project, id: 11, ...JSON.parse(String(init.body)) }
+      rows = [...rows, next]
+      return Response.json(next, { status: 201 })
+    }
+    if (init.method === 'PUT') {
+      expect(url).toBe('/api/projects/11')
+      const body = JSON.parse(String(init.body))
+      expect(body.department_ids).toEqual([])
+      rows = rows.map(row => row.id === 11 ? { ...row, ...body } : row)
+      return Response.json(rows[1])
+    }
+    if (init.method === 'DELETE') { rows = rows.filter(row => row.id !== 11); return Response.json(null) }
+    return Response.json(rows)
+  }))
+  const user = userEvent.setup()
+  render(<Harness />)
+  await screen.findByRole('button', { name: 'Edit Website' })
+  await user.click(screen.getByRole('button', { name: 'Add project' }))
+  let dialog = within(screen.getByRole('dialog'))
+  await user.type(dialog.getByLabelText('Project name'), 'Launch')
+  await user.click(dialog.getByLabelText('Development'))
+  await user.click(dialog.getByLabelText('Marketing'))
+  await user.type(dialog.getByLabelText('Start date'), '2026-10-01')
+  await user.click(dialog.getByRole('button', { name: 'Add project' }))
+  await screen.findByRole('button', { name: 'Edit Launch' })
+  await user.click(screen.getByRole('button', { name: 'Edit Launch' }))
+  dialog = within(screen.getByRole('dialog'))
+  await user.click(dialog.getByLabelText('Development'))
+  await user.click(dialog.getByLabelText('Marketing'))
+  await user.click(dialog.getByRole('button', { name: 'Save changes' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(screen.getByRole('list', { name: 'Projects' })).toHaveTextContent('No department links')
+  await user.click(screen.getByRole('button', { name: 'Delete Launch' }))
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete project' }))
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Edit Launch' })).not.toBeInTheDocument())
+})
+it('filters selectors by department and clears an incompatible selected project', async () => {
+  vi.stubGlobal('fetch', vi.fn(async url => Response.json(String(url).endsWith('/departments') ? departments : [project, { ...project, id: 12, name: 'Sales plan', department_ids: [8] }, { ...project, id: 13, name: 'Workspace plan', department_ids: [] }])))
+  const user = userEvent.setup()
+  render(<Harness />)
+  await screen.findByRole('button', { name: 'Edit Website' })
+  const form = within(screen.getByRole('form', { name: 'Business transaction' }))
+  await user.selectOptions(form.getByLabelText('Project'), '12')
+  await user.selectOptions(form.getByLabelText('Department'), '7')
+  expect(form.getByLabelText('Project')).toHaveValue('')
+  expect(form.queryByRole('option', { name: 'Sales plan' })).not.toBeInTheDocument()
+  expect(form.getByRole('option', { name: 'Workspace plan' })).toBeInTheDocument()
+})
+it('shows mutation errors without removing the project and hides management for non-owners', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => init.method === 'DELETE' ? Response.json({ detail: 'Workspace owner required' }, { status: 403 }) : Response.json(String(url).endsWith('/departments') ? departments : [project])))
+  const user = userEvent.setup()
+  const { rerender } = render(<Harness />)
+  await screen.findByRole('button', { name: 'Delete Website' })
+  await user.click(screen.getByRole('button', { name: 'Delete Website' }))
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete project' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Workspace owner required')
+  expect(screen.getByRole('list', { name: 'Projects' })).toHaveTextContent('Website')
+  rerender(<Harness owner={false} />)
+  expect(screen.queryByRole('button', { name: 'Add project' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Delete Website' })).not.toBeInTheDocument()
+})
+it('clears previous workspace projects immediately and ignores stale responses', async () => {
+  let resolveOld: (response: Response) => void = () => {}
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    const id = new Headers(init.headers).get('Workspace-ID')
+    if (String(url).endsWith('/departments')) return Response.json([])
+    if (id === '42') return new Promise<Response>(resolve => { resolveOld = resolve })
+    return Response.json([{ ...project, workspace_id: 43, name: 'Other workspace', department_ids: [] }])
+  }))
+  const { rerender } = render(<Harness />)
+  rerender(<Harness id={43} />)
+  await screen.findByRole('button', { name: 'Edit Other workspace' })
+  resolveOld(Response.json([project]))
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Edit Website' })).not.toBeInTheDocument())
+})
+
+it('does not connect an inaccessible workspace ID and explains that backend setup is required', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ detail: 'No access to this workspace' }, { status: 403 })))
+  const user = userEvent.setup()
+  const onConnect = vi.fn()
+  render(<ProjectManager catalog={{ workspaceId: undefined, projects: [], departments: [], loading: false, error: '', refresh() {}, upsert() {}, remove() {} }} onConnect={onConnect} canManage />)
+  await user.type(screen.getByLabelText('Workspace ID'), '1')
+  await user.click(screen.getByRole('button', { name: 'Load projects' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Your account cannot access workspace 1')
+  expect(onConnect).not.toHaveBeenCalled()
+  expect(screen.getByLabelText('Workspace ID')).toHaveValue(1)
+  expect(screen.queryByText(/Saved to backend/)).not.toBeInTheDocument()
+})

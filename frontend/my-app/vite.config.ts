@@ -21,7 +21,6 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(import.meta.dirname, './src'),
       },
     },
-    server: { port: 5173, strictPort: true, proxy: { '/api': apiProxy } },
-    preview: { port: 5173, strictPort: true },
+    server: { proxy: { '/api': apiProxy } },
   }
 })

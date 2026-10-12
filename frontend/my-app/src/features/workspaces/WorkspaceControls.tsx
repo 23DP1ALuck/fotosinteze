@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { Check, ChevronDown, Plus, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 
-export type Workspace = { id: string; name: string; kind: 'personal' | 'business' }
+export type Workspace = { id: string; name: string; kind: 'personal' | 'business'; role?: 'OWNER' | 'EMPLOYEE' }
 
 export function WorkspaceSwitcher({ workspace, workspaces, onSwitch, onCreate }: {
   workspace: Workspace
