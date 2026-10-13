@@ -170,3 +170,55 @@ while owners receive every linked department ID.
 Business transactions validate project/department links and apply the same
 employee department restrictions. SQLite connections enforce foreign keys,
 including workspace-aware assignment and association constraints.
+
+## Business expense requests
+
+Apply revision `c92e6a71bf03` with `.venv/bin/alembic upgrade head` before using
+the expense API. The migration preserves expense IDs, receipts, transaction
+links and balances, converts legacy statuses to uppercase, requires a category,
+and restricts deletion of categories referenced by expenses. It stops before
+changing the schema if legacy expense records need categories or reference repairs.
+
+All expense endpoints require `Authorization: Bearer <access_token>` and the
+`Workspace-ID` header for a business workspace.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/expenses` | Submit a pending expense |
+| `GET` | `/expenses` | List visible requests |
+| `GET` | `/expenses/{expense_id}` | Read a request |
+| `PUT` | `/expenses/{expense_id}` | Replace a pending request's editable fields |
+| `DELETE` | `/expenses/{expense_id}` | Delete a pending request |
+| `POST` | `/expenses/{expense_id}/review` | Approve or reject a pending request (owner only) |
+
+Employees see and edit their own submissions. Their assigned department is used
+automatically; projects must be linked to that department. Owners see all requests
+and may choose a department on submission. Department, project and category
+references must belong to the selected workspace, and category must be an expense
+category. Category is required; project and receipt are optional.
+
+Example submission:
+
+```json
+{
+  "category_id": 1,
+  "amount": "12.34",
+  "currency": "EUR",
+  "description": "Train ticket"
+}
+```
+
+Amounts use Decimal with at most two decimal places and must fit the transaction's
+10-digit precision. Currency must contain three uppercase letters. Responses
+serialize amounts as strings to preserve decimal precision. PUT replaces editable
+fields; omitted optional fields become null, except employees retain their assigned
+department. Status, submitter and reviewer fields cannot be supplied in the body.
+
+Approve with `{"approve": true, "account_id": 1}` or reject with
+`{"approve": false}`. Approval requires an account in the same workspace and
+currency, and saves the review, linked transaction and balance change in one commit.
+Rejection creates no transaction. Only `PENDING -> APPROVED` and
+`PENDING -> REJECTED` transitions are allowed; repeated review returns `409`.
+Reviewed requests cannot be edited or deleted, including by owners. Their linked
+transactions are also locked, and the regular transaction endpoint cannot create
+expense-linked transactions independently of review.

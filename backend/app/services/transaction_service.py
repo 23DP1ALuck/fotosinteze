@@ -10,18 +10,23 @@ from app.models import Workspace, Transaction, Category, Account, Project, Depar
 from app.models.transaction import TransactionSourceEnum
 from app.models.workspace import WorkspaceTypeEnum
 from app.models.category import CategoryType
+from app.models.expenses import ExpenseStatusEnum
 from app.services.workspace_access import get_workspace_membership, assert_department_access
 from app.services.project_service import load_project, assert_project_access
 
 async def create_transaction(request: CreateTransactionRequest,
                              current_user: dict[str,str],
                              active_workspace: Workspace,
-                             db: AsyncSession
+                             db: AsyncSession,
+                             *, commit: bool = True,
                              ):
 
     # Validate the request before creating a transaction or changing the balance.
     if request.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+    # Expense-linked transactions are created only inside the atomic review workflow.
+    if request.expense_id is not None and commit:
+        raise HTTPException(status_code=400, detail="Create expense transactions through expense review")
 
     category_stmt = select(Category).where(Category.category_id == request.category_id)
     category_result = await db.execute(category_stmt)
@@ -36,10 +41,15 @@ async def create_transaction(request: CreateTransactionRequest,
     account_stmt = (select(Account)
                     .where(Account.account_id == request.account_id)
                     .where(Account.workspace_id == active_workspace.workspace_id))
+    # Approval holds the account row until its surrounding review transaction commits.
+    if not commit:
+        account_stmt = account_stmt.with_for_update()
     account_result = await db.execute(account_stmt)
     account = account_result.scalar_one_or_none()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
+    if not commit and account.currency != request.currency:
+        raise HTTPException(status_code=400, detail="Expense and account currencies must match")
 
     if active_workspace.type == WorkspaceTypeEnum.PERSONAL:
         transaction = Transaction(
@@ -59,8 +69,11 @@ async def create_transaction(request: CreateTransactionRequest,
         else:
             account.balance -= request.amount
 
-        await db.commit()
-        await db.refresh(transaction)
+        if commit:
+            await db.commit()
+            await db.refresh(transaction)
+        else:
+            await db.flush()
         return transaction
     elif active_workspace.type == WorkspaceTypeEnum.BUSINESS:
         # Check business membership and related records before saving or changing the balance.
@@ -82,8 +95,11 @@ async def create_transaction(request: CreateTransactionRequest,
             account.balance += request.amount
         else:
             account.balance -= request.amount
-        await db.commit()
-        await db.refresh(transaction)
+        if commit:
+            await db.commit()
+            await db.refresh(transaction)
+        else:
+            await db.flush()
         return transaction
 
     raise HTTPException(status_code=400, detail="Invalid workspace type")
@@ -97,6 +113,10 @@ async def update_transaction(transaction_id: int,
 
     transaction = await find_transaction_by_id(transaction_id, active_workspace, db)
     membership = await authorize_transaction(transaction, current_user, active_workspace, db)
+    if transaction.expense_id is not None:
+        raise HTTPException(status_code=409, detail="Approved expense transactions cannot be edited")
+    if request.expense_id is not None:
+        raise HTTPException(status_code=400, detail="Link expense transactions through expense review")
 
     # Finish validation before changing the transaction or either account balance.
     if request.amount <= 0:
@@ -150,6 +170,8 @@ async def delete_transaction(transaction_id: int,
 
     transaction = await find_transaction_by_id(transaction_id, active_workspace, db)
     await authorize_transaction(transaction, current_user, active_workspace, db)
+    if transaction.expense_id is not None:
+        raise HTTPException(status_code=409, detail="Approved expense transactions cannot be deleted")
     account = await find_account_by_id(transaction.account_id, active_workspace, db)
     category = await db.get(Category, transaction.category_id) if transaction.category_id is not None else None
     effect = transaction.amount if category and category.type == CategoryType.income else -transaction.amount
@@ -235,6 +257,8 @@ async def validate_business_assignments(department_id: int | None, project_id: i
             raise HTTPException(status_code=404, detail="Expense not found")
         if expense.workspace_id != workspace.workspace_id:
             raise HTTPException(status_code=400, detail="Expense does not belong to this workspace")
+        if expense.status != ExpenseStatusEnum.APPROVED:
+            raise HTTPException(status_code=400, detail="Only approved expenses can have transactions")
         if membership.role != WorkspaceRole.OWNER and expense.department_id != membership.department_id:
             raise HTTPException(status_code=403, detail="No access to this expense")
     return department_id

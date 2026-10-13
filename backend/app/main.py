@@ -8,7 +8,7 @@ from app.database import sessionmanager
 
 from app.api.routes import auth
 from app.api.routes import transactions
-from app.api.routes import departments, projects
+from app.api.routes import departments, projects, expenses
 
 
 # inspired from
@@ -29,6 +29,7 @@ app.include_router(auth.router)
 app.include_router(transactions.router)
 app.include_router(departments.router)
 app.include_router(projects.router)
+app.include_router(expenses.router)
 
 app.add_middleware(
     CORSMiddleware,
