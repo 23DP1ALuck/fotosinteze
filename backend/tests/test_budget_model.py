@@ -4,6 +4,7 @@ from sqlalchemy import CHAR, Date, DateTime, Numeric
 
 import app.models  # noqa: F401 - imports the application model registry
 from app.database import Base
+from app.dto.create_budget_request import CreateBudgetRequest
 
 
 class BudgetModelTests(unittest.TestCase):
@@ -28,7 +29,7 @@ class BudgetModelTests(unittest.TestCase):
                 "updated_at",
             ],
         )
-        self.assertFalse(table.c.category_id.nullable)
+        self.assertTrue(table.c.category_id.nullable)
         self.assertTrue(table.c.project_id.nullable)
         self.assertTrue(table.c.department_id.nullable)
         self.assertFalse(table.c.name.nullable)
@@ -60,6 +61,16 @@ class BudgetModelTests(unittest.TestCase):
             {str(foreign_key.target_fullname) for foreign_key in table.c.department_id.foreign_keys},
             {"departments.department_id"},
         )
+
+    def test_create_budget_request_allows_missing_category(self):
+        request = CreateBudgetRequest(
+            name="General budget",
+            limit_amount=100,
+            currency="EUR",
+            period_length="MONTHLY",
+        )
+
+        self.assertIsNone(request.category_id)
 
 
 if __name__ == "__main__":
