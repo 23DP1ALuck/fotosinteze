@@ -13,6 +13,10 @@ from app.dto.employee_department_response import EmployeeDepartmentResponseDTO
 from app.dto.expense_response import ExpenseResponseDTO
 from app.dto.create_expense_request import CreateExpenseRequestDTO
 from app.dto.review_expense_request import ReviewExpenseRequestDTO
+from app.dto.category_response_dto import CategoryResponseDTO
+from app.dto.create_category_request import CreateCategoryRequest
+from app.dto.update_category_request import UpdateCategoryRequest
+from app.dto.workspace_list_response import WorkspaceListResponse
 
 __all__ = [
     "AccessTokenResponseDTO",
@@ -30,4 +34,8 @@ __all__ = [
     "ExpenseResponseDTO",
     "CreateExpenseRequestDTO",
     "ReviewExpenseRequestDTO",
+    "CategoryResponseDTO",
+    "CreateCategoryRequest",
+    "UpdateCategoryRequest",
+    "WorkspaceListResponse"
 ]
