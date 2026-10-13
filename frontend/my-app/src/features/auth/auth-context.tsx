@@ -85,7 +85,10 @@ function AuthProvider({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(() => {
       refreshAccessToken()
         .then(({ access_token }) => {
-          if (!cancelled && getAccessToken() === token) setAccessToken(access_token)
+          if (!cancelled && getAccessToken() === token) {
+            if (decodeJwtPayload(access_token)?.sub === decodeJwtPayload(token)?.sub) setAccessToken(access_token)
+            else clearSession()
+          }
         })
         .catch(() => {
           if (!cancelled && getAccessToken() === token) clearSession()

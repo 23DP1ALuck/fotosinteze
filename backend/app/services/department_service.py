@@ -11,6 +11,7 @@ async def create_department(workspace_id: int, name: str, current_user: dict, db
     # Check if the user can manage the department
     await can_manage_department(current_user, workspace_id, db)
 
+    # Department names must be unique within this workspace.
     existing_department = await db.scalar(
         select(Department.department_id).where(
             Department.workspace_id == workspace_id,
@@ -40,6 +41,7 @@ async def get_departments(workspace_id: int, current_user: dict, db: AsyncSessio
 
     # Retrieve visible departments for the specified workspace
     stmt = select(Department).where(Department.workspace_id == workspace_id)
+    # Employees see only their assigned department.
     if membership.role != WorkspaceRole.OWNER:
         stmt = stmt.where(Department.department_id == membership.department_id)
     result = await db.execute(stmt)
@@ -76,6 +78,7 @@ async def update_department(department_id: int, name: str, current_user: dict, d
     # Check if the user can manage the department
     await can_manage_department(current_user, department.workspace_id, db)
 
+    # Allow keeping the current name, but reject another department's name.
     existing_department = await db.scalar(
         select(Department.department_id).where(
             Department.workspace_id == department.workspace_id,
@@ -107,6 +110,7 @@ async def delete_department(department_id: int, current_user: dict, db: AsyncSes
     # Check if the user can manage the department
     await can_manage_department(current_user, department.workspace_id, db)
 
+    # Require reassignment first so deleting a department does not leave employees unassigned.
     assigned_employee = await db.scalar(select(WorkspaceUsers.user_id).where(
         WorkspaceUsers.department_id == department_id,
         WorkspaceUsers.workspace_id == department.workspace_id,
@@ -119,6 +123,7 @@ async def delete_department(department_id: int, current_user: dict, db: AsyncSes
     await db.commit()
 
 async def can_manage_department(current_user: dict, workspace_id: int, db: AsyncSession) -> bool:
+    # Creating, renaming and deleting departments requires workspace ownership.
     await get_workspace_membership(current_user, workspace_id, db, owner_only=True)
     return True
 
@@ -127,7 +132,9 @@ async def assign_employee_department(department_id: int, user_id: int, current_u
     department = await db.get(Department, department_id)
     if department is None:
         raise HTTPException(status_code=404, detail="Department not found")
+    # Only an owner of this department's workspace can assign employees.
     await get_workspace_membership(current_user, department.workspace_id, db, owner_only=True)
+    # Assignment updates an existing membership in the same workspace.
     employee = await db.scalar(select(WorkspaceUsers).where(
         WorkspaceUsers.user_id == user_id,
         WorkspaceUsers.workspace_id == department.workspace_id,
