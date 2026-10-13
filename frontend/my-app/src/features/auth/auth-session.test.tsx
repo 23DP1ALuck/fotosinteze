@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { GuestRoute, ProtectedRoute } from '@/components/auth/AuthGate'
+import { API_URL } from '@/features/auth/api'
 import { AuthProvider } from '@/features/auth/auth-context'
 import { authenticatedFetch } from '@/features/auth/authenticated-fetch'
 import { clearSession, getAccessToken, setAccessToken } from '@/features/auth/storage'
@@ -27,7 +28,7 @@ function renderAt(path: string) {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/app" element={<HomePage />} />
           </Route>
           <Route element={<GuestRoute />}>
             <Route path="/login" element={<LoginPage />} />
@@ -42,6 +43,14 @@ describe('browser auth session', () => {
   beforeEach(() => {
     localStorage.clear()
     clearSession()
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+      configurable: true,
+      value() { this.setAttribute('open', '') },
+    })
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+      configurable: true,
+      value() { this.removeAttribute('open') },
+    })
   })
 
   afterEach(() => {
@@ -59,18 +68,19 @@ describe('browser auth session', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    renderAt('/')
+    renderAt('/app')
 
-    expect(await screen.findByText(/welcome back, ada lovelace/i)).toBeInTheDocument()
+    expect(await screen.findByText(/ada lovelace/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Profile & account' }))
     expect(screen.getByText(/math@example.com/)).toBeInTheDocument()
     expect(localStorage.getItem('fm_access_token')).toBeNull()
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8000/auth/refresh',
+      `${API_URL}/auth/refresh`,
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
     )
 
     await authenticatedFetch('/protected')
-    expect(fetchMock.mock.lastCall?.[0]).toBe('http://localhost:8000/protected')
+    expect(fetchMock.mock.lastCall?.[0]).toBe(`${API_URL}/protected`)
     expect(fetchMock.mock.lastCall?.[1].headers.get('Authorization')).toBe(
       `Bearer ${accessToken}`,
     )
@@ -100,11 +110,11 @@ describe('browser auth session', () => {
 
     expect(await screen.findByRole('button', { name: 'Log in' })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8000/auth/login',
+      `${API_URL}/auth/login`,
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8000/auth/logout',
+      `${API_URL}/auth/logout`,
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
     )
     await authenticatedFetch('/protected')
@@ -114,6 +124,35 @@ describe('browser auth session', () => {
     })
     expect(localStorage.getItem('fm_access_token')).toBeNull()
     expect(localStorage.getItem('fm_user')).toBeNull()
+  })
+
+  it('updates dashboard totals and grocery budget after adding a sample expense', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ access_token: tokenFor('user@example.com') }),
+    }))
+    const user = userEvent.setup()
+    renderAt('/app')
+    await user.click(await screen.findByRole('button', { name: 'Add expense' }))
+    await user.type(screen.getByLabelText('Description'), 'Weekly groceries')
+    await user.type(screen.getByLabelText('Amount (€)'), '50')
+    await user.click(screen.getByRole('button', { name: 'Save expense' }))
+
+    expect(screen.getByText('€4,770.50')).toBeInTheDocument()
+    expect(screen.getByText('€1,892.35')).toBeInTheDocument()
+    expect(screen.getByText('€1,307.65')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('value', '267')
+    expect(screen.getByText('Weekly groceries')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Manage budgets' }))
+    await user.clear(screen.getByLabelText('Groceries (€)'))
+    await user.type(screen.getByLabelText('Groceries (€)'), '400')
+    await user.click(screen.getByRole('button', { name: 'Save budgets' }))
+    expect(screen.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('max', '400')
+    await user.click(screen.getByRole('button', { name: 'Transactions' }))
+    expect(screen.getByRole('heading', { name: 'Your transactions' })).toBeInTheDocument()
+    expect(screen.getAllByRole('row')).toHaveLength(5)
   })
 
   it('refreshes an expired access token before a protected request', async () => {
@@ -131,8 +170,8 @@ describe('browser auth session', () => {
 
     expect(response.status).toBe(200)
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      'http://localhost:8000/auth/refresh',
-      'http://localhost:8000/protected',
+      `${API_URL}/auth/refresh`,
+      `${API_URL}/protected`,
     ])
     expect(fetchMock.mock.lastCall?.[1].headers.get('Authorization')).toBe(
       `Bearer ${freshToken}`,
@@ -178,8 +217,8 @@ describe('browser auth session', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    renderAt('/')
-    expect(await screen.findByText(/welcome back, ada lovelace/i)).toBeInTheDocument()
+    renderAt('/app')
+    expect(await screen.findByText(/ada lovelace/i)).toBeInTheDocument()
 
     const response = await authenticatedFetch('/protected')
 
@@ -202,8 +241,8 @@ describe('browser auth session', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    renderAt('/')
-    expect(await screen.findByText(/welcome back, ada lovelace/i)).toBeInTheDocument()
+    renderAt('/app')
+    expect(await screen.findByText(/ada lovelace/i)).toBeInTheDocument()
 
     await waitFor(() => expect(refreshCalls).toBe(2))
     expect(getAccessToken()).toBe(renewed)
