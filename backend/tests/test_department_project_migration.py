@@ -6,6 +6,7 @@ from unittest.mock import patch
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 
 BACKEND = Path(__file__).resolve().parents[1]
 OLD_HEAD = 'a18c72e40b91'
@@ -36,6 +37,28 @@ class DepartmentProjectMigrationTests(unittest.TestCase):
             db.execute(text("INSERT INTO category(category_id,name,type,workspace_id) VALUES (1,'Cost','expense',1)"))
             db.execute(text("INSERT INTO expenses(expense_id,workspace_id,submitted_by,department_id,project_id,category_id,amount,currency,description,status,created_at,updated_at) VALUES (1,1,1,1,1,1,10,'EUR','Legacy expense','pending',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"))
             db.execute(text("INSERT INTO transactions(transaction_id,amount,currency,description,source,account_id,category_id,project_id,department_id,expense_id,workspace_id,created_at,updated_at) VALUES (1,10,'EUR','Legacy transaction','MANUAL',1,1,1,1,1,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"))
+
+    def test_expense_transaction_uniqueness_migration(self):
+        command.upgrade(self.config, 'head')
+        insert = text("INSERT INTO transactions(amount,currency,description,source,account_id,expense_id,workspace_id,created_at,updated_at) VALUES (5,'EUR','Extra','MANUAL',1,:expense_id,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)")
+        with self.assertRaises(IntegrityError):
+            with self.engine.begin() as db:
+                db.execute(insert, {'expense_id': 1})
+        with self.engine.begin() as db:
+            db.execute(insert, [{'expense_id': None}, {'expense_id': None}])
+            self.assertEqual(db.execute(text('SELECT count(*) FROM transactions')).scalar(), 3)
+        command.downgrade(self.config, '4b7f1c2d9e0a')
+        with self.engine.begin() as db:
+            db.execute(insert, {'expense_id': 1})
+
+    def test_expense_transaction_migration_rejects_legacy_duplicates(self):
+        command.upgrade(self.config, '4b7f1c2d9e0a')
+        with self.engine.begin() as db:
+            db.execute(text("INSERT INTO transactions(amount,currency,description,source,account_id,expense_id,workspace_id,created_at,updated_at) VALUES (5,'EUR','Duplicate','MANUAL',1,1,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"))
+        with self.assertRaisesRegex(RuntimeError, 'multiple transactions'):
+            command.upgrade(self.config, 'head')
+        with self.engine.connect() as db:
+            self.assertEqual(db.execute(text('SELECT count(*) FROM transactions')).scalar(), 2)
 
     def test_upgrade_preserves_links_and_downgrade_round_trip(self):
         command.upgrade(self.config, 'head')

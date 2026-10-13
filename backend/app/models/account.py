@@ -30,7 +30,7 @@ class Account(Base):
 
     connection: Mapped["RevolutConnection"] = relationship(back_populates="account")
 
-    transactions: Mapped["Transaction"] = relationship(
+    transactions: Mapped[list["Transaction"]] = relationship(
         back_populates="account",
         cascade="all, delete-orphan"
     )

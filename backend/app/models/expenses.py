@@ -40,7 +40,7 @@ class Expense(Base):
     department: Mapped["Department | None"] = relationship(back_populates="expenses")
     project: Mapped["Project | None"] = relationship(back_populates="expenses")
     category: Mapped["Category | None"] = relationship(back_populates="expenses")
-    transactions: Mapped["Transaction"] = relationship(back_populates="expense")
+    transactions: Mapped["Transaction | None"] = relationship(back_populates="expense")
     submitted_by_user: Mapped["User"] = relationship(
         foreign_keys=[submitted_by],
         back_populates="submitted_expenses",
