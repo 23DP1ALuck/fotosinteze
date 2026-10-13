@@ -12,6 +12,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from app.dto import CreateTransactionRequest
 from app.models.category import CategoryType
 from app.models.workspace import WorkspaceTypeEnum
+from app.models.transaction import TransactionSourceEnum
 from app.services import transaction_service
 
 
@@ -57,6 +58,8 @@ class Transaction(TestBase):
     project_id: Mapped[int | None]
     department_id: Mapped[int | None]
     expense_id: Mapped[int | None]
+    source: Mapped[TransactionSourceEnum] = mapped_column(Enum(TransactionSourceEnum), default=TransactionSourceEnum.MANUAL)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.now)
 
 
@@ -101,7 +104,6 @@ class TransactionServiceTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_update_changes_amount_and_balance(self):
         result = await transaction_service.update_transaction(1, self.request(), {}, self.workspace, self.db)
-        await self.db.refresh(result)
         self.assertEqual(result.amount, Decimal("30"))
         self.assertEqual(result.description, "Updated")
         self.assertEqual((await self.db.get(Account, 1)).balance, Decimal("70"))

@@ -6,6 +6,7 @@ from app.dto.login_user_request_dto import LoginUserRequestDTO
 from app.dto.create_department_request import CreateDepartmentRequest
 from app.dto.department_response import DepartmentResponseDTO
 from app.dto.create_transaction_request import CreateTransactionRequest
+from app.dto.transaction_response import TransactionResponseDTO
 from app.dto.create_projects_request import CreateProjectRequest
 from app.dto.project_response import ProjectResponseDTO
 from app.dto.category_response_dto import CategoryResponseDTO
@@ -21,6 +22,7 @@ __all__ = [
     "LoginUserRequestDTO",
     "CreateDepartmentRequest",
     "CreateTransactionRequest",
+    "TransactionResponseDTO",
     "DepartmentResponseDTO",
     "CreateProjectRequest",
     "ProjectResponseDTO",
