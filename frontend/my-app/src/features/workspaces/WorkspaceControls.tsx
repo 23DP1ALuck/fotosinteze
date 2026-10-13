@@ -27,7 +27,7 @@ export function WorkspaceSwitcher({ workspace, workspaces, onSwitch, onCreate }:
   return <div ref={container} className="group relative mt-8 rounded-xl border border-transparent bg-[#ecf0e6] transition-[border-color,box-shadow] duration-200 hover:border-[#98a56c] hover:shadow-sm focus-within:border-[#98a56c] motion-reduce:transition-none">
     <button type="button" aria-label={`Switch workspace, ${workspace.name}`} aria-expanded={open} onClick={() => setOpen(!open)}
       onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false) }} className="flex w-full items-center justify-between gap-2 px-[17px] py-[13px] text-left">
-      <span className="grid min-w-0 gap-1"><strong className="wrap-anywhere text-[17px] font-semibold">{workspace.name}</strong><span className="text-xs text-[#7d877f]">{workspace.kind === 'personal' ? 'Your personal workspace' : 'Business workspace'}</span></span>
+      <span className="grid min-w-0 gap-1"><strong className="wrap-anywhere text-[17px] font-semibold">{workspace.name}</strong><span className="text-xs text-[#7d877f]">{workspace.kind === 'personal' ? 'Your personal workspace' : `Business workspace · ${workspace.role === 'EMPLOYEE' ? 'Employee' : 'Owner'}`}</span></span>
       <ChevronDown size={15} className="shrink-0 text-[#7d877f] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none" />
     </button>
     <button type="button" aria-label="Create business workspace from workspace switcher" onClick={onCreate}
@@ -36,7 +36,7 @@ export function WorkspaceSwitcher({ workspace, workspaces, onSwitch, onCreate }:
     </button>
     {open && <div className="absolute top-[calc(100%+20px)] left-0 z-30 w-full rounded-xl border border-[#dce4d8] bg-white p-2 shadow-lg" aria-label="Available workspaces">
       {workspaces.map((item) => <button type="button" key={item.id} aria-label={`Switch to ${item.name}`} onClick={() => { onSwitch(item.id); setOpen(false) }} className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-[#f3f6ed]">
-        <span className="min-w-0 wrap-anywhere">{item.name}</span>{item.id === workspace.id && <Check size={16} className="shrink-0" aria-hidden />}
+        <span className="min-w-0 wrap-anywhere">{item.name}<span className="mt-1 block text-xs text-[#7d877f]">{item.kind === 'personal' ? 'Personal workspace' : `Business · ${item.role === 'EMPLOYEE' ? 'Employee' : 'Owner'}`}</span></span>{item.id === workspace.id && <Check size={16} className="shrink-0" aria-hidden />}
       </button>)}
     </div>}
   </div>

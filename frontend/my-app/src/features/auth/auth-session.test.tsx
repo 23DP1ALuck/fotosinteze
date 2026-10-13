@@ -1,4 +1,6 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { stubAuthFetch } from '@/test/auth-transport'
+import { render } from '@/test/render'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -66,7 +68,7 @@ describe('browser auth session', () => {
       status: 200,
       json: async () => ({ access_token: accessToken }),
     })
-    vi.stubGlobal('fetch', fetchMock)
+    stubAuthFetch(fetchMock)
 
     renderAt('/app')
 
@@ -97,7 +99,7 @@ describe('browser auth session', () => {
       }
       return { ok: true, status: 200, json: async () => ({ detail: 'Successfully logged out' }) }
     })
-    vi.stubGlobal('fetch', fetchMock)
+    stubAuthFetch(fetchMock)
     const user = userEvent.setup()
 
     renderAt('/login')
@@ -127,7 +129,7 @@ describe('browser auth session', () => {
   })
 
   it('updates dashboard totals and grocery budget after adding a sample expense', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    stubAuthFetch(vi.fn().mockResolvedValue({
       ok: true, status: 200,
       json: async () => ({ access_token: tokenFor('user@example.com') }),
     }))
@@ -164,7 +166,7 @@ describe('browser auth session', () => {
       }
       return { ok: true, status: 200 }
     })
-    vi.stubGlobal('fetch', fetchMock)
+    stubAuthFetch(fetchMock)
 
     const response = await authenticatedFetch('/protected')
 
@@ -191,7 +193,7 @@ describe('browser auth session', () => {
       protectedCalls += 1
       return { ok: protectedCalls > 1, status: protectedCalls > 1 ? 200 : 401 }
     })
-    vi.stubGlobal('fetch', fetchMock)
+    stubAuthFetch(fetchMock)
 
     const response = await authenticatedFetch('/protected')
 
@@ -215,7 +217,7 @@ describe('browser auth session', () => {
       }
       return { ok: false, status: 401 }
     })
-    vi.stubGlobal('fetch', fetchMock)
+    stubAuthFetch(fetchMock)
 
     renderAt('/app')
     expect(await screen.findByText(/ada lovelace/i)).toBeInTheDocument()
@@ -239,7 +241,7 @@ describe('browser auth session', () => {
         json: async () => ({ access_token: refreshCalls === 1 ? nearExpiry : renewed }),
       }
     })
-    vi.stubGlobal('fetch', fetchMock)
+    stubAuthFetch(fetchMock)
 
     renderAt('/app')
     expect(await screen.findByText(/ada lovelace/i)).toBeInTheDocument()

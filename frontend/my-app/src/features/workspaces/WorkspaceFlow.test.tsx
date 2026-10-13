@@ -1,177 +1,80 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { render } from '@/test/render'
+import { cleanup, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { AuthContext } from '@/features/auth/use-auth'
-import HomePage from '@/pages/HomePage'
 import { clearSession, setAccessToken } from '@/features/auth/storage'
+import HomePage from '@/pages/HomePage'
 import { TransactionsView } from './TransactionsView'
-
-beforeEach(() => {
-  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value() { this.setAttribute('open', '') } })
-  Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value() { this.removeAttribute('open') } })
-})
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); clearSession() })
-function renderWorkspace() {
-  render(<AuthContext.Provider value={{ status: 'authenticated', user: { id: 1, displayName: 'Ada', email: 'ada@example.com' }, token: null, login: async () => {}, register: async () => {}, logout: async () => {} }}><MemoryRouter><HomePage /></MemoryRouter></AuthContext.Provider>)
-}
-
-describe('business workspaces', () => {
-  it('validates and cancels creation, then creates and switches to the named workspace', async () => {
-    const user = userEvent.setup()
-    renderWorkspace()
-    await user.click(screen.getByRole('button', { name: 'Create business workspace from workspace switcher' }))
-    let modal = within(screen.getByRole('dialog'))
-    await user.click(modal.getByRole('button', { name: 'Create business workspace' }))
-    expect(modal.getByRole('alert')).toHaveTextContent('at least 2 characters')
-    await user.click(modal.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'A little clarity for your everyday.' })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Create business workspace from workspace switcher' }))
-    modal = within(screen.getByRole('dialog'))
-    await user.type(modal.getByLabelText('Workspace name'), '  Acme Studio  ')
-    await user.click(modal.getByRole('button', { name: 'Create business workspace' }))
-    expect(screen.getByRole('heading', { name: 'Your business, at a glance.' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Switch workspace, Acme Studio' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Revolut' })).not.toBeInTheDocument()
-    expect(within(screen.getByRole('navigation', { name: 'Workspace' })).getByRole('button', { name: 'Employees' })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Create business workspace from workspace switcher' }))
-    modal = within(screen.getByRole('dialog'))
-    await user.type(modal.getByLabelText('Workspace name'), 'acme studio')
-    await user.click(modal.getByRole('button', { name: 'Create business workspace' }))
-    expect(modal.getByRole('alert')).toHaveTextContent('already exists')
-  })
-
-  it('keeps business and personal transactions separate across switches', async () => {
-    const user = userEvent.setup()
-    renderWorkspace()
-    await user.click(screen.getByRole('button', { name: 'Add expense' }))
-    let modal = within(screen.getByRole('dialog'))
-    await user.type(modal.getByLabelText('Description'), 'Personal groceries')
-    await user.type(modal.getByLabelText('Amount (€)'), '50')
-    await user.click(modal.getByRole('button', { name: 'Save expense' }))
-
-    await user.click(screen.getByRole('button', { name: 'Create business workspace from workspace switcher' }))
-    modal = within(screen.getByRole('dialog'))
-    await user.type(modal.getByLabelText('Workspace name'), 'Acme Studio')
-    await user.click(modal.getByRole('button', { name: 'Create business workspace' }))
-    expect(within(screen.getByRole('main')).queryByText('Personal groceries')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Add income' }))
-    modal = within(screen.getByRole('dialog'))
-    await user.type(modal.getByLabelText('Description'), 'Client project')
-    await user.type(modal.getByLabelText('Amount (€)'), '900')
-    expect(modal.getByLabelText('Department')).toBeDisabled()
-    expect(modal.getByLabelText('Project')).toBeDisabled()
-    await user.click(modal.getByRole('button', { name: 'Save income' }))
-    await user.click(screen.getByRole('button', { name: 'Transactions' }))
-    const main = within(screen.getByRole('main'))
-    expect(main.getByRole('row', { name: /Client project Services — — Ada/ })).toBeInTheDocument()
-    await user.type(main.getByRole('textbox', { name: 'Search business transactions' }), 'unmatched')
-    expect(main.getByText('No transactions match these filters.')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Switch workspace, Acme Studio' }))
-    await user.click(screen.getByRole('button', { name: 'Switch to Personal' }))
-    expect(within(screen.getByRole('main')).getByText('Personal groceries')).toBeInTheDocument()
-    expect(within(screen.getByRole('main')).getByText('€4,770.50')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Switch workspace, Personal' }))
-    await user.click(screen.getByRole('button', { name: 'Switch to Acme Studio' }))
-    const businessMain = within(screen.getByRole('main'))
-    await user.clear(businessMain.getByRole('textbox', { name: 'Search business transactions' }))
-    expect(businessMain.getByText('Client project')).toBeInTheDocument()
-    expect(businessMain.queryByText('Personal groceries')).not.toBeInTheDocument()
-  })
-
-  it('keeps team management data separate between business workspaces', async () => {
-    const user = userEvent.setup()
-    renderWorkspace()
-    async function create(name: string) {
-      await user.click(screen.getByRole('button', { name: 'Create business workspace from workspace switcher' }))
-      const modal = within(screen.getByRole('dialog'))
-      await user.type(modal.getByLabelText('Workspace name'), name)
-      await user.click(modal.getByRole('button', { name: 'Create business workspace' }))
-    }
-    await create('Alpha Studio')
-    await user.click(within(screen.getByRole('navigation', { name: 'Workspace' })).getByRole('button', { name: 'Departments' }))
-    await user.click(screen.getAllByRole('button', { name: 'Add department' })[0])
-    const modal = within(screen.getByRole('dialog'))
-    await user.type(modal.getByLabelText('Department name'), 'Development')
-    await user.click(modal.getByRole('button', { name: 'Add department' }))
-    await create('Beta Studio')
-    await user.click(within(screen.getByRole('navigation', { name: 'Workspace' })).getByRole('button', { name: 'Departments' }))
-    expect(within(screen.getByRole('main')).getByText('No departments yet')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Switch workspace, Beta Studio' }))
-    await user.click(screen.getByRole('button', { name: 'Switch to Alpha Studio' }))
-    expect(within(screen.getByRole('main')).getByRole('list', { name: 'Departments' })).toHaveTextContent('Development')
-  })
-
-  it('uses the shared transaction menu in Personal with source filtering and details', async () => {
-    const user = userEvent.setup()
-    renderWorkspace()
-    await user.click(screen.getByRole('button', { name: 'Transactions' }))
-    expect(screen.getByRole('heading', { name: 'Every transaction, in its place.' })).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Search personal transactions' })).toBeInTheDocument()
-    expect(screen.queryByRole('columnheader', { name: 'Department' })).not.toBeInTheDocument()
-    await user.selectOptions(screen.getByLabelText('Filter by source'), 'Revolut')
-    expect(screen.getAllByRole('row')).toHaveLength(3)
-    await user.click(screen.getByRole('button', { name: 'View Rimi details' }))
-    expect(screen.getByRole('dialog')).toHaveTextContent('Revolut')
-    await user.click(screen.getByRole('button', { name: 'Close transaction details' }))
-    await user.type(screen.getByRole('textbox', { name: 'Search personal transactions' }), 'Spotify')
-    expect(screen.getAllByRole('row')).toHaveLength(2)
-  })
-
-  it('paginates and combines business transaction filters', async () => {
-    const user = userEvent.setup()
-    const transactions = Array.from({ length: 10 }, (_, index) => ({ id: index, name: `Invoice ${index}`, category: index % 2 ? 'Software' : 'Services', source: 'Manual', date: '2026-09-22', amount: index % 2 ? -10 : 100, department: 'Development', project: index % 2 ? 'App' : 'Website' }))
-    render(<TransactionsView transactions={transactions} income={500} expenses={50} workspaceName="Acme" />)
-    expect(screen.getAllByRole('row')).toHaveLength(9)
-    await user.click(screen.getByRole('button', { name: 'Next →' }))
-    expect(screen.getAllByRole('row')).toHaveLength(3)
-    await user.selectOptions(screen.getByLabelText('Filter by category'), 'Services')
-    expect(screen.getByRole('button', { name: '← Previous' })).toBeDisabled()
-    expect(screen.getAllByRole('row')).toHaveLength(6)
-    await user.click(screen.getByRole('button', { name: 'Expenses' }))
-    expect(screen.getByText('No transactions match these filters.')).toBeInTheDocument()
-  })
-})
-
-
-it('uses API project IDs in business transaction and budget selectors', async () => {
-  setAccessToken(`header.${btoa(JSON.stringify({ exp: Date.now()/1000+3600 }))}.signature`)
-  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
-    expect(new Headers(init.headers).get('Workspace-ID')).toBe('42')
-    return Response.json(String(url).endsWith('/departments')
-      ? [{ id: 7, workspace_id: 42, name: 'Development' }]
-      : [{ id: 10, workspace_id: 42, name: 'Website', status: 'Active', department_ids: [7], start_date: null, end_date: null }])
+const workspaces=[{id:7,name:'Personal',type:'PERSONAL',role:'OWNER'},{id:42,name:'Acme Studio',type:'BUSINESS',role:'OWNER'},{id:43,name:'Beta Studio',type:'BUSINESS',role:'EMPLOYEE'}]
+const token=`h.${btoa(JSON.stringify({sub:'1',exp:Math.floor(Date.now()/1000)+3600}))}.s`
+beforeEach(()=>{
+  localStorage.clear();clearSession();setAccessToken(token)
+  Object.defineProperty(HTMLDialogElement.prototype,'showModal',{configurable:true,value(){this.setAttribute('open','')}})
+  Object.defineProperty(HTMLDialogElement.prototype,'close',{configurable:true,value(){this.removeAttribute('open')}})
+  vi.stubGlobal('fetch',vi.fn(async(url,init)=>{
+    if(String(url).endsWith('/workspaces')) return Response.json(workspaces)
+    const id=Number(new Headers(init.headers).get('X-Workspace-ID'))
+    if(String(url).endsWith('/projects'))return Response.json([{id:10,workspace_id:id,name:'Website',status:'Active',department_ids:[7],start_date:null,end_date:null}])
+    if(String(url).endsWith('/departments'))return Response.json([{id:7,workspace_id:id,name:'Development'}])
+    return Response.json([])
   }))
-  const user = userEvent.setup()
-  renderWorkspace()
-  await user.click(screen.getByRole('button', { name: 'Create business workspace from workspace switcher' }))
-  let modal = within(screen.getByRole('dialog'))
-  await user.type(modal.getByLabelText('Workspace name'), 'Acme Studio')
-  await user.click(modal.getByRole('button', { name: 'Create business workspace' }))
-  await user.click(within(screen.getByRole('navigation', { name: 'Workspace' })).getByRole('button', { name: 'Projects' }))
-  await user.type(screen.getByLabelText('Workspace ID'), '42')
-  await user.click(screen.getByRole('button', { name: 'Load projects' }))
-  await screen.findByRole('button', { name: 'Edit Website' })
-  await user.click(screen.getByRole('button', { name: 'Add expense' }))
-  modal = within(screen.getByRole('dialog'))
-  await user.type(modal.getByLabelText('Description'), 'Website promotion')
-  await user.type(modal.getByLabelText('Amount (€)'), '900')
-  await user.selectOptions(modal.getByLabelText('Department'), '7')
-  await user.selectOptions(modal.getByLabelText('Project'), '10')
-  await user.click(modal.getByRole('button', { name: 'Save expense' }))
-  await user.click(screen.getByRole('button', { name: /^Budgets$/ }))
-  await user.click(screen.getByRole('button', { name: 'Manage budgets' }))
-  modal = within(screen.getByRole('dialog'))
-  const marketing = within(modal.getByRole('group', { name: 'Marketing' }))
-  await user.selectOptions(marketing.getByLabelText('Department'), '7')
-  await user.selectOptions(marketing.getByLabelText('Project'), '10')
-  await user.click(modal.getByRole('button', { name: 'Save budgets' }))
-  expect(within(screen.getByRole('main')).getByText('Project: Website')).toBeInTheDocument()
-  expect(screen.getByRole('progressbar', { name: 'Marketing budget used' })).toHaveAttribute('value', '900')
-  await user.click(screen.getByRole('button', { name: 'Transactions' }))
-  expect(screen.getByRole('row', { name: /Website promotion Marketing Development Website Ada/ })).toBeInTheDocument()
+})
+afterEach(()=>{cleanup();vi.unstubAllGlobals();clearSession()})
+async function renderWorkspace(){
+  render(<AuthContext.Provider value={{status:'authenticated',user:{id:1,displayName:'Ada',email:'ada@example.com'},token,login:async()=>{},register:async()=>{},logout:async()=>{}}}><MemoryRouter><HomePage /></MemoryRouter></AuthContext.Provider>)
+  await screen.findByRole('button',{name:'Switch workspace, Personal'})
+}
+async function switchWorkspace(from:string,to:string){await userEvent.click(screen.getByRole('button',{name:`Switch workspace, ${from}`}));await userEvent.click(screen.getByRole('button',{name:`Switch to ${to}`}))}
+it('loads actual memberships and displays Personal, Business and membership roles',async()=>{
+  await renderWorkspace(); await userEvent.click(screen.getByRole('button',{name:'Switch workspace, Personal'}))
+  expect(screen.getByRole('button',{name:'Switch to Acme Studio'})).toHaveTextContent('Owner')
+  expect(screen.getByRole('button',{name:'Switch to Beta Studio'})).toHaveTextContent('Employee')
+  await userEvent.click(screen.getByRole('button',{name:'Switch to Acme Studio'}))
+  expect(screen.getByRole('heading',{name:'Your business, at a glance.'})).toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'Revolut'})).not.toBeInTheDocument()
+})
+it('keeps business and personal transaction data separate across switches',async()=>{
+  const user=userEvent.setup();await renderWorkspace()
+  await user.click(screen.getByRole('button',{name:'Add expense'}));let modal=within(screen.getByRole('dialog'))
+  await user.type(modal.getByLabelText('Description'),'Personal groceries');await user.type(modal.getByLabelText('Amount (€)'),'50');await user.click(modal.getByRole('button',{name:'Save expense'}))
+  await switchWorkspace('Personal','Acme Studio')
+  expect(within(screen.getByRole('main')).queryByText('Personal groceries')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button',{name:'Add income'}));modal=within(screen.getByRole('dialog'))
+  await user.type(modal.getByLabelText('Description'),'Client project');await user.type(modal.getByLabelText('Amount (€)'),'900');await user.click(modal.getByRole('button',{name:'Save income'}))
+  await switchWorkspace('Acme Studio','Personal');expect(within(screen.getByRole('main')).getByText('Personal groceries')).toBeInTheDocument()
+  expect(within(screen.getByRole('main')).queryByText('Client project')).not.toBeInTheDocument()
+})
+it('shows employee role and hides owner-only project management',async()=>{
+  await renderWorkspace(); await switchWorkspace('Personal','Beta Studio')
+  await userEvent.click(within(screen.getByRole('navigation',{name:'Workspace'})).getByRole('button',{name:'Projects'}))
+  await within(screen.getByRole('list',{name:'Projects'})).findByText('Website');expect(screen.queryByRole('button',{name:'Add project'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'Delete Website'})).not.toBeInTheDocument()
+})
+it('uses the shared Personal transaction menu with source filters and details',async()=>{
+  const user=userEvent.setup();await renderWorkspace();await user.click(screen.getByRole('button',{name:'Transactions'}))
+  expect(screen.queryByRole('columnheader',{name:'Department'})).not.toBeInTheDocument()
+  await user.selectOptions(screen.getByLabelText('Filter by source'),'Revolut');expect(screen.getAllByRole('row')).toHaveLength(3)
+  await user.click(screen.getByRole('button',{name:'View Rimi details'}));expect(screen.getByRole('dialog')).toHaveTextContent('Revolut')
+})
+it('paginates and combines business transaction filters',async()=>{
+  const user=userEvent.setup()
+  const transactions=Array.from({length:10},(_,index)=>({id:index,name:`Invoice ${index}`,category:index%2?'Software':'Services',source:'Manual',date:'2026-09-22',amount:index%2?-10:100,department:'Development',project:index%2?'App':'Website'}))
+  render(<TransactionsView transactions={transactions} income={500} expenses={50} workspaceName="Acme" />)
+  expect(screen.getAllByRole('row')).toHaveLength(9);await user.click(screen.getByRole('button',{name:'Next →'}));expect(screen.getAllByRole('row')).toHaveLength(3)
+  await user.selectOptions(screen.getByLabelText('Filter by category'),'Services');expect(screen.getByRole('button',{name:'← Previous'})).toBeDisabled()
+  await user.click(screen.getByRole('button',{name:'Expenses'}));expect(screen.getByText('No transactions match these filters.')).toBeInTheDocument()
+})
+it('uses active backend project IDs in Business transaction and budget selectors',async()=>{
+  const user=userEvent.setup();await renderWorkspace();await switchWorkspace('Personal','Acme Studio')
+  await user.click(screen.getByRole('button',{name:'Projects'}));await screen.findByRole('button',{name:'Edit Website'})
+  expect(screen.queryByLabelText('Workspace ID')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button',{name:'Add expense'}));let modal=within(screen.getByRole('dialog'))
+  await user.type(modal.getByLabelText('Description'),'Website promotion');await user.type(modal.getByLabelText('Amount (€)'),'900')
+  await user.selectOptions(modal.getByLabelText('Department'),'7');await user.selectOptions(modal.getByLabelText('Project'),'10');await user.click(modal.getByRole('button',{name:'Save expense'}))
+  await user.click(screen.getByRole('button',{name:/^Budgets$/}));await user.click(screen.getByRole('button',{name:'Manage budgets'}));modal=within(screen.getByRole('dialog'))
+  const marketing=within(modal.getByRole('group',{name:'Marketing'}));await user.selectOptions(marketing.getByLabelText('Department'),'7');await user.selectOptions(marketing.getByLabelText('Project'),'10');await user.click(modal.getByRole('button',{name:'Save budgets'}))
+  expect(screen.getByRole('progressbar',{name:'Marketing budget used'})).toHaveAttribute('value','900')
+  await user.click(screen.getByRole('button',{name:'Transactions'}));expect(screen.getByRole('row',{name:/Website promotion Marketing Development Website Ada/})).toBeInTheDocument()
 })

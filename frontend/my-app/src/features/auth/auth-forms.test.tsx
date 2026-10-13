@@ -1,4 +1,6 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { stubAuthFetch } from '@/test/auth-transport'
+import { render } from '@/test/render'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -53,8 +55,7 @@ describe('auth forms', () => {
 
   it('shows a safe message when login fails on the server', async () => {
     const user = userEvent.setup()
-    vi.stubGlobal(
-      'fetch',
+    stubAuthFetch(
       vi.fn().mockResolvedValue({
         ok: false,
         status: 401,
@@ -77,7 +78,7 @@ describe('auth forms', () => {
     ['server error', () => Promise.resolve({ ok: false, status: 500 }), 'The server returned an error (HTTP 500). Please check the backend logs.'],
     ['connection failure', () => Promise.reject(new TypeError('Failed to fetch')), 'Cannot reach the server. Check that the backend is running and try again.'],
   ])('shows an actionable message for %s', async (_label, response, message) => {
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(response))
+    stubAuthFetch(vi.fn().mockImplementation(response))
     const user = userEvent.setup()
     renderAt('/login')
     await user.type(screen.getByLabelText(/email address/i), 'user@example.com')
@@ -105,8 +106,7 @@ describe('auth forms', () => {
     )
     const accessToken = `${tokenPayload}.${tokenBody}.signature`
 
-    vi.stubGlobal(
-      'fetch',
+    stubAuthFetch(
       vi
         .fn()
         .mockResolvedValueOnce({
@@ -159,8 +159,7 @@ describe('auth forms', () => {
       resolveFetch = resolve
     })
 
-    vi.stubGlobal(
-      'fetch',
+    stubAuthFetch(
       vi.fn().mockReturnValue(
         fetchPromise.then(() => ({
           ok: true,

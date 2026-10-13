@@ -6,10 +6,11 @@ import HomePage from '@/pages/HomePage'
 import LandingPage from '@/pages/LandingPage'
 import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
+import { QueryProvider } from '@/lib/QueryProvider'
 
 function App() {
   return (
-    <AuthProvider>
+    <QueryProvider><AuthProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<LandingPage />} />
@@ -23,7 +24,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
-    </AuthProvider>
+    </AuthProvider></QueryProvider>
   )
 }
 

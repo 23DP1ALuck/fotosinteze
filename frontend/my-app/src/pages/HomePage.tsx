@@ -6,10 +6,12 @@ import { Menu, Plus, X } from 'lucide-react'
 import { BrandMark } from '@/components/brand/BrandMark'
 import { useAuth } from '@/features/auth/use-auth'
 import { CategoryManager } from '@/features/categories/CategoryManager'
-import { WorkspaceSwitcher, CreateBusinessDialog, type Workspace } from '@/features/workspaces/WorkspaceControls'
+import { WorkspaceSwitcher, type Workspace } from '@/features/workspaces/WorkspaceControls'
 import { TeamManager } from '@/features/workspaces/TeamManager'
 import { ProjectManager, ProjectFields } from '@/features/projects/ProjectManager'
 import { useProjectCatalog } from '@/features/projects/use-project-catalog'
+import { WorkspaceProvider } from '@/features/workspaces/WorkspaceProvider'
+import { useWorkspace } from '@/features/workspaces/use-workspace'
 import type { TeamData, TeamSection } from '@/features/workspaces/team-types'
 import { TransactionsView, type WorkspaceTransaction } from '@/features/workspaces/TransactionsView'
 
@@ -39,10 +41,10 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   workspace: Workspace; workspaces: Workspace[]; active: boolean; onSwitch: (id: string) => void; onCreate: () => void
 }) {
   const isBusiness = workspace.kind === 'business'
-  const workspaceNavigation = isBusiness ? ['Dashboard', 'Transactions', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics', 'Settings'] : navigation
+  const workspaceNavigation = isBusiness ? workspace.role === 'EMPLOYEE' ? ['Dashboard', 'Transactions', 'Budgets', 'Categories', 'Projects', 'Statistics'] : ['Dashboard', 'Transactions', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics', 'Settings'] : navigation
   const { user, logout } = useAuth()
   const [team, setTeam] = useState<TeamData>({ departments: [], employees: [], projects: [] })
-  const [backendWorkspaceId, setBackendWorkspaceId] = useState<number>()
+  const backendWorkspaceId = Number(workspace.id)
   const projectCatalog = useProjectCatalog(backendWorkspaceId, isBusiness && active)
   const canManageProjects = workspace.role !== 'EMPLOYEE'
   const [transactionDepartmentId, setTransactionDepartmentId] = useState('')
@@ -67,13 +69,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   const chartData = history.map((item) => item.month === 'Sep' ? { ...item, income, expenses } : isBusiness ? { ...item, income: 0, expenses: 0 } : item)
 
   function navigate(next: string) { setView(next); setMobileMenu(false) }
-  function connectBackendWorkspace(id: number | undefined) {
-    setBackendWorkspaceId(id)
-    setTransactionDepartmentId('')
-    setTransactionProjectId('')
-    setBudgetTargets({})
-    setBudgetDraft({})
-  }
+  function connectBackendWorkspace() { setNotice('Use the workspace switcher to choose another accessible workspace.') }
   function openDialog(type: typeof dialogType, entry: typeof entryType = 'income') {
     setDialogType(type); setEntryType(entry)
     if (type === 'transaction') { setTransactionDepartmentId(''); setTransactionProjectId('') }
@@ -140,14 +136,14 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       <p className="mx-[9px] mt-[33px] mb-4 text-[10px] text-[#7d877f] uppercase">Workspace</p>
       <nav aria-label="Workspace" className="grid gap-2">{workspaceNavigation.map((item) => <button key={item} className={`rounded-[10px] border-0 px-[19px] py-[13px] text-left ${view === item ? 'bg-[#193f33] text-white' : 'bg-transparent text-[#7d877f] hover:bg-[#f1f4ec] hover:text-[#193f33]'}`} aria-current={view === item ? 'page' : undefined} onClick={() => navigate(item)}>{item}</button>)}</nav>
       <div className="mt-auto pt-[100px] max-[900px]:pt-[50px] max-sm:pt-6"><button className="flex w-full items-center gap-1 whitespace-nowrap border-t border-[#e1e5df] bg-transparent px-1 py-[21px] text-xs text-[#193f33] hover:text-[#60815b]" onClick={() => { setMobileMenu(false); onCreate() }}><Plus size={16} />Create business workspace</button>
-        <div className="mx-1 mt-[35px] mb-[23px] flex items-center gap-3 max-sm:mt-3 [&>div]:grid [&>div]:min-w-0 [&_strong]:text-sm [&_strong]:wrap-anywhere [&_div_span]:text-xs [&_div_span]:text-[#7d877f]"><span className="grid size-[39px] shrink-0 place-items-center rounded-full bg-[#ecf0e6] text-xs">{initials}</span><div><strong>{displayName}</strong><span>{isBusiness ? 'Workspace owner' : 'Personal account'}</span></div></div>
+        <div className="mx-1 mt-[35px] mb-[23px] flex items-center gap-3 max-sm:mt-3 [&>div]:grid [&>div]:min-w-0 [&_strong]:text-sm [&_strong]:wrap-anywhere [&_div_span]:text-xs [&_div_span]:text-[#7d877f]"><span className="grid size-[39px] shrink-0 place-items-center rounded-full bg-[#ecf0e6] text-xs">{initials}</span><div><strong>{displayName}</strong><span>{isBusiness ? workspace.role === 'EMPLOYEE' ? 'Workspace employee' : 'Workspace owner' : 'Personal account'}</span></div></div>
         <button className="mx-[7px] block border-0 bg-transparent p-0 text-[13px] text-[#7d877f] hover:text-[#60815b]" onClick={() => openDialog('profile')}>Profile & account</button>
         <button className="mx-[7px] mt-[14px] border-0 bg-transparent p-0 text-[11px] text-[#7d877f] hover:text-[#60815b]" onClick={handleLogout}>Log out</button>
         {logoutError && <p role="alert" className="mt-3 text-xs text-[#a43b32]">{logoutError}</p>}
       </div>
     </aside>
     <main className="mx-auto min-w-0 max-w-[1800px] flex-1 px-[42px] pt-8 pb-11 max-[1200px]:px-[26px] max-[1200px]:py-[25px] max-sm:px-[18px] max-sm:pt-5 max-sm:pb-7 min-[1600px]:px-[50px] min-[1600px]:pt-10 min-[1600px]:pb-[50px]">
-      <header className="flex items-center justify-between border-b border-[#e1e5df] pb-[23px] max-sm:pb-[18px] [&>div]:flex [&>div]:items-center [&>div]:gap-3 [&_div_span]:text-[11px] [&_div_span]:text-[#7d877f] [&_div_span]:uppercase max-sm:[&_div_span]:text-[9px] [&>span]:pr-[9%] [&>span]:text-sm max-sm:[&>span]:pr-0 max-sm:[&>span]:text-xs"><div><button className="inline-flex border-0 bg-transparent p-[3px] sm:hidden" aria-label="Toggle workspace navigation" aria-expanded={mobileMenu} onClick={() => setMobileMenu(!mobileMenu)}>{mobileMenu ? <X size={20} /> : <Menu size={20} />}</button><span>{isBusiness ? 'Business workspace / Owner' : 'Personal workspace'}</span></div><span>September 2026</span></header>
+      <header className="flex items-center justify-between border-b border-[#e1e5df] pb-[23px] max-sm:pb-[18px] [&>div]:flex [&>div]:items-center [&>div]:gap-3 [&_div_span]:text-[11px] [&_div_span]:text-[#7d877f] [&_div_span]:uppercase max-sm:[&_div_span]:text-[9px] [&>span]:pr-[9%] [&>span]:text-sm max-sm:[&>span]:pr-0 max-sm:[&>span]:text-xs"><div><button className="inline-flex border-0 bg-transparent p-[3px] sm:hidden" aria-label="Toggle workspace navigation" aria-expanded={mobileMenu} onClick={() => setMobileMenu(!mobileMenu)}>{mobileMenu ? <X size={20} /> : <Menu size={20} />}</button><span>{isBusiness ? `Business workspace / ${workspace.role === 'EMPLOYEE' ? 'Employee' : 'Owner'}` : 'Personal workspace'}</span></div><span>September 2026</span></header>
       <div className="mt-7 flex items-center justify-between gap-[22px] max-[1200px]:flex-col max-[1200px]:items-start max-sm:mt-[25px] [&_h1]:m-0 [&_h1]:text-[clamp(25px,2.45vw,40px)] [&_h1]:leading-[1.2] [&_h1]:font-semibold [&_h1]:tracking-[-.035em] max-sm:[&_h1]:max-w-[330px] max-sm:[&_h1]:text-[29px] [&_p]:mt-3 [&_p]:text-[15px] [&_p]:text-[#7d877f] max-sm:[&_p]:text-[13px]"><div><h1>{view === 'Dashboard' ? isBusiness ? 'Your business, at a glance.' : 'A little clarity for your everyday.' : view === 'Transactions' ? 'Every transaction, in its place.' : view}</h1><p>{isBusiness ? view === 'Transactions' ? 'Search, organise and follow the details behind your business.' : 'Track the money. Give every plan room to grow.' : view === 'Dashboard' ? 'Your balance, spending and goals — all in their own place.' : 'A clearer picture of your personal finances.'}</p></div>
         <div className="flex shrink-0 gap-[13px] max-sm:w-full max-sm:gap-[10px] max-sm:[&_button]:flex-1 max-sm:[&_button]:text-[13px]"><button className="inline-flex min-h-12 items-center justify-center gap-[6px] whitespace-nowrap rounded-[10px] border-0 bg-[#eaf0e6] px-[18px] py-3 text-[#193f33] hover:bg-[#dce6d4]" onClick={() => openDialog('transaction', 'income')}><Plus size={18} />Add income</button><button className={primaryButtonClasses} onClick={() => openDialog('transaction', 'expense')}><span aria-hidden>−</span>Add expense</button></div>
       </div>
@@ -159,12 +155,12 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       {view === 'Dashboard' && renderTransactions()}
       {view === 'Transactions' && <TransactionsView transactions={transactions} income={income} expenses={expenses} workspaceName={workspace.name} workspaceKind={workspace.kind} />}
       {view === 'Budgets' && renderBudgets()}
-      {view === 'Categories' && <CategoryManager workspaceName={workspace.name} workspaceKind={workspace.kind} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} />}
+      {active && view === 'Categories' && <CategoryManager workspaceName={workspace.name} workspaceKind={workspace.kind} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} />}
       {!isBusiness && (view === 'Dashboard' || view === 'Revolut') && <section className="mt-[25px] flex items-center justify-between gap-5 rounded-[15px] bg-[#eaf0e5] px-[26px] py-[17px] max-sm:flex-col max-sm:items-start max-sm:gap-3 max-sm:p-[18px] [&_h2]:m-0 [&_h2]:text-base [&_h2]:leading-[1.3] [&_h2]:font-semibold [&_h2]:tracking-[-.025em] [&_p]:mt-[5px] [&_p]:text-xs [&_p]:text-[#7d877f]"><div><h2>Revolut preview</h2><p>Sample imported transactions · connect your account when integration is available</p></div><span className="whitespace-nowrap rounded-full border border-[#cbd6c3] px-[10px] py-1 text-xs">Not connected</span></section>}
       {isBusiness && view === 'Dashboard' && <section className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-[#eaf0e5] p-5"><div><h2 className="text-base font-semibold!">Built for your team. Kept in your control.</h2><p className="mt-2 text-xs text-[#68796e]">Owners manage the workspace. Employees can view finances and add expenses.</p></div><button className="text-sm" onClick={() => navigate('Employees')}>Employees</button></section>}
       {isBusiness && view === 'Projects' && <ProjectManager key={backendWorkspaceId ?? 'unconnected'} catalog={projectCatalog} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} canManage={canManageProjects} />}
       {isBusiness && ['Departments', 'Employees'].includes(view) && <TeamManager key={view} section={view as TeamSection} data={team} onChange={setTeam} ownerName={displayName} />}
-      {isBusiness && view === 'Settings' && <section className={cardClasses}><h2>{workspace.name}</h2><p className="mt-3 text-sm text-[#68796e]">Business workspace · You are the Owner · Currency: EUR</p></section>}
+      {isBusiness && view === 'Settings' && <section className={cardClasses}><h2>{workspace.name}</h2><p className="mt-3 text-sm text-[#68796e]">Business workspace · {workspace.role === 'EMPLOYEE' ? 'Employee' : 'Owner'} · Currency: EUR</p></section>}
     </main>
     <dialog ref={dialog} className="m-auto max-h-[calc(100svh-40px)] w-[min(460px,calc(100%_-_32px))] overflow-y-auto rounded-[18px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/35 backdrop:backdrop-blur-[3px] [&_h2]:m-0 [&_h2]:text-[23px] [&_h2]:font-semibold" aria-labelledby="dashboard-dialog-title">
       <div className="flex items-center justify-between gap-[15px]"><h2 id="dashboard-dialog-title">{dialogType === 'transaction' ? `Add ${entryType}` : dialogType === 'budget' ? 'Manage your budgets' : dialogType === 'profile' ? 'Your account' : 'Your account'}</h2><button className="rounded-full border-0 bg-[#eff2e9] p-[6px]" aria-label="Close dialog" onClick={() => dialog.current?.close()}><X size={20} /></button></div>
@@ -175,21 +171,15 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   </div>
 }
 
-function HomePage() {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([{ id: 'personal', name: 'Personal', kind: 'personal' }])
-  const [activeId, setActiveId] = useState('personal')
-  const [creating, setCreating] = useState(false)
-  function createWorkspace(name: string) {
-    const workspace: Workspace = { id: crypto.randomUUID(), name, kind: 'business', role: 'OWNER' }
-    setWorkspaces((current) => [...current, workspace])
-    setActiveId(workspace.id)
-  }
-  return <>
-    {workspaces.map((workspace) => <div key={workspace.id} hidden={workspace.id !== activeId}>
-      <WorkspaceDashboard workspace={workspace} workspaces={workspaces} active={workspace.id === activeId} onSwitch={setActiveId} onCreate={() => setCreating(true)} />
-    </div>)}
-    {creating && <CreateBusinessDialog workspaces={workspaces} onCreate={createWorkspace} onClose={() => setCreating(false)} />}
-  </>
+function WorkspaceHome() {
+  const state = useWorkspace()
+  const { user } = useAuth()
+  const [notice, setNotice] = useState('')
+  if (state.status === 'loading') return <main className="grid min-h-svh place-items-center bg-[#f7f8f2] text-[#193f33]"><p role="status">Loading your workspaces…</p></main>
+  if (state.status === 'error') return <main className="grid min-h-svh place-items-center bg-[#f7f8f2] p-6 text-[#193f33]"><div className="rounded-2xl bg-white p-6"><p role="alert">{state.error}</p><button onClick={state.retry} className="mt-4 rounded-xl bg-[#193f33] px-5 py-3 text-white">Retry</button></div></main>
+  if (!state.activeWorkspace) return <main className="grid min-h-svh place-items-center bg-[#f7f8f2] p-6 text-[#193f33]"><div><h1 className="text-xl font-semibold">No accessible workspaces</h1><p className="mt-2">Your account needs workspace membership before you can manage finances.</p><button onClick={state.retry} className="mt-4 underline">Refresh workspaces</button></div></main>
+  const workspaces: Workspace[] = state.workspaces.map(item => ({ id:String(item.id), name:item.name, kind:item.type==='PERSONAL'?'personal':'business', role:item.role }))
+  return <>{notice && <div role="status" className="fixed top-4 right-4 z-50 max-w-sm rounded-xl bg-[#eaf0e5] p-4 text-sm text-[#193f33] shadow-lg">{notice}<button aria-label="Dismiss workspace notice" onClick={()=>setNotice('')} className="ml-3">×</button></div>}{workspaces.map(workspace=><div key={`${user?.id}-${workspace.id}`} hidden={workspace.id!==String(state.activeWorkspace!.id)}><WorkspaceDashboard workspace={workspace} workspaces={workspaces} active={workspace.id===String(state.activeWorkspace!.id)} onSwitch={id=>state.selectWorkspace(Number(id))} onCreate={()=>setNotice('Business workspace creation requires the WS-02 backend endpoint. Only existing accessible workspaces are shown.')} /></div>)}</>
 }
-
+function HomePage() { return <WorkspaceProvider><WorkspaceHome /></WorkspaceProvider> }
 export default HomePage

@@ -1,5 +1,6 @@
+import { render } from '@/test/render'
 import { useState } from 'react'
-import { cleanup, render, screen, within, waitFor } from '@testing-library/react'
+import { cleanup, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { setAccessToken, clearSession } from '@/features/auth/storage'
