@@ -1,0 +1,108 @@
+import { useState } from 'react'
+import { cleanup, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { TeamManager } from './TeamManager'
+import type { TeamData, TeamSection } from './team-types'
+
+beforeEach(() => Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value() { this.setAttribute('open', '') } }))
+afterEach(cleanup)
+function Harness() {
+  const [data, setData] = useState<TeamData>({ employees: [], departments: [], projects: [] })
+  const [section, setSection] = useState<TeamSection>('Departments')
+  return <><nav aria-label="Test management navigation">{(['Departments', 'Employees', 'Projects'] as const).map((item) => <button key={item} onClick={() => setSection(item)}>{item}</button>)}</nav><TeamManager key={section} section={section} data={data} onChange={setData} ownerName="Ada" /></>
+}
+const navigate = (section: string) => within(screen.getByRole('navigation', { name: 'Test management navigation' })).getByRole('button', { name: section })
+
+describe('business team management', () => {
+  it('creates and edits linked departments, employees and projects, and removes them without orphaned links', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+    await user.click(screen.getAllByRole('button', { name: 'Add department' })[0])
+    let dialog = within(screen.getByRole('dialog'))
+    await user.type(dialog.getByLabelText('Department name'), 'Development')
+    await user.click(dialog.getByRole('button', { name: 'Add department' }))
+    expect(screen.getByRole('list', { name: 'Departments' })).toHaveTextContent('Development')
+
+    await user.click(navigate('Employees'))
+    await user.click(screen.getAllByRole('button', { name: 'Add employee' })[0])
+    dialog = within(screen.getByRole('dialog'))
+    await user.type(dialog.getByLabelText('Full name'), 'Anna Smith')
+    await user.type(dialog.getByLabelText('Email address'), 'ANNA@example.com')
+    await user.selectOptions(dialog.getByLabelText('Department'), screen.getByRole('option', { name: 'Development' }).getAttribute('value')!)
+    await user.click(dialog.getByRole('button', { name: 'Add employee' }))
+    expect(screen.getByRole('list', { name: 'Employees' })).toHaveTextContent('anna@example.com')
+    expect(screen.getByRole('list', { name: 'Employees' })).toHaveTextContent('Development')
+
+    await user.click(navigate('Projects'))
+    await user.click(screen.getAllByRole('button', { name: 'Add project' })[0])
+    dialog = within(screen.getByRole('dialog'))
+    await user.type(dialog.getByLabelText('Project name'), 'Website redesign')
+    await user.selectOptions(dialog.getByLabelText('Status'), 'Active')
+    await user.click(dialog.getByLabelText('Development'))
+    await user.click(dialog.getByRole('button', { name: 'Add project' }))
+    expect(screen.getByRole('list', { name: 'Projects' })).toHaveTextContent('Development')
+    expect(screen.getByRole('list', { name: 'Projects' })).toHaveTextContent('Active')
+
+    await user.click(navigate('Departments'))
+    await user.click(screen.getByRole('button', { name: 'Delete Development' }))
+    dialog = within(screen.getByRole('dialog'))
+    expect(dialog.getByRole('button', { name: 'Delete department' })).toBeDisabled()
+    await user.click(dialog.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'Edit Development' }))
+    dialog = within(screen.getByRole('dialog'))
+    await user.clear(dialog.getByLabelText('Department name'))
+    await user.type(dialog.getByLabelText('Department name'), 'Engineering')
+    await user.click(dialog.getByRole('button', { name: 'Save changes' }))
+    expect(screen.getByRole('list', { name: 'Departments' })).toHaveTextContent('1 employees · 1 projects')
+
+    await user.click(navigate('Employees'))
+    expect(screen.getByRole('list', { name: 'Employees' })).toHaveTextContent('Engineering')
+    await user.click(screen.getByRole('button', { name: 'Edit Anna Smith' }))
+    dialog = within(screen.getByRole('dialog'))
+    await user.selectOptions(dialog.getByLabelText('Department'), '')
+    await user.click(dialog.getByRole('button', { name: 'Save changes' }))
+    expect(screen.getByRole('list', { name: 'Employees' })).toHaveTextContent('Unassigned')
+    await user.click(screen.getByRole('button', { name: 'Remove Anna Smith' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove employee' }))
+    expect(screen.getByText('No employees yet')).toBeInTheDocument()
+
+    await user.click(navigate('Projects'))
+    await user.click(screen.getByRole('button', { name: 'Edit Website redesign' }))
+    dialog = within(screen.getByRole('dialog'))
+    await user.click(dialog.getByLabelText('Engineering'))
+    await user.click(dialog.getByRole('button', { name: 'Save changes' }))
+    expect(screen.getByRole('list', { name: 'Projects' })).toHaveTextContent('No department links')
+    await user.click(screen.getByRole('button', { name: 'Delete Website redesign' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete project' }))
+    expect(screen.getByText('No projects yet')).toBeInTheDocument()
+    await user.click(navigate('Departments'))
+    await user.click(screen.getByRole('button', { name: 'Delete Engineering' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete department' }))
+    expect(screen.getByText('No departments yet')).toBeInTheDocument()
+  })
+
+  it('validates employee email, rejects duplicates and supports search', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+    await user.click(navigate('Employees'))
+    await user.click(screen.getAllByRole('button', { name: 'Add employee' })[0])
+    let dialog = within(screen.getByRole('dialog'))
+    await user.type(dialog.getByLabelText('Full name'), 'Anna Smith')
+    await user.click(dialog.getByRole('button', { name: 'Add employee' }))
+    expect(dialog.getByRole('alert')).toHaveTextContent('valid email')
+    await user.type(dialog.getByLabelText('Email address'), 'anna@example.com')
+    await user.click(dialog.getByRole('button', { name: 'Add employee' }))
+    await user.click(screen.getByRole('button', { name: 'Add employee' }))
+    dialog = within(screen.getByRole('dialog'))
+    await user.type(dialog.getByLabelText('Full name'), 'Another Anna')
+    await user.type(dialog.getByLabelText('Email address'), 'ANNA@example.com')
+    await user.click(dialog.getByRole('button', { name: 'Add employee' }))
+    expect(dialog.getByRole('alert')).toHaveTextContent('already in the workspace')
+    await user.click(dialog.getByRole('button', { name: 'Cancel' }))
+    await user.type(screen.getByRole('textbox', { name: 'Search employees' }), 'not-found')
+    expect(screen.getByText('No matches found')).toBeInTheDocument()
+    await user.clear(screen.getByRole('textbox', { name: 'Search employees' }))
+    expect(screen.getByRole('list', { name: 'Employees' })).toHaveTextContent('Anna Smith')
+  })
+})
