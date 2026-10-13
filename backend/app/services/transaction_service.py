@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSession
-from app.dto import CreateTransactionRequest
+from app.dto import CreateTransactionRequest, TransactionResponseDTO
 from app.models import Workspace, Transaction, Category, Account, Project, Department, Expense, WorkspaceRole, WorkspaceUsers
 from app.models.transaction import TransactionSourceEnum
 from app.models.workspace import WorkspaceTypeEnum
@@ -18,8 +18,9 @@ async def create_transaction(request: CreateTransactionRequest,
                              current_user: dict[str,str],
                              active_workspace: Workspace,
                              db: AsyncSession,
-                             *, commit: bool = True,
-                             ):
+                             *, commit: bool = True
+                             ) -> TransactionResponseDTO:
+        
 
     # Validate the request before creating a transaction or changing the balance.
     if request.amount <= 0:
@@ -68,14 +69,10 @@ async def create_transaction(request: CreateTransactionRequest,
             account.balance += request.amount
         else:
             account.balance -= request.amount
-
-        #commit the transaction only if it was made without an expense creation
-        if commit: 
-            await db.commit()
-            await db.refresh(transaction)
-        else: 
-            await db.flush() # flush all obejcts. db will execute a transaction commit later in the expense_service
-        return transaction
+        
+        await db.commit()
+        await db.refresh(transaction)
+        return transaction_response(transaction)
     elif active_workspace.type == WorkspaceTypeEnum.BUSINESS:
         # Check business membership and related records before saving or changing the balance.
         membership = await get_workspace_membership(current_user, active_workspace.workspace_id, db)
@@ -96,12 +93,13 @@ async def create_transaction(request: CreateTransactionRequest,
             account.balance += request.amount
         else:
             account.balance -= request.amount
+        
         if commit:
             await db.commit()
             await db.refresh(transaction)
         else:
             await db.flush()
-        return transaction
+        return transaction_response(transaction)
 
     raise HTTPException(status_code=400, detail="Invalid workspace type")
 
@@ -110,7 +108,7 @@ async def update_transaction(transaction_id: int,
                              request: CreateTransactionRequest,
                              current_user: dict[str, str],
                              active_workspace: Workspace,
-                             db: AsyncSession) -> Transaction:
+                             db: AsyncSession) -> TransactionResponseDTO:
 
     transaction = await find_transaction_by_id(transaction_id, active_workspace, db)
     membership = await authorize_transaction(transaction, current_user, active_workspace, db)
@@ -161,7 +159,7 @@ async def update_transaction(transaction_id: int,
 
     await db.commit()
     await db.refresh(transaction)
-    return transaction
+    return transaction_response(transaction)
 
 
 async def delete_transaction(transaction_id: int,
@@ -182,6 +180,40 @@ async def delete_transaction(transaction_id: int,
     await db.delete(transaction)
     await db.commit()
 
+
+def transaction_response(transaction: Transaction) -> TransactionResponseDTO:
+    return TransactionResponseDTO(
+        transaction_id=transaction.transaction_id,
+        amount=transaction.amount,
+        currency=transaction.currency,
+        description=transaction.description,
+        source=transaction.source,
+        account_id=transaction.account_id,
+        category_id=transaction.category_id,
+        project_id=transaction.project_id,
+        department_id=transaction.department_id,
+        expense_id=transaction.expense_id,
+        workspace_id=transaction.workspace_id,
+        created_at=transaction.created_at,
+        updated_at=transaction.updated_at,
+    )
+
+
+async def get_transaction_by_id(transaction_id: int, current_user: dict,
+                                workspace: Workspace, db: AsyncSession) -> TransactionResponseDTO:
+    transaction = await find_transaction_by_id(transaction_id, workspace, db)
+    await authorize_transaction(transaction, current_user, workspace, db)
+    return transaction_response(transaction)
+
+
+async def get_transactions(workspace: Workspace, current_user: dict, db: AsyncSession) -> list[TransactionResponseDTO]:
+    stmt = select(Transaction).where(Transaction.workspace_id == workspace.workspace_id)
+    if workspace.type == WorkspaceTypeEnum.BUSINESS:
+        membership = await get_workspace_membership(current_user, workspace.workspace_id, db)
+        if membership.role != WorkspaceRole.OWNER:
+            stmt = stmt.where(Transaction.department_id == membership.department_id)
+    result = await db.execute(stmt.order_by(Transaction.transaction_id))
+    return [transaction_response(transaction) for transaction in result.scalars().all()]
 
 async def find_transaction_by_id(transaction_id: int, workspace: Workspace, db: AsyncSession) -> Transaction:
     # Scope the lookup to the active workspace, even when the transaction ID exists elsewhere.

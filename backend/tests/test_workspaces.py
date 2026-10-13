@@ -129,7 +129,9 @@ class WorkspaceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_expense_cannot_have_two_transactions(self):
         self.db.add(Account(account_id=1, name='Cash', currency='EUR', balance=100, workspace_id=1))
-        self.db.add(Expense(expense_id=1, workspace_id=1, submitted_by=1, amount=10,
+        self.db.add(Category(category_id=1, name='Travel', type=CategoryType.expense, workspace_id=1))
+        await self.db.flush()
+        self.db.add(Expense(expense_id=1, workspace_id=1, submitted_by=1, category_id=1, amount=10,
                             currency='EUR', description='Train'))
         await self.db.flush()
         self.db.add(Transaction(workspace_id=1, account_id=1, expense_id=1, amount=10,
