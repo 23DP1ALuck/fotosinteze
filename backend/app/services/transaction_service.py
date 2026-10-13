@@ -69,11 +69,12 @@ async def create_transaction(request: CreateTransactionRequest,
         else:
             account.balance -= request.amount
 
-        if commit:
+        #commit the transaction only if it was made without an expense creation
+        if commit: 
             await db.commit()
             await db.refresh(transaction)
-        else:
-            await db.flush()
+        else: 
+            await db.flush() # flush all obejcts. db will execute a transaction commit later in the expense_service
         return transaction
     elif active_workspace.type == WorkspaceTypeEnum.BUSINESS:
         # Check business membership and related records before saving or changing the balance.
