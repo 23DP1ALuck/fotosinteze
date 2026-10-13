@@ -50,7 +50,7 @@ class Workspace(Base):
     expenses: Mapped[List["Expense"]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan",
     )
-    transactions: Mapped["Transaction"] = relationship(
+    transactions: Mapped[List["Transaction"]] = relationship(
         back_populates="workspace",
         cascade="all, delete-orphan"
     )

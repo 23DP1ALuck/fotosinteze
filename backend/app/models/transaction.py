@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Integer,BigInteger, String, DECIMAL, CHAR, Enum, DateTime, ForeignKey
+from sqlalchemy import Integer,BigInteger, String, DECIMAL, CHAR, Enum, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -18,6 +18,7 @@ class TransactionSourceEnum(enum.Enum):
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (UniqueConstraint('expense_id', name='uq_transaction_expense'),)
 
     transaction_id: Mapped[int] = mapped_column(Integer,primary_key=True, autoincrement=True)
     external_transaction_id: Mapped[str] = mapped_column(String(255), nullable=True)
