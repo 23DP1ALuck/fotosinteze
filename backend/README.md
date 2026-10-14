@@ -222,3 +222,24 @@ Rejection creates no transaction. Only `PENDING -> APPROVED` and
 Reviewed requests cannot be edited or deleted, including by owners. Their linked
 transactions are also locked, and the regular transaction endpoint cannot create
 expense-linked transactions independently of review.
+
+## Personal dashboard
+
+`GET /dashboard` requires a bearer access token and `Workspace-ID`. Personal
+Workspaces return the summary below. Business Workspaces return `200` with `null`
+until their dashboard is implemented. Inaccessible workspaces return `403` for
+either workspace type.
+
+The response contains `workspace_id`, `currency`, `period_start`, `period_end`,
+`balance`, `income`, `expenses`, `savings`, and `recent_transactions`.
+`balance` sums current account balances across all time. Income and expenses
+sum categorized transactions in the current server-local calendar month;
+`savings` is income minus expenses and may be negative. The period end is
+exclusive. Money is serialized as decimal strings.
+
+All balances and transactions are filtered to the workspace's `base_currency`;
+other currencies are excluded, with no conversion. Recent transactions are the
+latest 10 from that month and currency, ordered by creation time and then ID,
+newest first, including uncategorized entries. Uncategorized transactions do not
+contribute to income or expenses. Empty workspaces return zero amounts and an
+empty transaction list. Budgets are not included.
