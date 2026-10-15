@@ -273,3 +273,15 @@ updates return `409`. Creating, editing or deleting local transactions (includin
 expense approval) changes manual account balances only. Moving a transaction
 between accounts adjusts only the manual sides. Renaming connected accounts is
 allowed. This API does not implement the bank synchronization job.
+
+### Transaction history
+
+`GET /transactions?limit=50&offset=0` requires authentication and the
+`Workspace-ID` header. It returns `{items, limit, offset, has_more}` rather than
+a bare array. `limit` accepts 1–100 (default 50); `offset` is nonnegative
+(default 0). Items are ordered by `created_at DESC, transaction_id DESC`.
+Workspace and employee department access filters apply before pagination.
+An empty page returns `items: []` and `has_more: false`.
+
+Offset pagination can shift between requests when new transactions arrive;
+refresh from offset 0 to retrieve the latest history.

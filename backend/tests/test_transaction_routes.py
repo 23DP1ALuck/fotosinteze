@@ -1,5 +1,6 @@
 import unittest
 from decimal import Decimal
+from datetime import datetime
 
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
@@ -68,7 +69,7 @@ class TransactionRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(updated, TransactionResponseDTO)
         self.assertEqual(updated.description, 'Changed')
         items = await transaction_service.get_transactions(workspace, self.user, self.db)
-        self.assertTrue(all(isinstance(item, TransactionResponseDTO) for item in items))
+        self.assertTrue(all(isinstance(item, TransactionResponseDTO) for item in items.items))
         read = await transaction_service.get_transaction_by_id(created.transaction_id, self.user, workspace, self.db)
         self.assertIsInstance(read, TransactionResponseDTO)
         self.assertNotIn('external_transaction_id', read.model_dump())
@@ -84,8 +85,8 @@ class TransactionRouteTests(unittest.IsolatedAsyncioTestCase):
             operation = paths[path][method]
             schema = operation['responses'][status]['content']['application/json']['schema']
             if path == '/transactions' and method == 'get':
-                self.assertEqual(schema['type'], 'array')
-                schema = schema['items']
+                self.assertEqual(schema['$ref'], '#/components/schemas/TransactionListResponseDTO')
+                schema = app.openapi()['components']['schemas']['TransactionListResponseDTO']['properties']['items']['items']
             self.assertEqual(schema['$ref'], '#/components/schemas/TransactionResponseDTO')
             for code in ('401', '403', '422'):
                 self.assertIn(code, operation['responses'])
@@ -112,12 +113,44 @@ class TransactionRouteTests(unittest.IsolatedAsyncioTestCase):
             self.user = {'sub': user}
             response = await self.client.get('/transactions', headers={'Workspace-ID': workspace})
             self.assertEqual(response.status_code, 200, response.text)
-            self.assertEqual(sorted(row['transaction_id'] for row in response.json()), expected)
+            self.assertEqual(sorted(row['transaction_id'] for row in response.json()["items"]), expected)
 
-    async def test_list_returns_empty_array_for_empty_workspace(self):
+    async def test_list_returns_empty_page_for_empty_workspace(self):
         response = await self.client.get('/transactions', headers={'Workspace-ID': '2'})
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json(), [])
+        self.assertEqual(response.json(), {"items": [], "limit": 50, "offset": 0, "has_more": False})
+
+    async def test_history_order_and_page_boundaries(self):
+        # IDs deliberately disagree with creation order; equal dates use descending IDs.
+        for transaction_id, created_at in [(2, datetime(2025, 1, 1)), (3, datetime(2024, 1, 1)),
+                                           (4, datetime(2025, 1, 1))]:
+            self.db.add(Transaction(transaction_id=transaction_id, workspace_id=1, account_id=1,
+                                    department_id=2, amount=5, currency='EUR', description='History',
+                                    source=TransactionSourceEnum.MANUAL, created_at=created_at))
+        original = await self.db.get(Transaction, 1)
+        original.created_at = datetime(2023, 1, 1)
+        await self.db.commit()
+        for offset, expected, has_more in [(0, [4, 2], True), (2, [3, 1], False), (4, [], False)]:
+            response = await self.client.get('/transactions', params={'limit': 2, 'offset': offset})
+            self.assertEqual(response.status_code, 200, response.text)
+            page = response.json()
+            self.assertEqual([row['transaction_id'] for row in page['items']], expected)
+            self.assertEqual((page['limit'], page['offset'], page['has_more']), (2, offset, has_more))
+        self.user = {'sub': '2'}
+        response = await self.client.get('/transactions', params={'limit': 2, 'offset': 2})
+        self.assertEqual([row['transaction_id'] for row in response.json()['items']], [3])
+        self.assertFalse(response.json()['has_more'])
+
+    async def test_history_requires_authentication(self):
+        app.dependency_overrides.pop(get_current_user)
+        response = await self.client.get('/transactions')
+        self.assertEqual(response.status_code, 401, response.text)
+
+    async def test_history_rejects_invalid_pagination(self):
+        for params in [{'limit': 0}, {'limit': 101}, {'limit': 'invalid'}, {'offset': -1}, {'offset': 'invalid'}]:
+            with self.subTest(params=params):
+                response = await self.client.get('/transactions', params=params)
+                self.assertEqual(response.status_code, 422, response.text)
 
     async def test_list_denies_nonmember_and_unassigned_employee(self):
         self.user = {'sub': '2'}
