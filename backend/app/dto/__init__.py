@@ -18,8 +18,12 @@ from app.dto.category_response_dto import CategoryResponseDTO
 from app.dto.create_category_request import CreateCategoryRequest
 from app.dto.update_category_request import UpdateCategoryRequest
 from app.dto.workspace_list_response import WorkspaceListResponse
+from app.dto.create_budget_request import CreateBudgetRequest
+from app.dto.budget_response import BudgetResponseDTO
 
 __all__ = [
+    "CreateBudgetRequest",
+    "BudgetResponseDTO",
     "AccessTokenResponseDTO",
     "CreateUserDTO",
     "CreateUserResponseDTO",
