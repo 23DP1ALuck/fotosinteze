@@ -243,3 +243,33 @@ latest 10 from that month and currency, ordered by creation time and then ID,
 newest first, including uncategorized entries. Uncategorized transactions do not
 contribute to income or expenses. Empty workspaces return zero amounts and an
 empty transaction list. Budgets are not included.
+
+## Accounts
+
+Apply migrations with `.venv/bin/alembic upgrade head` before using account
+creation. Revision `9c52e7a1bd30` fixes SQLite account ID generation and preserves
+existing accounts and transaction references.
+
+Account routes require a bearer token and `Workspace-ID`. Personal workspace
+members can manage their accounts; business account routes require the owner,
+matching category management permissions. IDs are always scoped to the selected
+workspace; an account from another workspace returns `404`.
+
+- `GET /accounts` lists accounts in ID order.
+- `GET /accounts/{account_id}` reads one account.
+- `POST /accounts` creates a manual account with `name`, `currency` (three uppercase
+  letters), and `balance` (a decimal with at most two decimal places).
+- `PUT /accounts/{account_id}` updates supplied `name` and/or `balance` fields;
+  omitted fields are preserved. Explicit null and unknown fields are rejected.
+
+Names are trimmed, nonempty, at most 120 characters, and checked for duplicates
+in the workspace. Responses use the existing `balance` field for current balance
+and serialize money as decimal strings. Negative balances are allowed.
+Currency, workspace, connection and bank identifiers cannot be edited.
+
+An account with `connection_id` is bank-managed even if its connection expires.
+Only bank synchronization should replace its balance; ordinary account balance
+updates return `409`. Creating, editing or deleting local transactions (including
+expense approval) changes manual account balances only. Moving a transaction
+between accounts adjusts only the manual sides. Renaming connected accounts is
+allowed. This API does not implement the bank synchronization job.

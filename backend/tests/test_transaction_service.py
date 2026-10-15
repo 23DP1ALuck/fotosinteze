@@ -25,6 +25,7 @@ class Account(TestBase):
     account_id: Mapped[int] = mapped_column(primary_key=True)
     workspace_id: Mapped[int]
     balance: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    connection_id: Mapped[int | None]
 
 
 class Category(TestBase):

@@ -64,10 +64,10 @@ async def create_transaction(request: CreateTransactionRequest,
         )
         db.add(transaction)
 
-        # Income adds to the account balance; expenses subtract from it.
-        if category.type == CategoryType.income:
+        # Bank sync owns connected balances; local entries affect manual accounts only.
+        if account.connection_id is None and category.type == CategoryType.income:
             account.balance += request.amount
-        else:
+        elif account.connection_id is None:
             account.balance -= request.amount
         
         await db.commit()
@@ -89,9 +89,9 @@ async def create_transaction(request: CreateTransactionRequest,
                                   workspace_id=active_workspace.workspace_id,
                                   source=TransactionSourceEnum.EXPENSE)
         db.add(transaction)
-        if category.type == CategoryType.income:
+        if account.connection_id is None and category.type == CategoryType.income:
             account.balance += request.amount
-        else:
+        elif account.connection_id is None:
             account.balance -= request.amount
         
         if commit:
@@ -146,8 +146,10 @@ async def update_transaction(transaction_id: int,
     new_effect = request.amount if category.type == CategoryType.income else -request.amount
 
     # undo the original entry, then apply its replacement, even if the account changed.
-    old_account.balance -= old_effect
-    account.balance += new_effect
+    if old_account.connection_id is None:
+        old_account.balance -= old_effect
+    if account.connection_id is None:
+        account.balance += new_effect
     for field in ("amount", "description", "currency", "account_id", "category_id"):
         setattr(transaction, field, getattr(request, field))
     # Full updates clear optional references; employees retain their assigned department.
@@ -176,7 +178,8 @@ async def delete_transaction(transaction_id: int,
     effect = transaction.amount if category and category.type == CategoryType.income else -transaction.amount
 
     # Reverse the entry's balance effect before deleting it in the same commit.
-    account.balance -= effect
+    if account.connection_id is None:
+        account.balance -= effect
     await db.delete(transaction)
     await db.commit()
 
