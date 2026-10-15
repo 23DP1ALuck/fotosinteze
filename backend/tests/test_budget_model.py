@@ -19,6 +19,7 @@ class BudgetModelTests(unittest.TestCase):
                 "category_id",
                 "project_id",
                 "department_id",
+                "workspace_id",
                 "name",
                 "limit_amount",
                 "currency",

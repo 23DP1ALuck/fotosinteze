@@ -162,8 +162,10 @@ class WorkspaceTests(unittest.IsolatedAsyncioTestCase):
         self.db.add(expense)
         await self.db.flush()
         self.db.add_all([
-            Budget(name='Travel', category_id=1, project_id=1, department_id=1, limit_amount=100,
+            Budget(workspace_id=1, name='Travel', category_id=1, project_id=1, department_id=1, limit_amount=100,
                    currency='EUR', period_length=BudgetPeriod.MONTHLY),
+            Budget(workspace_id=3, name='Other budget', limit_amount=75, currency='EUR', period_length='MONTHLY'),
+            Budget(workspace_id=1, name='General', limit_amount=50, currency='EUR', period_length='MONTHLY'),
             Transaction(workspace_id=1, account_id=1, category_id=1, project_id=1, department_id=1,
                         expense_id=1, amount=10, currency='EUR', description='Train', source=TransactionSourceEnum.EXPENSE),
             Transaction(workspace_id=1, account_id=1, category_id=1, project_id=1, department_id=1,
@@ -174,7 +176,7 @@ class WorkspaceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 204, response.text)
         self.assertEqual(response.content, b'')
         for model in [Department, Project, Category, Account, Expense, Transaction, Budget, RevolutConnection]:
-            self.assertEqual(await self.db.scalar(select(func.count()).select_from(model)), 0, model.__name__)
+            self.assertEqual(await self.db.scalar(select(func.count()).select_from(model)), 1 if model is Budget else 0, model.__name__)
         self.assertEqual(await self.db.scalar(select(func.count()).select_from(Workspace)), 2)
         self.assertEqual(await self.db.scalar(select(func.count()).select_from(User)), 3)
         self.assertEqual(await self.db.scalar(select(func.count()).select_from(WorkspaceUsers)), 2)

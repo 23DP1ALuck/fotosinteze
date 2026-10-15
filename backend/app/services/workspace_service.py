@@ -1,12 +1,12 @@
 from datetime import datetime
 
 from fastapi import HTTPException
-from sqlalchemy import delete, or_
+from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
 
 from app.dto.update_business_workspace_request import UpdateBusinessWorkspaceRequest
 from app.dto.workspace_response import WorkspaceResponse
-from app.models import User, Category, Project, Department, Account, Budget, RevolutConnection
+from app.models import User, Account, Budget, RevolutConnection
 
 from app.database import AsyncSession
 from app.models import WorkspaceUsers
@@ -137,17 +137,11 @@ async def update_business_workspace(workspace_id: int, request: UpdateBusinessWo
 async def delete_business_workspace(workspace_id: int, current_user: dict, db: AsyncSession) -> None:
     membership = await load_workspace_member(workspace_id, current_user, db)
     assert_business_owner(membership.workspace, membership)
-    category_ids = select(Category.category_id).where(Category.workspace_id == workspace_id)
-    project_ids = select(Project.project_id).where(Project.workspace_id == workspace_id)
-    department_ids = select(Department.department_id).where(Department.workspace_id == workspace_id)
     connection_ids = list((await db.scalars(select(Account.connection_id).where(
         Account.workspace_id == workspace_id, Account.connection_id.is_not(None),
     ))).all())
     try:
-        # Budgets have no workspace_id,so remove them through their workspace-owned links
-        await db.execute(delete(Budget).where(or_(Budget.category_id.in_(category_ids),
-                                                 Budget.project_id.in_(project_ids),
-                                                 Budget.department_id.in_(department_ids))))
+        await db.execute(delete(Budget).where(Budget.workspace_id == workspace_id))
         # ORM deletion applies the workspace model's relationship cascades
         await db.delete(membership.workspace)
         await db.flush()

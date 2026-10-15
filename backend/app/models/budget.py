@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
-    from app.models import Category, Department, Project
+    from app.models import Category, Department, Project, Workspace
 
 
 class BudgetPeriod(str, enum.Enum):
@@ -27,6 +27,7 @@ class Budget(Base):
     )
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.project_id"), nullable=True)
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.department_id"), nullable=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.workspace_id"), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     limit_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     currency: Mapped[str] = mapped_column(CHAR(3), nullable=False)
@@ -39,3 +40,4 @@ class Budget(Base):
     category: Mapped["Category | None"] = relationship(back_populates="budgets")
     project: Mapped["Project | None"] = relationship(back_populates="budgets")
     department: Mapped["Department | None"] = relationship(back_populates="budgets")
+    workspace: Mapped["Workspace"] = relationship(back_populates="budgets")
