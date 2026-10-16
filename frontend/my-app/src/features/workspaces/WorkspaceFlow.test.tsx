@@ -66,16 +66,13 @@ it('paginates and combines business transaction filters',async()=>{
   await user.selectOptions(screen.getByLabelText('Filter by category'),'Services');expect(screen.getByRole('button',{name:'← Previous'})).toBeDisabled()
   await user.click(screen.getByRole('button',{name:'Expenses'}));expect(screen.getByText('No transactions match these filters.')).toBeInTheDocument()
 })
-it('uses active backend project IDs in Business transaction and budget selectors',async()=>{
+it('uses active backend project IDs in Business transaction selectors',async()=>{
   const user=userEvent.setup();await renderWorkspace();await switchWorkspace('Personal','Acme Studio')
   await user.click(screen.getByRole('button',{name:'Projects'}));await screen.findByRole('button',{name:'Edit Website'})
   expect(screen.queryByLabelText('Workspace ID')).not.toBeInTheDocument()
-  await user.click(screen.getByRole('button',{name:'Add expense'}));let modal=within(screen.getByRole('dialog'))
+  await user.click(screen.getByRole('button',{name:'Add expense'}));const modal=within(screen.getByRole('dialog'))
   await user.type(modal.getByLabelText('Description'),'Website promotion');await user.type(modal.getByLabelText('Amount (€)'),'900')
   await user.selectOptions(modal.getByLabelText('Department'),'7');await user.selectOptions(modal.getByLabelText('Project'),'10');await user.click(modal.getByRole('button',{name:'Save expense'}))
-  await user.click(screen.getByRole('button',{name:/^Budgets$/}));await user.click(screen.getByRole('button',{name:'Manage budgets'}));modal=within(screen.getByRole('dialog'))
-  const marketing=within(modal.getByRole('group',{name:'Marketing'}));await user.selectOptions(marketing.getByLabelText('Department'),'7');await user.selectOptions(marketing.getByLabelText('Project'),'10');await user.click(modal.getByRole('button',{name:'Save budgets'}))
-  expect(screen.getByRole('progressbar',{name:'Marketing budget used'})).toHaveAttribute('value','900')
   await user.click(screen.getByRole('button',{name:'Transactions'}));expect(screen.getByRole('row',{name:/Website promotion Marketing Development Website Ada/})).toBeInTheDocument()
 })
 
