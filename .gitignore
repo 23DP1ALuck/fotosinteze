@@ -3,3 +3,13 @@ backend/app/__pycache__/main.cpython-312.pyc
 /backend/.idea
 /backend/app/__pycache__
 /backend/app/__pycache__
+
+# Local credentials and certificates, including Revolut sandbox files.
+.env
+.env.*
+!.env.example
+*.key
+*.csr
+*.pem
+*.der
+*.cer

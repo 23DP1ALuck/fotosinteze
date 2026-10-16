@@ -285,3 +285,122 @@ An empty page returns `items: []` and `has_more: false`.
 
 Offset pagination can shift between requests when new transactions arrive;
 refresh from offset 0 to retrieve the latest history.
+
+
+## Revolut Open Banking sandbox configuration
+
+This setup authenticates the backend to Revolut's Open Banking sandbox using
+mutual TLS (mTLS). It does not enable production access, customer consents,
+transaction syncing, or workspace/account linking. No database migration is
+needed for this configuration task.
+
+### Portal and local certificates
+
+1. Create an application in the Revolut Developer Portal and enable
+   **Account and Transactions (AISP)**.
+2. Configure the sandbox redirect URL and generate a CSR using the portal's
+   command. Run that command outside the repository, in a private directory
+   such as `~/.config/fotosinteze/revolut-sandbox`, with `umask 077`.
+3. Upload only `revolut.csr`. Keep the generated `private.key`; it must match
+   the downloaded transport certificate. Download the sandbox certificates.
+4. Download the sandbox Root CA and Issuing CA from the Open Banking page linked
+   by Revolut's authentication documentation. Verify their published hashes.
+
+Official references:
+
+- [Revolut sandbox setup](https://developer.revolut.com/docs/guides/build-banking-apps/get-started/prepare-sandbox-environment)
+- [Revolut authentication](https://developer.revolut.com/docs/api/open-banking)
+- [Open Banking sandbox CAs](https://openbanking.atlassian.net/wiki/spaces/DZ/pages/252018873/OB+Root+and+Issuing+Certificates+for+Sandbox)
+
+For the DER files currently supplied by the portal and Open Banking:
+
+```bash
+cd ~/.config/fotosinteze/revolut-sandbox
+chmod 600 private.key
+openssl x509 -inform DER -in transport.der -out transport.pem
+openssl x509 -inform DER -in 'OB_SandBox_PP_Root CA.cer' -out sandbox-root.pem
+openssl x509 -inform DER -in 'OB_SandBox_PP_Issuing CA.cer' -out sandbox-issuing.pem
+cat sandbox-root.pem sandbox-issuing.pem > sandbox-ca-bundle.pem
+```
+
+If provided, convert `signing.der` to `signing.pem` the same way. Signing/JWKs
+configuration is needed for the later customer-consent flow, not this
+client-credentials connectivity check. A callback/tunnel is not needed to run
+the token check; its registered URL will be used when implementing customer consent.
+
+### Backend environment
+
+Add these settings to the ignored `backend/.env`. Run backend commands from
+`backend`, because `.env` and relative file paths are resolved from the current
+directory. Certificate paths may be absolute or start with `~`.
+
+```dotenv
+REVOLUT_API_CLIENT_ID=your-sandbox-client-id
+REVOLUT_TRANSPORT_CERT_PATH=~/.config/fotosinteze/revolut-sandbox/transport.pem
+REVOLUT_PRIVATE_KEY_PATH=~/.config/fotosinteze/revolut-sandbox/private.key
+REVOLUT_CA_BUNDLE_PATH=~/.config/fotosinteze/revolut-sandbox/sandbox-ca-bundle.pem
+```
+
+These settings are optional for normal backend startup. The Revolut helper
+requires all four when called and loads the certificate/key at request time.
+The sandbox authentication URL is fixed in the helper to prevent accidentally
+sending credentials to another environment. Server hostname and certificate
+validation remain enabled; no `verify=False` or `--insecure` is needed.
+The HTTP client uses a 15-second timeout, does not follow redirects, and does
+not inherit proxy settings from the shell.
+
+### Secure backend connectivity check
+
+From `backend`, run:
+
+```bash
+.venv/bin/python -m app.services.revolut_service
+```
+
+Success prints only the TLS-verification result and token lifetime. Failure
+exits with a nonzero status and a sanitized error; tokens and response bodies
+are never printed. This command calls the same async helper available to future
+backend integration code:
+
+```python
+from app.services.revolut_service import get_sandbox_access_token
+
+token = await get_sandbox_access_token()
+# Only unwrap the secret when constructing the next authenticated API request.
+authorization = f"Bearer {token.access_token.get_secret_value()}"
+```
+
+The token is held in memory only; request another after its returned lifetime
+expires. Do not log the unwrapped token, authorization headers, or private keys.
+
+Troubleshooting:
+
+- Configuration error: set all four variables in `backend/.env`.
+- Certificate/key/CA loading error: check paths, PEM format and matching key.
+- TLS/connectivity error: check CA trust, certificate expiry, network and clock;
+  do not disable TLS verification.
+- HTTP 4xx: check sandbox client ID, certificate registration and AISP scope.
+
+### Keep credentials out of Git
+
+Store credentials outside the repository. `.env`, private keys, CSRs and
+certificate formats (`.key`, `.csr`, `.pem`, `.der`, `.cer`) are ignored at the
+repository root. `.env.example` contains placeholders only. Ignore rules do
+not remove already committed files; rotate any exposed key and re-register its
+certificate if necessary. The token helper does not create credential files.
+
+Check tracked credentials and ignore rules without displaying secret contents:
+
+```bash
+git ls-files '*.key' '*.csr' '*.pem' '*.der' '*.cer' '.env' 'backend/.env'
+git check-ignore backend/.env private.key transport.pem sandbox-ca-bundle.pem
+```
+
+Run automated checks from `backend`:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -p 'test_revolut_sandbox.py'
+```
+
+Tests generate temporary certificates and mock Revolut HTTP responses; live
+connectivity is verified separately using the command above.

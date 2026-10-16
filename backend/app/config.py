@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
@@ -10,7 +12,11 @@ class Settings(BaseSettings):
     oauth_token_secret: str = "my_dev_secret"
     log_level: str = "DEBUG"
     client_url: str
-
+    # Optional until the sandbox integration is used; credentials stay outside Git.
+    revolut_api_client_id: str | None = None
+    revolut_transport_cert_path: Path | None = None
+    revolut_private_key_path: Path | None = None
+    revolut_ca_bundle_path: Path | None = None
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
