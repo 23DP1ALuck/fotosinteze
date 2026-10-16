@@ -20,3 +20,10 @@ class TransactionResponseDTO(BaseModel):
     workspace_id: int
     created_at: datetime
     updated_at: datetime
+
+
+class TransactionListResponseDTO(BaseModel):
+    items: list[TransactionResponseDTO]
+    limit: int
+    offset: int
+    has_more: bool

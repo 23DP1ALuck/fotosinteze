@@ -15,7 +15,10 @@ class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.get('/accounts/1')).status_code, 200)
         self.assertEqual((await self.client.get('/accounts/1', headers={'Workspace-ID': '2'})).status_code, 404)
         self.user = {'sub': '2'}
-        self.assertEqual((await self.client.get('/accounts')).status_code, 403)
+        response = await self.client.get('/accounts')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([a['account_id'] for a in response.json()], [1])
+        self.assertEqual((await self.client.get('/accounts/1')).status_code, 200)
         self.assertEqual((await self.client.get('/accounts', headers={'Workspace-ID': '2'})).status_code, 403)
 
     async def test_manual_updates_and_protected_fields(self):
@@ -30,7 +33,11 @@ class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.status_code, 422, response.text)
         self.assertEqual((await self.client.put('/accounts/1', headers={'Workspace-ID': '2'}, json={'name': 'Other'})).status_code, 404)
         self.user = {'sub': '2'}
-        self.assertEqual((await self.client.put('/accounts/1', json={'balance': 0})).status_code, 403)
+        response = await self.client.put('/accounts/1', json={'balance': 0})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(Decimal(response.json()['balance']), Decimal('0'))
+        self.assertEqual((await self.client.put('/accounts/1', headers={'Workspace-ID': '2'},
+                                                json={'balance': 0})).status_code, 403)
 
     async def test_connected_balance_is_bank_managed(self):
         self.db.add(RevolutConnection(revolut_connection_id=1, external_consent_id='consent', status='active', connected_by_id=1))
@@ -73,7 +80,7 @@ class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
             response = await self.client.post('/accounts', json={**payload, **fields})
             self.assertEqual(response.status_code, 422, response.text)
         self.user = {'sub': '2'}
-        self.assertEqual((await self.client.get('/accounts/1')).status_code, 403)
+        self.assertEqual((await self.client.get('/accounts/1')).status_code, 200)
         self.assertEqual((await self.client.post('/accounts', json=payload)).status_code, 403)
 
     async def test_transfer_between_manual_and_connected_accounts(self):

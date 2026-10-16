@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSession
-from app.dto import CreateTransactionRequest, TransactionResponseDTO
+from app.dto import CreateTransactionRequest, TransactionResponseDTO, TransactionListResponseDTO
 from app.models import Workspace, Transaction, Category, Account, Project, Department, Expense, WorkspaceRole, WorkspaceUsers
 from app.models.transaction import TransactionSourceEnum
 from app.models.workspace import WorkspaceTypeEnum
@@ -209,14 +209,23 @@ async def get_transaction_by_id(transaction_id: int, current_user: dict,
     return transaction_response(transaction)
 
 
-async def get_transactions(workspace: Workspace, current_user: dict, db: AsyncSession) -> list[TransactionResponseDTO]:
+async def get_transactions(workspace: Workspace, current_user: dict, db: AsyncSession,
+                           *, limit: int = 50, offset: int = 0) -> TransactionListResponseDTO:
     stmt = select(Transaction).where(Transaction.workspace_id == workspace.workspace_id)
     if workspace.type == WorkspaceTypeEnum.BUSINESS:
         membership = await get_workspace_membership(current_user, workspace.workspace_id, db)
         if membership.role != WorkspaceRole.OWNER:
             stmt = stmt.where(Transaction.department_id == membership.department_id)
-    result = await db.execute(stmt.order_by(Transaction.transaction_id))
-    return [transaction_response(transaction) for transaction in result.scalars().all()]
+    # shortcut: offsets can shift during concurrent inserts; use cursors if stable traversal is needed.
+    result = await db.execute(
+        stmt.order_by(Transaction.created_at.desc(), Transaction.transaction_id.desc())
+        .offset(offset).limit(limit + 1)
+    )
+    transactions = result.scalars().all()
+    return TransactionListResponseDTO(
+        items=[transaction_response(transaction) for transaction in transactions[:limit]],
+        limit=limit, offset=offset, has_more=len(transactions) > limit,
+    )
 
 async def find_transaction_by_id(transaction_id: int, workspace: Workspace, db: AsyncSession) -> Transaction:
     # Scope the lookup to the active workspace, even when the transaction ID exists elsewhere.

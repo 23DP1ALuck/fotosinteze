@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db_session
-from app.dto import CreateTransactionRequest, TransactionResponseDTO
+from app.dto import CreateTransactionRequest, TransactionResponseDTO, TransactionListResponseDTO
 from app.dependencies.auth import get_current_user
 from app.dependencies.workspace import get_current_workspace
 
@@ -28,16 +28,18 @@ async def create_transaction(request: CreateTransactionRequest,
     return await transaction_service.create_transaction(request, current_user, workspace, db)
 
 
-@router.get('/transactions', status_code=200, response_model=list[TransactionResponseDTO],
-            summary='List workspace transactions; employees see their assigned department only',
+@router.get('/transactions', status_code=200, response_model=TransactionListResponseDTO,
+            summary='List newest workspace transactions first; employees see their assigned department only',
             responses={**unauthorized, **forbidden, **invalid_request,
                        404: {'description': 'Business workspace not found'}})
 async def get_transactions(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db_session),
     current_user: dict = Depends(get_current_user),
     workspace: Workspace = Depends(get_current_workspace),
-) -> list[TransactionResponseDTO]:
-    return await transaction_service.get_transactions(workspace, current_user, db)
+) -> TransactionListResponseDTO:
+    return await transaction_service.get_transactions(workspace, current_user, db, limit=limit, offset=offset)
 
 
 @router.get('/transactions/{transaction_id}', status_code=200, response_model=TransactionResponseDTO,
