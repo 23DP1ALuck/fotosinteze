@@ -8,7 +8,7 @@ from app.database import sessionmanager
 
 from app.api.routes import auth
 from app.api.routes import transactions
-from app.api.routes import departments, projects, expenses, categories, workspaces
+from app.api.routes import accounts, departments, projects, expenses, categories, workspaces
 
 
 # inspired from
@@ -30,6 +30,7 @@ app.include_router(transactions.router)
 app.include_router(departments.router)
 app.include_router(projects.router)
 app.include_router(expenses.router)
+app.include_router(accounts.router)
 app.include_router(categories.router)
 app.include_router(workspaces.router)
 app.add_middleware(
