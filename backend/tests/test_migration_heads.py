@@ -13,12 +13,12 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 
 class MigrationHeadTests(unittest.TestCase):
-    def test_either_existing_head_upgrades_to_one_head(self):
+    def test_existing_heads_upgrade_to_one_head(self):
         config = Config(str(BACKEND / 'alembic.ini'))
         config.set_main_option('script_location', str(BACKEND / 'alembic'))
         heads = ScriptDirectory.from_config(config).get_heads()
         self.assertEqual(len(heads), 1)
-        for starting_revision in ('74448962612b', '9c52e7a1bd30'):
+        for starting_revision in ('74448962612b', '9c52e7a1bd30', 'a6d4e9b217c0', 'e8c031b47f62'):
             with self.subTest(starting_revision=starting_revision), tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / 'migration.sqlite'
                 with patch.dict(os.environ, {'DATABASE_URL': 'sqlite+aiosqlite:///' + str(path)}):
