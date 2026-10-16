@@ -285,3 +285,35 @@ An empty page returns `items: []` and `has_more: false`.
 
 Offset pagination can shift between requests when new transactions arrive;
 refresh from offset 0 to retrieve the latest history.
+
+## Business budget management (BBUD-03)
+
+`GET /business-budgets` returns saved budgets with target labels, spent/remaining
+amounts, period boundaries, warning status, `can_manage`, and permitted targets.
+All routes require a business `Workspace-ID` and authentication. Owners can
+`POST /business-budgets`, `PUT /business-budgets/{id}` and
+`DELETE /business-budgets/{id}`. Bodies use `name`, `target_type`
+(`CATEGORY`, `DEPARTMENT`, `PROJECT`), `target_id`, `limit_amount`, `currency`,
+`period_start`, `period_length` (`MONTHLY`, `WEEKLY`, `CUSTOM`) and
+`duration_days` (required only for custom periods).
+
+Each managed budget has exactly one target from its own workspace; category
+targets must be expense categories. Existing schema and migration head are
+sufficient. Ambiguous legacy budgets with multiple targets, or without a target,
+remain stored but are excluded from this business API until repaired.
+
+Progress sums expense-category transactions in the budget currency from the
+inclusive start date to the exclusive end date. Monthly periods end on the same
+day next month, clamped to that month's last day; weekly periods last seven days.
+Custom periods last the specified number of days. Periods do not roll forward
+automatically. At 80% spent, status is `WARNING`; above the limit, `EXCEEDED`.
+
+Employees cannot mutate budgets. Assigned employees see their own department's
+budgets and budgets for projects linked to that department. Their spending totals
+include only transactions assigned to that department, including for shared
+projects; company-wide category budgets are owner-only. Unassigned employees
+receive the existing department-assignment error.
+
+In the UI, open a Business workspace, choose Budgets, then select an accessible
+Business workspace if one is not already connected. Budget CRUD is persisted;
+the workspace switcher uses your accessible backend memberships.
