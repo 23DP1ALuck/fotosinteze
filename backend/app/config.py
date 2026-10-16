@@ -10,6 +10,14 @@ class Settings(BaseSettings):
     oauth_token_secret: str = "my_dev_secret"
     log_level: str = "DEBUG"
     client_url: str
+    revolut_api_client_id: str | None = None
+    revolut_token_encryption_key: str | None = None
+    revolut_signing_kid: str | None = None
+    revolut_redirect_uri: str | None = None
+    revolut_signing_cert_path: str| None = None
+    revolut_ca_bundle_path: str | None = None
+    revolut_private_key_path: str | None = None
+    revolut_transport_cert_path: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

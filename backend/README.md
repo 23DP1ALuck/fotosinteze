@@ -68,6 +68,40 @@ The API is available at `http://localhost:8000`. Interactive API documentation i
 - Swagger UI: `http://localhost:8000/docs`
 - OpenAPI JSON: `http://localhost:8000/openapi.json`
 
+## Backend testing guide
+
+Run commands from `backend` with the virtual environment active and `.env`
+configured as described above. Install or update the dependencies first:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+The test runner is pytest. Existing tests use Python's `unittest`, including
+`IsolatedAsyncioTestCase` for async tests and `unittest.mock` for mocks.
+Pytest runs these directly; no async plugin is required for these test classes.
+API tests use HTTPX's `AsyncClient` and `ASGITransport` to call FastAPI in process.
+
+```bash
+# Run the full backend suite
+python -m pytest tests -q
+
+# Run one test file
+python -m pytest tests/test_accounts.py -q
+
+# Run tests whose names match an expression
+python -m pytest tests -k "manual_updates" -v
+```
+
+Keep tests in `tests/test_*.py`. Follow the existing unittest patterns for new
+tests. Database tests create in-memory or temporary SQLite databases; a running
+API server is not needed.
+
+If collection fails with a settings validation error, check `.env` against
+`app/config.py`: unknown keys are rejected. Migration tests also require a
+consistent Alembic revision graph; a "Multiple head revisions" error indicates
+that migration branches need resolving.
+
 ## Current endpoints
 
 | Method | Path | Purpose |

@@ -1,0 +1,46 @@
+name: backend_ci
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+defaults:
+  run:
+    working-directory: backend
+env:
+  DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+  JWT_SECRET: "ci-test-secret-only"
+  CLIENT_URL: "http://localhost:5173"
+jobs:
+  lint_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      - name: Install dependencies and tools
+        run: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt bandit flake8
+      - name: Static code analysis (Bandit, Flake8)
+        run: |
+            bandit -r .
+            flake8 .
+        # Bandit scans code for common security issues:contentReference[oaicite:9]{index=9}.
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Run tests
+      run: python -m pytest tests -q
