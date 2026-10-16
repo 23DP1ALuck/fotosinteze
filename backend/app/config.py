@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, HttpUrl, SecretStr
 
 class Settings(BaseSettings):
     database_url: str
@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     revolut_transport_cert_path: Path | None = None
     revolut_private_key_path: Path | None = None
     revolut_ca_bundle_path: Path | None = None
+    revolut_signing_cert_path: Path | None = None
+    revolut_signing_kid: str = "fotosinteze-sandbox"
+    revolut_redirect_uri: HttpUrl | None = None
+    revolut_token_encryption_key: SecretStr | None = None
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

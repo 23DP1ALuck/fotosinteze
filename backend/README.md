@@ -404,3 +404,100 @@ Run automated checks from `backend`:
 
 Tests generate temporary certificates and mock Revolut HTTP responses; live
 connectivity is verified separately using the command above.
+
+
+## Revolut consent and authorization (REV-02)
+
+Install the updated requirements and migrate before using the new flow:
+
+```bash
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/alembic upgrade head
+```
+
+Revision `a72d18f4c901` joins the existing budget/account migration heads and
+adds nullable authorization columns to the existing `revolut_connections`
+table. It stores hashed state, browser binding, pending consent/user and expiry
+on that same row, and reuses its existing encrypted access/refresh token columns.
+No separate authorization table is created. Legacy connection IDs, tokens and
+account links are preserved; Personal Workspace ownership is backfilled from
+unambiguous account links. Legacy rows without account links stay unassigned.
+Ambiguous cross-workspace or duplicate Personal Workspace links must be repaired
+before upgrade. For rollback, use an explicit
+target revision (for example `74448962612b`); `downgrade -1` is ambiguous at a merge.
+
+In addition to REV-01 settings, configure these values in the ignored `.env`:
+
+```dotenv
+REVOLUT_REDIRECT_URI=https://your-dev-backend.example/revolut/callback
+REVOLUT_SIGNING_CERT_PATH=~/.config/fotosinteze/revolut-sandbox/signing.pem
+REVOLUT_SIGNING_KID=fotosinteze-sandbox
+REVOLUT_TOKEN_ENCRYPTION_KEY=your-generated-Fernet-key
+```
+
+Generate the encryption key locally with:
+
+```bash
+.venv/bin/python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+```
+
+Keep this key in `.env` or your secret manager and preserve it across restarts;
+changing it makes existing encrypted handoffs unreadable. The signing certificate
+must match the REV-01 private key. `cryptography` supplies PS256 signing and
+Fernet authenticated encryption; no custom encryption is used.
+
+In the Revolut sandbox portal:
+
+1. Register the exact `REVOLUT_REDIRECT_URI`, including `/revolut/callback`.
+2. Register `https://your-dev-backend.example/.well-known/jwks.json` as the JWKs URL.
+   This public endpoint returns only the signing certificate and RSA public key.
+3. Keep the HTTPS backend/tunnel reachable during authorization. Temporary tunnel
+   domains must be updated in both the portal and `.env` when they change.
+
+### Endpoints and browser flow
+
+- `POST /revolut/authorize`: authenticated request with `Workspace-ID` for a
+  Personal Workspace. Business/inaccessible workspaces are rejected before any
+  provider request. It creates consent for account details, balances and debit/
+  credit transactions, returns `{authorization_url}`, and sets a Secure,
+  HttpOnly cookie scoped to `/revolut/callback`. Cross-origin frontend requests
+  must use `credentials: 'include'` and an origin allowed by `CLIENT_URL`.
+- Navigate the same browser to `authorization_url`. It contains a PS256-signed
+  consent request and uses `response_mode=fragment`, keeping returned codes out
+  of backend request URLs and access logs.
+- `GET /revolut/callback`: a small page removes the URL fragment and posts only
+  state/code/error to the same-origin callback. No third-party scripts or
+  resources are loaded; CSP, no-store and no-referrer headers are applied.
+- `POST /revolut/callback`: browser-bound, one-use state is claimed atomically
+  before exchanging the code over verified mTLS. It rechecks workspace membership
+  and Personal type, validates token issuer/audience/expiry/nonce/consent binding,
+  and returns only `{status: "authorized", workspace_id}`. The browser's ID token
+  is ignored. The ID token from the pinned token endpoint is validated using
+  that direct TLS channel as permitted by
+  [OIDC Core 3.1.3.7](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation).
+
+Attempts expire after ten minutes and survive backend restarts. Each Personal
+Workspace has at most one assigned connection row. Starting again replaces its
+pending attempt, so only the latest state and matching browser cookie work.
+An unexpired exchange already in progress returns `409` rather than being replaced.
+A failed reconnect preserves the established consent, tokens and connection status. Expired, replayed and
+wrong-browser callbacks return `400`; removed workspace access returns `403`.
+Denied/incomplete callbacks are consumed. Provider exchange errors return a
+sanitized `502` and require restarting the flow. Response bodies and malformed
+callback codes are never echoed or logged by this code.
+
+Successful authorization updates `RevolutConnection.external_consent_id`,
+`access_token_encrypted`, `refresh_token_encrypted`, `expires_at` and
+`refresh_token_expires_at`, and marks the connection active. Pending state uses
+separate `authorization_*` fields plus `pending_consent_id` on that same row,
+so reconnects do not disturb existing tokens before success. No token is returned
+to the frontend. REV-03 builds on this connection for account persistence and
+synchronization. REV-05 owns the app's connection UI.
+
+The portal's registered callback path and JWKs URL must be configured before
+an interactive sandbox journey can succeed. Tests exercise the full flow with
+mocked provider responses, not real customer credentials:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -p 'test_revolut*.py'
+```
