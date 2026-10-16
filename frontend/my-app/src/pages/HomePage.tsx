@@ -14,8 +14,9 @@ import { WorkspaceProvider } from '@/features/workspaces/WorkspaceProvider'
 import { useWorkspace } from '@/features/workspaces/use-workspace'
 import type { TeamData, TeamSection } from '@/features/workspaces/team-types'
 import { TransactionsView, type WorkspaceTransaction } from '@/features/workspaces/TransactionsView'
+import { ExpenseRequests } from '@/features/expenses/ExpenseRequests'
 
-type Transaction = WorkspaceTransaction
+type Transaction = WorkspaceTransaction & { expenseId?: number }
 const initialTransactions: Transaction[] = [
   { id: 1, name: 'Monthly salary', category: 'Salary', source: 'Manual', date: '2026-09-22', amount: 3200 },
   { id: 2, name: 'Rimi', category: 'Groceries', source: 'Revolut', date: '2026-09-21', amount: -28.54 },
@@ -41,7 +42,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   workspace: Workspace; workspaces: Workspace[]; active: boolean; onSwitch: (id: string) => void; onCreate: () => void
 }) {
   const isBusiness = workspace.kind === 'business'
-  const workspaceNavigation = isBusiness ? workspace.role === 'EMPLOYEE' ? ['Dashboard', 'Transactions', 'Budgets', 'Categories', 'Projects', 'Statistics'] : ['Dashboard', 'Transactions', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics', 'Settings'] : navigation
+  const workspaceNavigation = isBusiness ? workspace.role === 'EMPLOYEE' ? ['Dashboard', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Projects', 'Statistics'] : ['Dashboard', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics', 'Settings'] : navigation
   const { user, logout } = useAuth()
   const [team, setTeam] = useState<TeamData>({ departments: [], employees: [], projects: [] })
   const backendWorkspaceId = Number(workspace.id)
@@ -162,6 +163,11 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       </section><div className="my-[25px] grid grid-cols-[minmax(0,1.92fr)_minmax(270px,1fr)] gap-6 max-[1200px]:grid-cols-[minmax(0,1.6fr)_minmax(235px,1fr)] max-[1200px]:gap-[18px] max-[900px]:grid-cols-1 min-[1600px]:my-[30px] min-[1600px]:gap-[30px]">{renderChart()}{renderBudgets()}</div></>}
       {view === 'Dashboard' && renderTransactions()}
       {view === 'Transactions' && <TransactionsView transactions={transactions} income={income} expenses={expenses} workspaceName={workspace.name} workspaceKind={workspace.kind} />}
+      {isBusiness && view === 'Expense requests' && <ExpenseRequests key={backendWorkspaceId ?? 'unconnected'} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} catalog={projectCatalog} onApproved={(expense, labels) => setTransactions(current => {
+        if (current.some(item => item.expenseId === expense.id)) return current
+        const item: Transaction = { id: Date.now(), expenseId: expense.id, name: expense.description, category: labels.categoryName, source: 'Expense', date: expense.created_at.slice(0, 10), amount: -expense.amount, department: labels.departmentName, project: labels.projectName, createdBy: `User ${expense.submitted_by}`, departmentId: expense.department_id ?? undefined, projectId: expense.project_id ?? undefined }
+        return [item, ...current]
+      })} />}
       {view === 'Budgets' && renderBudgets()}
       {active && view === 'Categories' && <CategoryManager workspaceName={workspace.name} workspaceKind={workspace.kind} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} />}
       {!isBusiness && (view === 'Dashboard' || view === 'Revolut') && <section className="mt-[25px] flex items-center justify-between gap-5 rounded-[15px] bg-[#eaf0e5] px-[26px] py-[17px] max-sm:flex-col max-sm:items-start max-sm:gap-3 max-sm:p-[18px] [&_h2]:m-0 [&_h2]:text-base [&_h2]:leading-[1.3] [&_h2]:font-semibold [&_h2]:tracking-[-.025em] [&_p]:mt-[5px] [&_p]:text-xs [&_p]:text-[#7d877f]"><div><h2>Revolut preview</h2><p>Sample imported transactions · connect your account when integration is available</p></div><span className="whitespace-nowrap rounded-full border border-[#cbd6c3] px-[10px] py-1 text-xs">Not connected</span></section>}

@@ -100,6 +100,34 @@ class ExpenseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([row['id'] for row in response.json()], [expense_id])
         self.assertEqual((await self.client.get(f'/expenses/{expense_id}')).status_code, 200)
 
+    async def test_employee_expense_category_catalog_is_workspace_scoped(self):
+        response = await self.client.get('/expenses/categories')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([row['category_id'] for row in response.json()], [1])
+        foreign = await self.client.get('/expenses/categories', headers={'Workspace-ID': '2'})
+        self.assertEqual(foreign.status_code, 403)
+
+    async def test_list_accounts_for_review_in_active_workspace(self):
+        self.identity = {'sub': '1'}
+        response = await self.client.get('/accounts')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), [{
+            'account_id': 1, 'name': 'Business cash', 'currency': 'EUR',
+            'balance': '100.00', 'workspace_id': 1, 'connection_id': None,
+        }])
+
+        self.identity = {'sub': '1'}
+        foreign = await self.client.get('/accounts', headers={'Workspace-ID': '2'})
+        self.assertEqual(foreign.status_code, 403, foreign.text)
+        personal = await self.client.get('/accounts', headers={'Workspace-ID': '3'})
+        self.assertEqual(personal.status_code, 200, personal.text)
+        self.assertEqual(personal.json(), [])
+
+        self.identity = {'sub': '2'}
+        employee = await self.client.get('/accounts')
+        self.assertEqual(employee.status_code, 200, employee.text)
+        self.assertEqual([row['workspace_id'] for row in employee.json()], [1])
+
     async def test_employee_cannot_read_or_review_another_submission(self):
         expense_id = await self.submit()
         self.identity = {'sub': '3'}

@@ -82,7 +82,7 @@ it('uses active backend project IDs in Business transaction and budget selectors
 
 it('creates, edits and deletes sample budgets, retains the period, and shows exceeded spending', async () => {
   const user = userEvent.setup()
-  renderWorkspace()
+  await renderWorkspace()
   await user.click(screen.getByRole('button', { name: /^Budgets$/ }))
   await user.click(screen.getByRole('button', { name: 'Manage budgets' }))
   let modal = within(screen.getByRole('dialog'))
