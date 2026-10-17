@@ -341,3 +341,20 @@ receive the existing department-assignment error.
 In the UI, open a Business workspace, choose Budgets, then select an accessible
 Business workspace if one is not already connected. Budget CRUD is persisted;
 the workspace switcher uses your accessible backend memberships.
+
+## Transaction search and filters
+
+`GET /transactions` accepts optional, combinable query parameters:
+`search` (trimmed, case-insensitive literal substring of description, max 255 characters),
+`type` (`INCOME` or `EXPENSE`, determined by category), `category_id`,
+`date_from` and `date_to` (inclusive `YYYY-MM-DD` creation dates),
+`department_id`, and `project_id`. Transactions currently have no separate name field.
+Blank search behaves like omitted search. Uncategorized transactions do not match a type filter.
+
+All filters apply before `limit`/`offset` pagination within the active `Workspace-ID`.
+Department/project filters require a business workspace (400 otherwise).
+Unknown or foreign department/project IDs return 404; employees cannot filter another
+department or inaccessible project (403). Shared projects still expose only the employee's
+assigned department transactions. A reversed date range returns 400; malformed dates,
+invalid types, and nonpositive IDs return 422. No matches return an empty `items` page.
+Dates use the existing stored creation timestamps without timezone conversion.
