@@ -17,9 +17,13 @@ export type TransactionAccount = z.infer<typeof accountSchema>
 export type TransactionInput = Pick<ApiTransaction, 'amount' | 'currency' | 'description' | 'account_id' | 'department_id' | 'project_id' | 'expense_id'> & { category_id: number }
 const pageSchema = z.object({ items: z.array(transactionSchema), limit: z.number().int().positive(), offset: z.number().int().nonnegative(), has_more: z.boolean() })
 const dashboardBase = z.object({ workspace_id: id, currency, period_start: z.iso.date(), period_end: z.iso.date(), expenses: decimal })
+const spendingGroupSchema = z.object({ id: id.nullable(), name: z.string().trim().min(1), amount: decimal.refine(value => Number.isFinite(Number(value)) && Number(value) >= 0) })
+export const businessDashboardSchema = dashboardBase.extend({ revenue: decimal, profit: decimal, spending_by_category: z.array(spendingGroupSchema), spending_by_department: z.array(spendingGroupSchema), spending_by_project: z.array(spendingGroupSchema) })
+export type BusinessDashboardData = z.infer<typeof businessDashboardSchema>
+export type SpendingGroup = z.infer<typeof spendingGroupSchema>
 const dashboardSchema = z.union([
   dashboardBase.extend({ income: decimal, balance: decimal, savings: decimal, recent_transactions: z.array(transactionSchema) }),
-  dashboardBase.extend({ revenue: decimal, profit: decimal, spending_by_category: z.array(z.unknown()), spending_by_department: z.array(z.unknown()), spending_by_project: z.array(z.unknown()) }),
+  businessDashboardSchema,
 ])
 export type TransactionDashboard = z.infer<typeof dashboardSchema>
 

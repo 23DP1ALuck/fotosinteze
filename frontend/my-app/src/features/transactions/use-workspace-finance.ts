@@ -19,7 +19,7 @@ export function useWorkspaceFinance(workspaceId: number, enabled: boolean, catal
     const category = categories.find(item => item.id === row.category_id)
     return {
       id: row.transaction_id, name: row.description || (category?.type === 'income' ? 'Income' : 'Expense'),
-      category: category?.name ?? 'Uncategorised', type: category?.type ?? 'unknown', currency: row.currency,
+      category: category?.name ?? (row.category_id === null ? 'Uncategorised' : `Category #${row.category_id}`), type: category?.type ?? 'unknown', currency: row.currency,
       amount: Number(row.amount) * (category?.type === 'expense' ? -1 : 1), source: row.source === 'MANUAL' ? 'Manual' : row.source === 'BANK' ? 'Revolut' : 'Expense',
       date: row.created_at.slice(0, 10), departmentId: row.department_id ?? undefined, projectId: row.project_id ?? undefined,
       department: catalog.departments.find(item => item.id === row.department_id)?.name,
@@ -31,10 +31,17 @@ export function useWorkspaceFinance(workspaceId: number, enabled: boolean, catal
     for (const feature of ['transactions', 'dashboard', 'accounts', 'categories']) void client.invalidateQueries({ queryKey: workspaceQueryKey(feature, workspaceId) })
   }
   return {
-    rows, transactions, dashboard: dashboardQuery.data, accounts, loading: enabled && (transactionQuery.isPending || dashboardQuery.isPending || categoryQuery.isPending),
+    rows, transactions, dashboard: dashboardQuery.data, accounts,
+    dashboardLoading: enabled && dashboardQuery.isPending, dashboardRefreshing: dashboardQuery.isFetching, dashboardError: dashboardQuery.error?.message ?? '',
+    transactionsLoading: enabled && transactionQuery.isPending, transactionsRefreshing: transactionQuery.isFetching, transactionsError: transactionQuery.error?.message ?? '',
+    metadataError: categoryQuery.error?.message || catalog.error,
+    retryDashboard: () => { void dashboardQuery.refetch() }, retryTransactions: () => { void transactionQuery.refetch() },
+    retryMetadata: () => { void categoryQuery.refetch(); catalog.refresh() }, loading: enabled && (transactionQuery.isPending || dashboardQuery.isPending || categoryQuery.isPending),
     error: error instanceof Error ? error.message : '', refresh,
     hasMore: transactionQuery.hasNextPage, loadingMore: transactionQuery.isFetchingNextPage,
     loadMore: () => { void transactionQuery.fetchNextPage() },
     options: { accounts, categories, loading: accountQuery.isPending || categoryQuery.isPending, error: (accountQuery.error || categoryQuery.error)?.message ?? '', retry: refresh },
   }
 }
+
+export type WorkspaceFinance = ReturnType<typeof useWorkspaceFinance>
