@@ -16,6 +16,7 @@ import type { TeamData, TeamSection } from '@/features/workspaces/team-types'
 import { TransactionsView, type WorkspaceTransaction } from '@/features/workspaces/TransactionsView'
 import { BusinessBudgets } from '@/features/budgets/BusinessBudgets'
 import { ExpenseRequests } from '@/features/expenses/ExpenseRequests'
+import { RevolutConnect } from '@/features/revolut/RevolutConnect'
 
 type Transaction = WorkspaceTransaction & { expenseId?: number }
 const initialTransactions: Transaction[] = [
@@ -172,7 +173,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       })} />}
       {active && view === 'Budgets' && (isBusiness ? <BusinessBudgets key={backendWorkspaceId} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} /> : renderBudgets())}
       {active && view === 'Categories' && <CategoryManager workspaceName={workspace.name} workspaceKind={workspace.kind} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} />}
-      {!isBusiness && (view === 'Dashboard' || view === 'Revolut') && <section className="mt-[25px] flex items-center justify-between gap-5 rounded-[15px] bg-[#eaf0e5] px-[26px] py-[17px] max-sm:flex-col max-sm:items-start max-sm:gap-3 max-sm:p-[18px] [&_h2]:m-0 [&_h2]:text-base [&_h2]:leading-[1.3] [&_h2]:font-semibold [&_h2]:tracking-[-.025em] [&_p]:mt-[5px] [&_p]:text-xs [&_p]:text-[#7d877f]"><div><h2>Revolut preview</h2><p>Sample imported transactions · connect your account when integration is available</p></div><span className="whitespace-nowrap rounded-full border border-[#cbd6c3] px-[10px] py-1 text-xs">Not connected</span></section>}
+      {active && !isBusiness && (view === 'Dashboard' || view === 'Revolut') && <RevolutConnect key={backendWorkspaceId} workspaceId={backendWorkspaceId} />}
       {isBusiness && view === 'Dashboard' && <section className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-[#eaf0e5] p-5"><div><h2 className="text-base font-semibold!">Built for your team. Kept in your control.</h2><p className="mt-2 text-xs text-[#68796e]">Owners manage the workspace. Employees can view finances and add expenses.</p></div><button className="text-sm" onClick={() => navigate('Employees')}>Employees</button></section>}
       {isBusiness && view === 'Projects' && <ProjectManager key={backendWorkspaceId ?? 'unconnected'} catalog={projectCatalog} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} canManage={canManageProjects} />}
       {isBusiness && ['Departments', 'Employees'].includes(view) && <TeamManager key={view} section={view as TeamSection} data={team} onChange={setTeam} ownerName={displayName} />}

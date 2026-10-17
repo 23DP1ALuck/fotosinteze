@@ -260,8 +260,8 @@ expense-linked transactions independently of review.
 ## Personal dashboard
 
 `GET /dashboard` requires a bearer access token and `Workspace-ID`. Personal
-Workspaces return the summary below. Business Workspaces return `200` with `null`
-until their dashboard is implemented. Inaccessible workspaces return `403` for
+Workspaces return the summary below. Business Workspaces return the business
+financial summary described next. Inaccessible workspaces return `403` for
 either workspace type.
 
 The response contains `workspace_id`, `currency`, `period_start`, `period_end`,
@@ -530,7 +530,8 @@ No separate authorization table is created. Legacy connection IDs, tokens and
 account links are preserved; Personal Workspace ownership is backfilled from
 unambiguous account links. Legacy rows without account links stay unassigned.
 Ambiguous cross-workspace or duplicate Personal Workspace links must be repaired
-before upgrade. For rollback, use an explicit
+before upgrade. Revision `c84b7a2e190d` merges this branch with deployment head
+`f0af51ce271b`, preserving both migration histories. For rollback, use an explicit
 target revision (for example `74448962612b`); `downgrade -1` is ambiguous at a merge.
 
 In addition to REV-01 settings, configure these values in the ignored `.env`:
@@ -558,8 +559,47 @@ In the Revolut sandbox portal:
 1. Register the exact `REVOLUT_REDIRECT_URI`, including `/revolut/callback`.
 2. Register `https://your-dev-backend.example/.well-known/jwks.json` as the JWKs URL.
    This public endpoint returns only the signing certificate and RSA public key.
-3. Keep the HTTPS backend/tunnel reachable during authorization. Temporary tunnel
-   domains must be updated in both the portal and `.env` when they change.
+3. Keep the HTTPS backend reachable during authorization.
+
+### Deployed Fotosinteze domains
+
+The permanent frontend is `https://fotosinteze.lat` and the backend is
+`https://api.fotosinteze.lat`; Cloudflared is no longer needed for this setup.
+
+1. In the backend hosting environment, set `CLIENT_URL=https://fotosinteze.lat`
+   (no trailing slash) and
+   `REVOLUT_REDIRECT_URI=https://api.fotosinteze.lat/revolut/callback`.
+   See `.env.production.example` for all Revolut settings; this file is a
+   reference, not an automatically loaded environment file. Retain the deployed
+   `DATABASE_URL`, `JWT_SECRET`, sandbox client ID and token encryption key.
+2. Mount the existing transport certificate, signing certificate, private key
+   and sandbox CA bundle as private server files. Set the four certificate/key
+   path variables to their actual server paths. Mac-local paths do not deploy
+   with the app. Keep the existing signing KID and encryption key.
+3. Back up the deployed database, then run `alembic upgrade head` from the backend
+   environment and restart the backend. Do not use `alembic stamp` to skip schema
+   changes.
+4. In the Revolut Developer Portal's sandbox application, replace the old tunnel
+   redirect URL with `https://api.fotosinteze.lat/revolut/callback`, and set the
+   JWKs URL to `https://api.fotosinteze.lat/.well-known/jwks.json`.
+   The JWKs endpoint must return public JSON without hosting authentication.
+5. Rebuild and deploy the frontend. `frontend/my-app/.env.production` sets
+   `VITE_API_URL=https://api.fotosinteze.lat`; remove any hosting/build override
+   that still points to localhost or the tunnel. Development keeps the local
+   Vite proxy.
+6. Sign in at `https://fotosinteze.lat`, choose a Personal Workspace, and click
+   **Connect Revolut sandbox**. Authorize in the same browser; the callback page
+   reports success or failure. Start a fresh attempt after changing domains.
+
+The frontend request includes credentials and the selected workspace header.
+The callback and public JWKs must be routed to FastAPI at the root paths above,
+not through a frontend SPA fallback or an `/api` prefix. Do not redirect the API
+hostname to the frontend hostname.
+
+This remains the Open Banking sandbox. Deployment does not enable live accounts:
+production credentials, certificates and provider endpoints need a separate
+production rollout. Authorization stores tokens but does not yet import accounts
+or transactions, refresh Revolut tokens, or show persisted connection status.
 
 ### Endpoints and browser flow
 
