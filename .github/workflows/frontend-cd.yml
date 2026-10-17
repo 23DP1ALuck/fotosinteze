@@ -1,0 +1,44 @@
+name: frontend_cd
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event.pull_request.merged == true
+    runs-on: [self-hosted, macOS, fotosinteze-production]
+    timeout-minutes: 20
+    concurrency:
+      group: fotosinteze-frontend-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Skip superseded merges
+        id: current
+        env:
+          MERGE_SHA: ${{ github.sha }}
+        run: |
+          if [ "$(git rev-parse HEAD)" = "$MERGE_SHA" ]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build and deploy frontend container
+        if: steps.current.outputs.deploy == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export BACKEND_ENV_FILE="$HOME/fotosinteze-backend/.env"
+          export BACKEND_DATA_DIR="$HOME/fotosinteze-backend"
+          test -f "$BACKEND_ENV_FILE"
+          docker info > /dev/null
+          docker compose config --quiet
+          trap 'docker compose logs --tail=100 frontend' ERR
+          docker compose build frontend
+          docker compose up -d --no-deps --wait --wait-timeout 120 frontend
