@@ -1,0 +1,28 @@
+name: backend_ci
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+defaults:
+  run:
+    working-directory: backend
+env:
+  DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+  JWT_SECRET: "ci-test-secret-only"
+  CLIENT_URL: "http://localhost:5173"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Run tests
+      run: python -m pytest tests -q
