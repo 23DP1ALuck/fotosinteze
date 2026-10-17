@@ -6,7 +6,7 @@ import { Menu, Plus, X } from 'lucide-react'
 import { BrandMark } from '@/components/brand/BrandMark'
 import { useAuth } from '@/features/auth/use-auth'
 import { CategoryManager } from '@/features/categories/CategoryManager'
-import { WorkspaceSwitcher, type Workspace } from '@/features/workspaces/WorkspaceControls'
+import { CreateBusinessDialog, WorkspaceSwitcher, type Workspace } from '@/features/workspaces/WorkspaceControls'
 import { TeamManager } from '@/features/workspaces/TeamManager'
 import { ProjectManager, ProjectFields } from '@/features/projects/ProjectManager'
 import { useProjectCatalog } from '@/features/projects/use-project-catalog'
@@ -191,12 +191,15 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
 function WorkspaceHome() {
   const state = useWorkspace()
   const { user } = useAuth()
-  const [notice, setNotice] = useState('')
+  const [creating, setCreating] = useState(false)
+  const workspaces: Workspace[] = state.workspaces.map(item => ({ id: String(item.id), name: item.name, kind: item.type === 'PERSONAL' ? 'personal' : 'business', role: item.role }))
+  const createDialog = creating && <CreateBusinessDialog key={user?.id} workspaces={workspaces} onCreate={state.createBusiness} onClose={() => setCreating(false)} />
+  if (state.status === 'unauthenticated') return null
   if (state.status === 'loading') return <main className="grid min-h-svh place-items-center bg-[#f7f8f2] text-[#193f33]"><p role="status">Loading your workspaces…</p></main>
   if (state.status === 'error') return <main className="grid min-h-svh place-items-center bg-[#f7f8f2] p-6 text-[#193f33]"><div className="rounded-2xl bg-white p-6"><p role="alert">{state.error}</p><button onClick={state.retry} className="mt-4 rounded-xl bg-[#193f33] px-5 py-3 text-white">Retry</button></div></main>
-  if (!state.activeWorkspace) return <main className="grid min-h-svh place-items-center bg-[#f7f8f2] p-6 text-[#193f33]"><div><h1 className="text-xl font-semibold">No accessible workspaces</h1><p className="mt-2">Your account needs workspace membership before you can manage finances.</p><button onClick={state.retry} className="mt-4 underline">Refresh workspaces</button></div></main>
-  const workspaces: Workspace[] = state.workspaces.map(item => ({ id:String(item.id), name:item.name, kind:item.type==='PERSONAL'?'personal':'business', role:item.role }))
-  return <>{notice && <div role="status" className="fixed top-4 right-4 z-50 max-w-sm rounded-xl bg-[#eaf0e5] p-4 text-sm text-[#193f33] shadow-lg">{notice}<button aria-label="Dismiss workspace notice" onClick={()=>setNotice('')} className="ml-3">×</button></div>}{workspaces.map(workspace=><div key={`${user?.id}-${workspace.id}`} hidden={workspace.id!==String(state.activeWorkspace!.id)}><WorkspaceDashboard workspace={workspace} workspaces={workspaces} active={workspace.id===String(state.activeWorkspace!.id)} onSwitch={id=>state.selectWorkspace(Number(id))} onCreate={()=>setNotice('Business workspace creation requires the WS-02 backend endpoint. Only existing accessible workspaces are shown.')} /></div>)}</>
+  if (!state.activeWorkspace) return <><main className="grid min-h-svh place-items-center bg-[#f7f8f2] p-6 text-[#193f33]"><div><h1 className="text-xl font-semibold">No accessible workspaces</h1><p className="mt-2">Refresh your memberships or create a business workspace to get started.</p><div className="mt-4 flex flex-wrap gap-4"><button onClick={() => setCreating(true)} className="rounded-xl bg-[#193f33] px-5 py-3 text-white">Create business workspace</button><button onClick={state.retry} className="underline">Refresh workspaces</button></div></div></main>{createDialog}</>
+  return <>{workspaces.map(workspace => <div key={`${user?.id}-${workspace.id}`} hidden={workspace.id !== String(state.activeWorkspace!.id)}><WorkspaceDashboard workspace={workspace} workspaces={workspaces} active={workspace.id === String(state.activeWorkspace!.id)} onSwitch={id => state.selectWorkspace(Number(id))} onCreate={() => setCreating(true)} /></div>)}{createDialog}</>
 }
+
 function HomePage() { return <WorkspaceProvider><WorkspaceHome /></WorkspaceProvider> }
 export default HomePage

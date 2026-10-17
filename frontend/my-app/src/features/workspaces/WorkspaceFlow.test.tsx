@@ -1,5 +1,5 @@
 import { render } from '@/test/render'
-import { cleanup, screen, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -97,4 +97,64 @@ it('creates, edits and deletes sample budgets, retains the period, and shows exc
   modal = within(screen.getByRole('dialog'))
   expect(modal.getByLabelText('Period Groceries')).toHaveValue('WEEKLY')
   expect(modal.getByLabelText('Groceries (€)')).toHaveValue(100)
+})
+
+
+it('creates a business through the API and selects its persisted workspace ID', async () => {
+  const user = userEvent.setup()
+  let finish: (response: Response) => void = () => {}
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  const create = vi.fn<(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () => new Promise<Response>(resolve => { finish = resolve }))
+  vi.stubGlobal('fetch', vi.fn((url, init) => String(url).endsWith('/workspaces/business') ? create(url, init) : fallback(url, init)))
+  await renderWorkspace()
+  await user.click(screen.getByRole('button', { name: 'Create business workspace' }))
+  const modal = within(screen.getByRole('dialog', { name: 'Make room for your business.' }))
+  await user.type(modal.getByLabelText('Workspace name'), 'New Studio')
+  await user.clear(modal.getByLabelText('Base currency'))
+  await user.type(modal.getByLabelText('Base currency'), 'eur')
+  await user.click(modal.getByRole('button', { name: 'Create business workspace' }))
+  await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+  expect(modal.getByRole('button', { name: 'Creating workspace…' })).toBeDisabled()
+  const init = create.mock.calls[0][1]!
+  expect(init.method).toBe('POST')
+  expect(JSON.parse(String(init.body))).toEqual({ name: 'New Studio', base_currency: 'EUR' })
+  const headers = new Headers(init.headers)
+  expect(headers.get('Authorization')).toBe(`Bearer ${token}`)
+  expect(headers.has('X-Workspace-ID')).toBe(false)
+  expect(headers.has('Workspace-ID')).toBe(false)
+  await act(async () => finish(Response.json({ id: 81, name: 'New Studio', type: 'BUSINESS', role: 'OWNER' }, { status: 201 })))
+  await screen.findByRole('button', { name: 'Switch workspace, New Studio' })
+  expect(screen.queryByRole('dialog', { name: 'Make room for your business.' })).not.toBeInTheDocument()
+  expect(localStorage.getItem('fotosinteze.workspace.1')).toBe('81')
+  await switchWorkspace('New Studio', 'Personal')
+  await switchWorkspace('Personal', 'New Studio')
+  expect(screen.getByRole('button', { name: 'Switch workspace, New Studio' })).toHaveTextContent('Owner')
+})
+
+it('keeps the creation form and selection after a server error, allowing retry', async () => {
+  const user = userEvent.setup()
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  let fail = true
+  vi.stubGlobal('fetch', vi.fn((url, init) => String(url).endsWith('/workspaces/business')
+    ? Promise.resolve(fail ? Response.json({ detail: 'Workspace name is already taken' }, { status: 409 }) : Response.json({ id: 81, name: 'New Studio', type: 'BUSINESS', role: 'OWNER' }, { status: 201 }))
+    : fallback(url, init)))
+  await renderWorkspace()
+  await user.click(screen.getByRole('button', { name: 'Create business workspace from workspace switcher' }))
+  const modal = within(screen.getByRole('dialog', { name: 'Make room for your business.' }))
+  await user.type(modal.getByLabelText('Workspace name'), 'New Studio')
+  await user.click(modal.getByRole('button', { name: 'Create business workspace' }))
+  expect(await modal.findByRole('alert')).toHaveTextContent('Workspace name is already taken')
+  expect(modal.getByLabelText('Workspace name')).toHaveValue('New Studio')
+  expect(localStorage.getItem('fotosinteze.workspace.1')).toBe('7')
+  fail = false
+  await user.click(modal.getByRole('button', { name: 'Create business workspace' }))
+  await screen.findByRole('button', { name: 'Switch workspace, New Studio' })
+})
+
+it('allows creation when the account has no accessible workspaces', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json([])))
+  render(<AuthContext.Provider value={{ status: 'authenticated', user: { id: 1, displayName: 'Ada', email: 'ada@example.com' }, token, login: async () => {}, register: async () => {}, logout: async () => {} }}><MemoryRouter><HomePage /></MemoryRouter></AuthContext.Provider>)
+  await screen.findByRole('heading', { name: 'No accessible workspaces' })
+  await userEvent.click(screen.getByRole('button', { name: 'Create business workspace' }))
+  expect(screen.getByRole('dialog', { name: 'Make room for your business.' })).toBeInTheDocument()
 })

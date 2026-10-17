@@ -17,7 +17,7 @@ async function request(workspaceId: number, path: string, init: RequestInit): Pr
     if (response.status === 401) throw new Error('Your session has expired. Please log in again.')
     const detail = await readApiErrorMessage(response)
     if (response.status === 403 && detail === 'No access to this workspace') {
-      throw new Error(`Your account cannot access workspace ${workspaceId}. Connect an existing Business workspace where you are a member. Creating a workspace in this frontend currently creates a session workspace only.`)
+      throw new Error(`Your account cannot access workspace ${workspaceId}. Choose an accessible Business workspace from the workspace switcher.`)
     }
     if (response.status === 400 && detail === 'Departments and projects require a business workspace') {
       throw new Error(`Workspace ${workspaceId} is a Personal workspace. Projects require a Business workspace.`)
