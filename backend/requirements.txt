@@ -63,3 +63,5 @@ watchfiles==1.2.0
 websockets==17.1
 zope.event==6.2
 zope.interface==8.6
+
+cryptography==50.0.2

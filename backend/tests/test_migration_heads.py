@@ -18,7 +18,7 @@ class MigrationHeadTests(unittest.TestCase):
         config.set_main_option('script_location', str(BACKEND / 'alembic'))
         heads = ScriptDirectory.from_config(config).get_heads()
         self.assertEqual(len(heads), 1)
-        for starting_revision in ('74448962612b', '9c52e7a1bd30', 'a6d4e9b217c0', 'e8c031b47f62'):
+        for starting_revision in ('74448962612b', '9c52e7a1bd30', 'a6d4e9b217c0', 'e8c031b47f62', 'a72d18f4c901', 'f0af51ce271b'):
             with self.subTest(starting_revision=starting_revision), tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / 'migration.sqlite'
                 with patch.dict(os.environ, {'DATABASE_URL': 'sqlite+aiosqlite:///' + str(path)}):
@@ -29,6 +29,7 @@ class MigrationHeadTests(unittest.TestCase):
                         with engine.connect() as db:
                             self.assertEqual(db.execute(text('SELECT version_num FROM alembic_version')).scalars().all(), heads)
                             self.assertIn('workspace_id', [c['name'] for c in inspect(db).get_columns('budgets')])
+                            self.assertIn('authorization_state_hash', [c['name'] for c in inspect(db).get_columns('revolut_connections')])
                             self.assertEqual(str(next(c for c in inspect(db).get_columns('accounts') if c['name'] == 'account_id')['type']), 'INTEGER')
                             self.assertEqual(db.execute(text('PRAGMA foreign_key_check')).all(), [])
                     finally:
