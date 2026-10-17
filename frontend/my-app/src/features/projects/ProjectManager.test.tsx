@@ -1,14 +1,15 @@
 import { render } from '@/test/render'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { cleanup, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { setAccessToken, clearSession } from '@/features/auth/storage'
 import { ProjectManager, ProjectFields } from './ProjectManager'
+import { setWorkspace } from '@/features/workspaces/workspace-state'
 import { useProjectCatalog } from './use-project-catalog'
 
 beforeEach(() => {
-  setAccessToken(`header.${btoa(JSON.stringify({ exp: Date.now()/1000+3600 }))}.signature`)
+  setAccessToken(`header.${btoa(JSON.stringify({ sub: '1', exp: Date.now()/1000+3600 }))}.signature`)
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value() { this.setAttribute('open', '') } })
 })
 afterEach(() => { cleanup(); clearSession(); vi.unstubAllGlobals() })
@@ -16,9 +17,10 @@ const project = { id: 10, workspace_id: 42, name: 'Website', status: 'Active', d
 const departments = [{ id: 7, workspace_id: 42, name: 'Development' }, { id: 8, workspace_id: 42, name: 'Marketing' }]
 function Harness({ id = 42, owner = true }: { id?: number; owner?: boolean }) {
   const catalog = useProjectCatalog(id, true)
+  useEffect(() => { setWorkspace(1, id) }, [id])
   const [departmentId, setDepartment] = useState('')
   const [projectId, setProject] = useState('')
-  return <><ProjectManager catalog={catalog} workspaceId={id} onConnect={() => {}} canManage={owner} /><form aria-label="Business transaction"><ProjectFields catalog={catalog} departmentId={departmentId} projectId={projectId} onDepartmentChange={setDepartment} onProjectChange={setProject} /></form></>
+  return <><ProjectManager catalog={catalog} canManage={owner} /><form aria-label="Business transaction"><ProjectFields catalog={catalog} departmentId={departmentId} projectId={projectId} onDepartmentChange={setDepartment} onProjectChange={setProject} /></form></>
 }
 it('creates, edits and deletes real projects with multiple departments and ISO dates', async () => {
   let rows = [project]
@@ -59,7 +61,7 @@ it('creates, edits and deletes real projects with multiple departments and ISO d
   await user.click(dialog.getByLabelText('Marketing'))
   await user.click(dialog.getByRole('button', { name: 'Save changes' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  expect(screen.getByRole('list', { name: 'Projects' })).toHaveTextContent('No department links')
+  expect(screen.getByRole('list', { name: 'Projects' })).toHaveTextContent('Workspace-wide project')
   await user.click(screen.getByRole('button', { name: 'Delete Launch' }))
   await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete project' }))
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Edit Launch' })).not.toBeInTheDocument())
@@ -104,15 +106,35 @@ it('clears previous workspace projects immediately and ignores stale responses',
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Edit Website' })).not.toBeInTheDocument())
 })
 
-it('does not connect an inaccessible workspace ID and explains that backend setup is required', async () => {
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ detail: 'No access to this workspace' }, { status: 403 })))
-  const user = userEvent.setup()
-  const onConnect = vi.fn()
-  render(<ProjectManager catalog={{ workspaceId: undefined, projects: [], departments: [], loading: false, error: '', refresh() {}, upsert() {}, remove() {} }} onConnect={onConnect} canManage />)
-  await user.type(screen.getByLabelText('Workspace ID'), '1')
-  await user.click(screen.getByRole('button', { name: 'Load projects' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('Your account cannot access workspace 1')
-  expect(onConnect).not.toHaveBeenCalled()
-  expect(screen.getByLabelText('Workspace ID')).toHaveValue(1)
-  expect(screen.queryByText(/Saved to backend/)).not.toBeInTheDocument()
+it('uses the workspace switcher instead of asking for a manual workspace ID', () => {
+  render(<ProjectManager catalog={{ workspaceId: undefined, projects: [], departments: [], loading: false, error: '', refresh() {}, upsert() {}, remove() {} }} canManage />)
+  expect(screen.queryByLabelText('Workspace ID')).not.toBeInTheDocument()
+  expect(screen.getByText(/Choose a Business workspace from the workspace switcher/)).toBeInTheDocument()
+})
+
+it('includes workspace-wide projects in department filters and supports filtering them separately', async () => {
+  vi.stubGlobal('fetch', vi.fn(async url => Response.json(String(url).endsWith('/departments') ? departments : [project, { ...project, id: 12, name: 'Sales plan', department_ids: [8] }, { ...project, id: 13, name: 'Workspace plan', department_ids: [] }])))
+  render(<Harness />)
+  await screen.findByRole('button', { name: 'Edit Workspace plan' })
+  await userEvent.selectOptions(screen.getByLabelText('Filter projects by department'), '7')
+  const list = within(screen.getByRole('list', { name: 'Projects' }))
+  expect(list.getByText('Website')).toBeInTheDocument()
+  expect(list.getByText('Workspace plan')).toBeInTheDocument()
+  expect(list.queryByText('Sales plan')).not.toBeInTheDocument()
+  await userEvent.selectOptions(screen.getByLabelText('Filter projects by department'), 'workspace')
+  expect(list.getByText('Workspace plan')).toBeInTheDocument()
+  expect(list.queryByText('Website')).not.toBeInTheDocument()
+})
+
+it('clears a project selector when the selected project is removed by a catalog refresh', async () => {
+  let available = [project]
+  vi.stubGlobal('fetch', vi.fn(async url => Response.json(String(url).endsWith('/departments') ? departments : available)))
+  render(<Harness />)
+  await screen.findByRole('button', { name: 'Edit Website' })
+  const form = within(screen.getByRole('form', { name: 'Business transaction' }))
+  await userEvent.selectOptions(form.getByLabelText('Project'), '10')
+  available = []
+  await userEvent.click(screen.getByRole('button', { name: 'Refresh projects' }))
+  await waitFor(() => expect(form.getByLabelText('Project')).toHaveValue(''))
+  expect(form.queryByRole('option', { name: 'Website' })).not.toBeInTheDocument()
 })

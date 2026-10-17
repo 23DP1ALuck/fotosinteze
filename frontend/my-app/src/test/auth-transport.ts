@@ -1,7 +1,12 @@
 import { vi } from 'vitest'
-// Auth tests use the real dashboard; provide its membership endpoint separately from auth responses.
+import { createFinanceTransport } from './finance-transport'
+// Auth tests render the real dashboard; keep its API responses separate from auth responses.
 export function stubAuthFetch(mock: unknown) {
   const transport = mock as typeof fetch
-  vi.stubGlobal('fetch',vi.fn((url: RequestInfo | URL, init?: RequestInit) => String(url).endsWith('/workspaces')
-    ? Promise.resolve(Response.json([{ id:7, name:'Personal', type:'PERSONAL', role:'OWNER' }])) : transport(url,init)))
+  const finance = createFinanceTransport()
+  vi.stubGlobal('fetch', vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
+    if (String(url).endsWith('/workspaces')) return Promise.resolve(Response.json([{ id: 7, name: 'Personal', type: 'PERSONAL', role: 'OWNER' }]))
+    const response = finance.respond(url, init)
+    return response ? Promise.resolve(response) : transport(url, init)
+  }))
 }
