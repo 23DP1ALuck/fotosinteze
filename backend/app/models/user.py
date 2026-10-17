@@ -26,7 +26,7 @@ class User(Base):
     )
 
     revolut_connections: Mapped[List["RevolutConnection"]] = relationship(
-        back_populates="connected_by",
+        back_populates="connected_by", foreign_keys="RevolutConnection.connected_by_id",
         cascade="all, delete-orphan",
     )
     submitted_expenses: Mapped[List["Expense"]] = relationship(
