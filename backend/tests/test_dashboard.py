@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.database import Base, get_db_session
 from app.dependencies.auth import get_current_user
 from app.main import app
-from app.models import Account, Category, Transaction, User, Workspace, WorkspaceUsers
+from app.models import Account, Category, Department, Project, Transaction, User, Workspace, WorkspaceUsers, WorkspaceRole
 from app.models.category import CategoryType
 from app.models.transaction import TransactionSourceEnum
 from app.models.workspace import WorkspaceTypeEnum
@@ -105,12 +105,66 @@ class DashboardTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get('/dashboard', headers={'Workspace-ID': '1'})
         self.assertEqual(response.status_code, 401, response.text)
 
-    async def test_business_dashboard_placeholder_and_membership(self):
+    async def test_business_empty_dashboard_and_membership(self):
         response = await self.client.get('/dashboard', headers={'Workspace-ID': '3'})
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertIsNone(response.json())
+        self.assertEqual(Decimal(response.json()['profit']), 0)
+        self.assertEqual(response.json()['spending_by_project'], [])
         membership = await self.db.get(WorkspaceUsers, (1, 3))
         await self.db.delete(membership)
         await self.db.commit()
         response = await self.client.get('/dashboard', headers={'Workspace-ID': '3'})
         self.assertEqual(response.status_code, 403, response.text)
+
+    async def test_business_totals_and_employee_scope(self):
+        self.db.add_all([
+            Department(department_id=1, workspace_id=3, name='Engineering'),
+            Department(department_id=2, workspace_id=3, name='Sales'),
+            Project(project_id=1, workspace_id=3, name='Shared'),
+            Category(category_id=3, workspace_id=3, name='Revenue', type=CategoryType.income),
+            Category(category_id=4, workspace_id=3, name='Equipment', type=CategoryType.expense),
+        ])
+        await self.db.flush()
+        date = datetime(2026, 10, 10)
+        for tid, amount, category, department, project, currency, created in [
+            (1, 1000, 3, 1, None, 'EUR', date),
+            (2, 200, 4, 1, 1, 'EUR', date),
+            (3, 300, 4, 2, 1, 'EUR', date),
+            (4, 50, 4, None, None, 'EUR', date),
+            (5, 9999, 4, 1, 1, 'USD', date),
+            (6, 9999, 4, 1, 1, 'EUR', datetime(2026, 11, 1)),
+            (7, 9999, None, 1, None, 'EUR', date),
+        ]:
+            self.transaction(tid, amount, category, created, workspace=3, currency=currency)
+            transaction = next(t for t in self.db.new if isinstance(t, Transaction) and t.transaction_id == tid)
+            transaction.department_id = department
+            transaction.project_id = project
+        self.transaction(8, 9999, 2, date)
+        await self.db.commit()
+        async def dashboard():
+            with patch('app.services.dashboard_service.datetime') as clock:
+                clock.now.return_value = datetime(2026, 10, 14)
+                return await self.client.get('/dashboard', headers={'Workspace-ID': '3'})
+        response = await dashboard()
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        self.assertEqual(Decimal(data['revenue']), 1000)
+        self.assertEqual(Decimal(data['expenses']), 550)
+        self.assertEqual(Decimal(data['profit']), 450)
+        self.assertEqual([(g['name'], Decimal(g['amount'])) for g in data['spending_by_project']], [('Shared', Decimal(500)), ('Unassigned', Decimal(50))])
+        self.assertEqual(sum(Decimal(g['amount']) for g in data['spending_by_department']), 550)
+        self.assertEqual([(g['id'], Decimal(g['amount'])) for g in data['spending_by_category']], [(4, Decimal(550))])
+        membership = await self.db.get(WorkspaceUsers, (1, 3))
+        membership.role = WorkspaceRole.EMPLOYEE
+        membership.department_id = 1
+        await self.db.commit()
+        response = await dashboard()
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        self.assertEqual(Decimal(data['expenses']), 200)
+        self.assertEqual(Decimal(data['profit']), 800)
+        self.assertEqual([(g['id'], Decimal(g['amount'])) for g in data['spending_by_department']], [(1, Decimal(200))])
+        self.assertEqual(Decimal(data['spending_by_project'][0]['amount']), 200)
+        membership.department_id = None
+        await self.db.commit()
+        self.assertEqual((await dashboard()).status_code, 403)
