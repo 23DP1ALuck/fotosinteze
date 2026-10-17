@@ -1,4 +1,5 @@
 import { render } from '@/test/render'
+import { createFinanceTransport } from '@/test/finance-transport'
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -13,8 +14,11 @@ beforeEach(()=>{
   localStorage.clear();clearSession();setAccessToken(token)
   Object.defineProperty(HTMLDialogElement.prototype,'showModal',{configurable:true,value(){this.setAttribute('open','')}})
   Object.defineProperty(HTMLDialogElement.prototype,'close',{configurable:true,value(){this.removeAttribute('open')}})
+  const finance = createFinanceTransport()
   vi.stubGlobal('fetch',vi.fn(async(url,init)=>{
     if(String(url).endsWith('/workspaces')) return Response.json(workspaces)
+    const response = finance.respond(url, init)
+    if (response) return response
     const id=Number(new Headers(init.headers).get('X-Workspace-ID'))
     if(String(url).endsWith('/projects'))return Response.json([{id:10,workspace_id:id,name:'Website',status:'Active',department_ids:[7],start_date:null,end_date:null}])
     if(String(url).endsWith('/departments'))return Response.json([{id:7,workspace_id:id,name:'Development'}])
@@ -38,11 +42,11 @@ it('loads actual memberships and displays Personal, Business and membership role
 it('keeps business and personal transaction data separate across switches',async()=>{
   const user=userEvent.setup();await renderWorkspace()
   await user.click(screen.getByRole('button',{name:'Add expense'}));let modal=within(screen.getByRole('dialog'))
-  await user.type(modal.getByLabelText('Description'),'Personal groceries');await user.type(modal.getByLabelText('Amount (€)'),'50');await user.click(modal.getByRole('button',{name:'Save expense'}))
+  await user.selectOptions(modal.getByLabelText('Account'), '12');await user.selectOptions(modal.getByLabelText('Category'), '4');await user.type(modal.getByLabelText('Description'),'Personal groceries');await user.type(modal.getByLabelText('Amount (EUR)'),'50');await user.click(modal.getByRole('button',{name:'Save expense'}));await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add expense' })).not.toBeInTheDocument())
   await switchWorkspace('Personal','Acme Studio')
   expect(within(screen.getByRole('main')).queryByText('Personal groceries')).not.toBeInTheDocument()
   await user.click(screen.getByRole('button',{name:'Add income'}));modal=within(screen.getByRole('dialog'))
-  await user.type(modal.getByLabelText('Description'),'Client project');await user.type(modal.getByLabelText('Amount (€)'),'900');await user.click(modal.getByRole('button',{name:'Save income'}))
+  await user.selectOptions(modal.getByLabelText('Account'), '13');await user.selectOptions(modal.getByLabelText('Category'), '6');await user.type(modal.getByLabelText('Description'),'Client project');await user.type(modal.getByLabelText('Amount (EUR)'),'900');await user.click(modal.getByRole('button',{name:'Save income'}));await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add income' })).not.toBeInTheDocument())
   await switchWorkspace('Acme Studio','Personal');expect(within(screen.getByRole('main')).getByText('Personal groceries')).toBeInTheDocument()
   expect(within(screen.getByRole('main')).queryByText('Client project')).not.toBeInTheDocument()
 })
@@ -71,9 +75,9 @@ it('uses active backend project IDs in Business transaction selectors',async()=>
   await user.click(screen.getByRole('button',{name:'Projects'}));await screen.findByRole('button',{name:'Edit Website'})
   expect(screen.queryByLabelText('Workspace ID')).not.toBeInTheDocument()
   await user.click(screen.getByRole('button',{name:'Add expense'}));const modal=within(screen.getByRole('dialog'))
-  await user.type(modal.getByLabelText('Description'),'Website promotion');await user.type(modal.getByLabelText('Amount (€)'),'900')
-  await user.selectOptions(modal.getByLabelText('Department'),'7');await user.selectOptions(modal.getByLabelText('Project'),'10');await user.click(modal.getByRole('button',{name:'Save expense'}))
-  await user.click(screen.getByRole('button',{name:'Transactions'}));expect(screen.getByRole('row',{name:/Website promotion Marketing Development Website Ada/})).toBeInTheDocument()
+  await user.selectOptions(modal.getByLabelText('Account'), '13');await user.selectOptions(modal.getByLabelText('Category'), '5');await user.type(modal.getByLabelText('Description'),'Website promotion');await user.type(modal.getByLabelText('Amount (EUR)'),'900')
+  await user.selectOptions(modal.getByLabelText('Department'),'7');await user.selectOptions(modal.getByLabelText('Project'),'10');await user.click(modal.getByRole('button',{name:'Save expense'}));await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add expense' })).not.toBeInTheDocument())
+  await user.click(screen.getByRole('button',{name:'Transactions'}));expect(screen.getByRole('row',{name:/Website promotion Marketing Development Website/})).toBeInTheDocument()
 })
 
 
@@ -84,7 +88,7 @@ it('creates, edits and deletes sample budgets, retains the period, and shows exc
   await user.click(screen.getByRole('button', { name: 'Manage budgets' }))
   let modal = within(screen.getByRole('dialog'))
   await user.clear(modal.getByLabelText('Groceries (€)'))
-  await user.type(modal.getByLabelText('Groceries (€)'), '100')
+  await user.type(modal.getByLabelText('Groceries (€)'), '10')
   await user.selectOptions(modal.getByLabelText('Period Groceries'), 'WEEKLY')
   await user.type(modal.getByLabelText('New budget name'), 'Travel')
   await user.click(modal.getByRole('button', { name: '+ Add budget' }))
@@ -96,7 +100,7 @@ it('creates, edits and deletes sample budgets, retains the period, and shows exc
   await user.click(screen.getByRole('button', { name: 'Manage budgets' }))
   modal = within(screen.getByRole('dialog'))
   expect(modal.getByLabelText('Period Groceries')).toHaveValue('WEEKLY')
-  expect(modal.getByLabelText('Groceries (€)')).toHaveValue(100)
+  expect(modal.getByLabelText('Groceries (€)')).toHaveValue(10)
 })
 
 
