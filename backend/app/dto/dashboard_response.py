@@ -16,3 +16,22 @@ class DashboardResponse(BaseModel):
     expenses: Decimal
     savings: Decimal
     recent_transactions: list[TransactionResponseDTO]
+
+
+class SpendingGroup(BaseModel):
+    id: int | None
+    name: str
+    amount: Decimal
+
+
+class BusinessDashboardResponse(BaseModel):
+    workspace_id: int
+    currency: str
+    period_start: date
+    period_end: date
+    revenue: Decimal
+    expenses: Decimal
+    profit: Decimal
+    spending_by_category: list[SpendingGroup]
+    spending_by_department: list[SpendingGroup]
+    spending_by_project: list[SpendingGroup]

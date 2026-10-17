@@ -100,3 +100,12 @@ class ExpenseMigrationTests(unittest.TestCase):
             self.assertEqual(db.execute(text("SELECT sql FROM sqlite_master WHERE name='expenses'")).scalar(), original_schema)
             self.assertEqual(db.execute(text('SELECT version_num FROM alembic_version')).scalar(), OLD_HEAD)
             self.assertEqual(db.execute(text('SELECT status FROM expenses WHERE expense_id=1')).scalar(), 'pending')
+
+
+    def test_original_expense_ui_head_can_upgrade_to_merged_schema(self):
+        command.upgrade(self.config, 'd4817a0e9c25')
+        command.upgrade(self.config, 'head')
+        with self.engine.connect() as db:
+            self.assertIn('workspace_id', {column['name'] for column in inspect(db).get_columns('budgets')})
+            self.assertEqual(db.execute(text('SELECT version_num FROM alembic_version')).scalars().all(), ['c84b7a2e190d'])
+            self.assertEqual(db.execute(text('PRAGMA foreign_key_check')).all(), [])

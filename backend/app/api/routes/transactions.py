@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,6 +9,7 @@ from app.dependencies.auth import get_current_user
 from app.dependencies.workspace import get_current_workspace
 
 from app.models import Workspace
+from app.models.category import CategoryType
 from app.services import transaction_service
 
 router = APIRouter(tags=['transactions'])
@@ -31,15 +34,27 @@ async def create_transaction(request: CreateTransactionRequest,
 @router.get('/transactions', status_code=200, response_model=TransactionListResponseDTO,
             summary='List newest workspace transactions first; employees see their assigned department only',
             responses={**unauthorized, **forbidden, **invalid_request,
-                       404: {'description': 'Business workspace not found'}})
+                       404: {'description': 'Workspace, department or project not found'},
+                       400: {'description': 'Invalid date range or business-only filters in personal workspace'}})
 async def get_transactions(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    search: str | None = Query(default=None, max_length=255, description='Case-insensitive literal description search'),
+    transaction_type: CategoryType | None = Query(default=None, alias='type'),
+    category_id: int | None = Query(default=None, gt=0),
+    date_from: date | None = Query(default=None, description='Inclusive creation date'),
+    date_to: date | None = Query(default=None, description='Inclusive creation date'),
+    department_id: int | None = Query(default=None, gt=0),
+    project_id: int | None = Query(default=None, gt=0),
     db: AsyncSession = Depends(get_db_session),
     current_user: dict = Depends(get_current_user),
     workspace: Workspace = Depends(get_current_workspace),
 ) -> TransactionListResponseDTO:
-    return await transaction_service.get_transactions(workspace, current_user, db, limit=limit, offset=offset)
+    return await transaction_service.get_transactions(
+        workspace, current_user, db, limit=limit, offset=offset, search=search,
+        transaction_type=transaction_type, category_id=category_id, date_from=date_from,
+        date_to=date_to, department_id=department_id, project_id=project_id,
+    )
 
 
 @router.get('/transactions/{transaction_id}', status_code=200, response_model=TransactionResponseDTO,

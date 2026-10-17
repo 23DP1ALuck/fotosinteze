@@ -68,6 +68,40 @@ The API is available at `http://localhost:8000`. Interactive API documentation i
 - Swagger UI: `http://localhost:8000/docs`
 - OpenAPI JSON: `http://localhost:8000/openapi.json`
 
+## Backend testing guide
+
+Run commands from `backend` with the virtual environment active and `.env`
+configured as described above. Install or update the dependencies first:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+The test runner is pytest. Existing tests use Python's `unittest`, including
+`IsolatedAsyncioTestCase` for async tests and `unittest.mock` for mocks.
+Pytest runs these directly; no async plugin is required for these test classes.
+API tests use HTTPX's `AsyncClient` and `ASGITransport` to call FastAPI in process.
+
+```bash
+# Run the full backend suite
+python -m pytest tests -q
+
+# Run one test file
+python -m pytest tests/test_accounts.py -q
+
+# Run tests whose names match an expression
+python -m pytest tests -k "manual_updates" -v
+```
+
+Keep tests in `tests/test_*.py`. Follow the existing unittest patterns for new
+tests. Database tests create in-memory or temporary SQLite databases; a running
+API server is not needed.
+
+If collection fails with a settings validation error, check `.env` against
+`app/config.py`: unknown keys are rejected. Migration tests also require a
+consistent Alembic revision graph; a "Multiple head revisions" error indicates
+that migration branches need resolving.
+
 ## Current endpoints
 
 | Method | Path | Purpose |
@@ -226,8 +260,8 @@ expense-linked transactions independently of review.
 ## Personal dashboard
 
 `GET /dashboard` requires a bearer access token and `Workspace-ID`. Personal
-Workspaces return the summary below. Business Workspaces return `200` with `null`
-until their dashboard is implemented. Inaccessible workspaces return `403` for
+Workspaces return the summary below. Business Workspaces return the business
+financial summary described next. Inaccessible workspaces return `403` for
 either workspace type.
 
 The response contains `workspace_id`, `currency`, `period_start`, `period_end`,
@@ -285,6 +319,79 @@ An empty page returns `items: []` and `has_more: false`.
 
 Offset pagination can shift between requests when new transactions arrive;
 refresh from offset 0 to retrieve the latest history.
+
+
+## Business dashboard
+
+`GET /dashboard` with a Business Workspace returns `workspace_id`, `currency`,
+`period_start`, `period_end`, `revenue`, `expenses`, `profit`,
+`spending_by_category`, `spending_by_department`, and `spending_by_project`.
+Revenue sums income-category transactions; expenses sum expense-category
+transactions; profit is revenue minus expenses (and may be negative).
+Only current server-local calendar-month transactions in the workspace's
+`base_currency` count, with an exclusive period end and no currency conversion.
+Uncategorized transactions are excluded. Pending expense requests do not count;
+their transactions count after approval.
+
+Each spending breakdown contains `{id, name, amount}` entries, ordered by amount
+descending then ID. Missing department/project links appear as `id: null`,
+`name: "Unassigned"`. Breakdowns use transaction links directly, so shared projects
+do not multiply spending. Amounts are decimal strings; empty workspaces return
+zero totals and empty breakdowns.
+
+Owners see the whole active workspace. Employees see only transactions belonging
+to their assigned department, including only that department's spending on shared
+projects. Employees without a valid department assignment receive `403`.
+Budgets and frontend dashboard rendering are outside this endpoint's scope.
+
+## Business budget management (BBUD-03)
+
+`GET /business-budgets` returns saved budgets with target labels, spent/remaining
+amounts, period boundaries, warning status, `can_manage`, and permitted targets.
+All routes require a business `Workspace-ID` and authentication. Owners can
+`POST /business-budgets`, `PUT /business-budgets/{id}` and
+`DELETE /business-budgets/{id}`. Bodies use `name`, `target_type`
+(`CATEGORY`, `DEPARTMENT`, `PROJECT`), `target_id`, `limit_amount`, `currency`,
+`period_start`, `period_length` (`MONTHLY`, `WEEKLY`, `CUSTOM`) and
+`duration_days` (required only for custom periods).
+
+Each managed budget has exactly one target from its own workspace; category
+targets must be expense categories. Existing schema and migration head are
+sufficient. Ambiguous legacy budgets with multiple targets, or without a target,
+remain stored but are excluded from this business API until repaired.
+
+Progress sums expense-category transactions in the budget currency from the
+inclusive start date to the exclusive end date. Monthly periods end on the same
+day next month, clamped to that month's last day; weekly periods last seven days.
+Custom periods last the specified number of days. Periods do not roll forward
+automatically. At 80% spent, status is `WARNING`; above the limit, `EXCEEDED`.
+
+Employees cannot mutate budgets. Assigned employees see their own department's
+budgets and budgets for projects linked to that department. Their spending totals
+include only transactions assigned to that department, including for shared
+projects; company-wide category budgets are owner-only. Unassigned employees
+receive the existing department-assignment error.
+
+In the UI, open a Business workspace, choose Budgets, then select an accessible
+Business workspace if one is not already connected. Budget CRUD is persisted;
+the workspace switcher uses your accessible backend memberships.
+
+## Transaction search and filters
+
+`GET /transactions` accepts optional, combinable query parameters:
+`search` (trimmed, case-insensitive literal substring of description, max 255 characters),
+`type` (`INCOME` or `EXPENSE`, determined by category), `category_id`,
+`date_from` and `date_to` (inclusive `YYYY-MM-DD` creation dates),
+`department_id`, and `project_id`. Transactions currently have no separate name field.
+Blank search behaves like omitted search. Uncategorized transactions do not match a type filter.
+
+All filters apply before `limit`/`offset` pagination within the active `Workspace-ID`.
+Department/project filters require a business workspace (400 otherwise).
+Unknown or foreign department/project IDs return 404; employees cannot filter another
+department or inaccessible project (403). Shared projects still expose only the employee's
+assigned department transactions. A reversed date range returns 400; malformed dates,
+invalid types, and nonpositive IDs return 422. No matches return an empty `items` page.
+Dates use the existing stored creation timestamps without timezone conversion.
 
 
 ## Revolut Open Banking sandbox configuration
@@ -423,7 +530,8 @@ No separate authorization table is created. Legacy connection IDs, tokens and
 account links are preserved; Personal Workspace ownership is backfilled from
 unambiguous account links. Legacy rows without account links stay unassigned.
 Ambiguous cross-workspace or duplicate Personal Workspace links must be repaired
-before upgrade. For rollback, use an explicit
+before upgrade. Revision `c84b7a2e190d` merges this branch with deployment head
+`f0af51ce271b`, preserving both migration histories. For rollback, use an explicit
 target revision (for example `74448962612b`); `downgrade -1` is ambiguous at a merge.
 
 In addition to REV-01 settings, configure these values in the ignored `.env`:
@@ -451,8 +559,47 @@ In the Revolut sandbox portal:
 1. Register the exact `REVOLUT_REDIRECT_URI`, including `/revolut/callback`.
 2. Register `https://your-dev-backend.example/.well-known/jwks.json` as the JWKs URL.
    This public endpoint returns only the signing certificate and RSA public key.
-3. Keep the HTTPS backend/tunnel reachable during authorization. Temporary tunnel
-   domains must be updated in both the portal and `.env` when they change.
+3. Keep the HTTPS backend reachable during authorization.
+
+### Deployed Fotosinteze domains
+
+The permanent frontend is `https://fotosinteze.lat` and the backend is
+`https://api.fotosinteze.lat`; Cloudflared is no longer needed for this setup.
+
+1. In the backend hosting environment, set `CLIENT_URL=https://fotosinteze.lat`
+   (no trailing slash) and
+   `REVOLUT_REDIRECT_URI=https://api.fotosinteze.lat/revolut/callback`.
+   See `.env.production.example` for all Revolut settings; this file is a
+   reference, not an automatically loaded environment file. Retain the deployed
+   `DATABASE_URL`, `JWT_SECRET`, sandbox client ID and token encryption key.
+2. Mount the existing transport certificate, signing certificate, private key
+   and sandbox CA bundle as private server files. Set the four certificate/key
+   path variables to their actual server paths. Mac-local paths do not deploy
+   with the app. Keep the existing signing KID and encryption key.
+3. Back up the deployed database, then run `alembic upgrade head` from the backend
+   environment and restart the backend. Do not use `alembic stamp` to skip schema
+   changes.
+4. In the Revolut Developer Portal's sandbox application, replace the old tunnel
+   redirect URL with `https://api.fotosinteze.lat/revolut/callback`, and set the
+   JWKs URL to `https://api.fotosinteze.lat/.well-known/jwks.json`.
+   The JWKs endpoint must return public JSON without hosting authentication.
+5. Rebuild and deploy the frontend. `frontend/my-app/.env.production` sets
+   `VITE_API_URL=https://api.fotosinteze.lat`; remove any hosting/build override
+   that still points to localhost or the tunnel. Development keeps the local
+   Vite proxy.
+6. Sign in at `https://fotosinteze.lat`, choose a Personal Workspace, and click
+   **Connect Revolut sandbox**. Authorize in the same browser; the callback page
+   reports success or failure. Start a fresh attempt after changing domains.
+
+The frontend request includes credentials and the selected workspace header.
+The callback and public JWKs must be routed to FastAPI at the root paths above,
+not through a frontend SPA fallback or an `/api` prefix. Do not redirect the API
+hostname to the frontend hostname.
+
+This remains the Open Banking sandbox. Deployment does not enable live accounts:
+production credentials, certificates and provider endpoints need a separate
+production rollout. Authorization stores tokens but does not yet import accounts
+or transactions, refresh Revolut tokens, or show persisted connection status.
 
 ### Endpoints and browser flow
 

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.main import app
 from app.database import Base, get_db_session
 from app.dependencies.auth import get_current_user
-from app.models import Account, Category, Department, Transaction, User, Workspace, WorkspaceUsers, WorkspaceRole
+from app.models import Account, Category, Department, Transaction, Project, User, Workspace, WorkspaceUsers, WorkspaceRole
 from app.models.category import CategoryType
 from app.models.transaction import TransactionSourceEnum
 from app.models.workspace import WorkspaceTypeEnum
@@ -140,6 +140,76 @@ class TransactionRouteTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get('/transactions', params={'limit': 2, 'offset': 2})
         self.assertEqual([row['transaction_id'] for row in response.json()['items']], [3])
         self.assertFalse(response.json()['has_more'])
+
+    async def test_search_filters(self):
+        transaction = await self.db.get(Transaction, 1)
+        transaction.description = 'Office 50%_ supplies'
+        transaction.created_at = datetime(2026, 10, 17, 23, 59, 59)
+        await self.db.commit()
+        filters = dict(search=' OFFICE ', type='EXPENSE', category_id=1,
+                       date_from='2026-10-17', date_to='2026-10-17', department_id=1, limit=1)
+        response = await self.client.get('/transactions', params=filters)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([row['transaction_id'] for row in response.json()['items']], [1])
+        self.assertFalse(response.json()['has_more'])
+        for params in [{'search': 'missing'}, {'type': 'INCOME'}, {'date_from': '2026-10-18'},
+                       {'date_to': '2026-10-16'}, {'department_id': 2}]:
+            response = await self.client.get('/transactions', params=params)
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()['items'], [])
+        response = await self.client.get('/transactions', params={'search': '50%_'})
+        self.assertEqual(len(response.json()['items']), 1)
+        response = await self.client.get('/transactions', params={'search': 'Office'}, headers={'Workspace-ID': '2'})
+        self.assertEqual(response.json()['items'], [])
+        self.user = {'sub': '2'}
+        response = await self.client.get('/transactions', params={'search': 'Office'})
+        self.assertEqual(response.json()['items'], [])
+
+    async def test_project_filter_preserves_department_scope_and_pagination(self):
+        self.db.add_all([
+            Project(project_id=1, name='Shared', workspace_id=1,
+                    departments=[await self.db.get(Department, 1), await self.db.get(Department, 2)]),
+            Project(project_id=2, name='Private', workspace_id=1,
+                    departments=[await self.db.get(Department, 1)]),
+            Project(project_id=3, name='Foreign', workspace_id=2),
+        ])
+        await self.db.flush()
+        (await self.db.get(Transaction, 1)).project_id = 1
+        for transaction_id, project_id, description in [(2, 1, 'Match'), (3, 1, 'Match'), (4, 2, 'Other')]:
+            self.db.add(Transaction(transaction_id=transaction_id, workspace_id=1, account_id=1,
+                                    category_id=1, project_id=project_id, department_id=2,
+                                    amount=5, currency='EUR', description=description,
+                                    source=TransactionSourceEnum.MANUAL, created_at=datetime(2026, 10, 17)))
+        await self.db.commit()
+        self.user = {'sub': '2'}
+        for offset, expected, has_more in [(0, [3], True), (1, [2], False)]:
+            response = await self.client.get('/transactions', params=dict(project_id=1, search='Match', limit=1, offset=offset))
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual([row['transaction_id'] for row in response.json()['items']], expected)
+            self.assertEqual(response.json()['has_more'], has_more)
+        response = await self.client.get('/transactions', params={'project_id': 2})
+        self.assertEqual(response.status_code, 403, response.text)
+        self.user = {'sub': '1'}
+        response = await self.client.get('/transactions', params={'project_id': 3})
+        self.assertEqual(response.status_code, 404, response.text)
+        response = await self.client.get('/transactions', params={'search': '%'})
+        self.assertEqual(response.json()['items'], [])
+
+    async def test_filter_validation(self):
+        for params in [{'type': 'invalid'}, {'category_id': 0}, {'department_id': -1},
+                       {'project_id': 'bad'}, {'date_from': 'bad'}]:
+            response = await self.client.get('/transactions', params=params)
+            self.assertEqual(response.status_code, 422, response.text)
+        response = await self.client.get('/transactions', params={'date_from': '2026-10-18', 'date_to': '2026-10-17'})
+        self.assertEqual(response.status_code, 400, response.text)
+        for field in ('department_id', 'project_id'):
+            response = await self.client.get('/transactions', params={field: 1}, headers={'Workspace-ID': '2'})
+            self.assertEqual(response.status_code, 400, response.text)
+            response = await self.client.get('/transactions', params={field: 999})
+            self.assertEqual(response.status_code, 404, response.text)
+        self.user = {'sub': '2'}
+        response = await self.client.get('/transactions', params={'department_id': 1})
+        self.assertEqual(response.status_code, 403, response.text)
 
     async def test_history_requires_authentication(self):
         app.dependency_overrides.pop(get_current_user)

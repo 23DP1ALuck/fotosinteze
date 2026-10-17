@@ -19,7 +19,7 @@ class RevolutAuthorizationMigrationTests(unittest.TestCase):
             config = Config(str(BACKEND / 'alembic.ini'))
             config.set_main_option('script_location', str(BACKEND / 'alembic'))
             with patch.dict(os.environ, {'DATABASE_URL': 'sqlite+aiosqlite:///' + str(path)}):
-                self.assertEqual(ScriptDirectory.from_config(config).get_heads(), ['a72d18f4c901'])
+                self.assertEqual(ScriptDirectory.from_config(config).get_heads(), ['c84b7a2e190d'])
                 command.upgrade(config, 'head')
                 engine = create_engine('sqlite:///' + str(path))
                 try:

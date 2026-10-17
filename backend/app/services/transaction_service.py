@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime, time
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -210,12 +210,39 @@ async def get_transaction_by_id(transaction_id: int, current_user: dict,
 
 
 async def get_transactions(workspace: Workspace, current_user: dict, db: AsyncSession,
-                           *, limit: int = 50, offset: int = 0) -> TransactionListResponseDTO:
+                           *, limit: int = 50, offset: int = 0, search: str | None = None,
+                           transaction_type: CategoryType | None = None, category_id: int | None = None,
+                           date_from: date | None = None, date_to: date | None = None,
+                           department_id: int | None = None, project_id: int | None = None) -> TransactionListResponseDTO:
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise HTTPException(status_code=400, detail="date_from must be on or before date_to")
+    if workspace.type != WorkspaceTypeEnum.BUSINESS and (department_id is not None or project_id is not None):
+        raise HTTPException(status_code=400, detail="Department and project filters require a business workspace")
     stmt = select(Transaction).where(Transaction.workspace_id == workspace.workspace_id)
     if workspace.type == WorkspaceTypeEnum.BUSINESS:
         membership = await get_workspace_membership(current_user, workspace.workspace_id, db)
         if membership.role != WorkspaceRole.OWNER:
             stmt = stmt.where(Transaction.department_id == membership.department_id)
+        if department_id is not None:
+            assert_department_access(membership, department_id)
+            await find_department_by_id(department_id, workspace, db)
+        if project_id is not None:
+            project = await find_project_by_id(project_id, workspace, True, db)
+            assert_project_access(project, membership)
+    if search is not None and search.strip():
+        stmt = stmt.where(Transaction.description.icontains(search.strip(), autoescape=True))
+    if transaction_type is not None:
+        stmt = stmt.where(Transaction.category.has(Category.type == transaction_type))
+    if category_id is not None:
+        stmt = stmt.where(Transaction.category_id == category_id)
+    if date_from is not None:
+        stmt = stmt.where(Transaction.created_at >= datetime.combine(date_from, time.min))
+    if date_to is not None:
+        stmt = stmt.where(Transaction.created_at <= datetime.combine(date_to, time.max))
+    if department_id is not None:
+        stmt = stmt.where(Transaction.department_id == department_id)
+    if project_id is not None:
+        stmt = stmt.where(Transaction.project_id == project_id)
     # shortcut: offsets can shift during concurrent inserts; use cursors if stable traversal is needed.
     result = await db.execute(
         stmt.order_by(Transaction.created_at.desc(), Transaction.transaction_id.desc())

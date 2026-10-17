@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, HttpUrl, SecretStr
+from pydantic import HttpUrl, SecretStr
 
 class Settings(BaseSettings):
     database_url: str

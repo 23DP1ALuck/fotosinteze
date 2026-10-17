@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import sessionmanager
 
-from app.api.routes import auth, revolut
+from app.api.routes import auth, revolut, business_budgets
 
 from app.api.routes import transactions, dashboard
 from app.api.routes import departments, projects, expenses, categories, workspaces, budgets, accounts
@@ -37,6 +37,7 @@ app.include_router(categories.router)
 app.include_router(workspaces.router)
 app.include_router(accounts.router)
 app.include_router(budgets.router)
+app.include_router(business_budgets.router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.client_url],

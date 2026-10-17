@@ -39,7 +39,7 @@ export async function authenticatedFetch(
     if (!token) return new Response(null, { status: 401 })
   }
   const headers = new Headers(init.headers)
-  const scoped = /^\/(transactions|categories|budgets|dashboards?|statistics|projects|departments)(\/|\?|$)/.test(path)
+  const scoped = /^\/(business-budgets|expenses|accounts|transactions|categories|budgets|dashboards?|statistics|projects|departments|revolut)(\/|\?|$)/.test(path)
   if (scoped) {
     const id = requestedWorkspaceId
     if (id === null || !Number.isSafeInteger(id) || id < 1) throw new Error('Select an accessible workspace before making this request.')
