@@ -2,6 +2,90 @@
 
 This directory contains the Fotosinteze FastAPI backend. It uses async SQLAlchemy, Alembic migrations, JWT authentication, and CORS configuration for the frontend.
 
+## Docker deployment and CD
+
+The backend runs in a Python 3.12 container. The frontend uses a multi-stage
+Node build and an Nginx container. `compose.yml` at the repository root runs both,
+with restart policies and health checks. Nginx serves React routes and proxies
+`/api/*` to the backend, including refresh-cookie path rewriting.
+
+Both CD workflows deploy after a PR into `main` is **merged**, using the MacBook
+runner labelled `self-hosted`, `macOS`, and `fotosinteze-production`. They build
+the corresponding image locally and run `docker compose up --wait`. Backend CD
+stops the old backend and takes a SQLite backup before replacing it. Migrations
+run once in CD before the replacement container starts. Neither CD workflow reruns
+tests; require the existing backend and frontend CI checks and an up-to-date PR
+branch in `main` branch protection. Closing an unmerged PR or pushing directly
+to `main` does not deploy.
+
+### One-time MacBook setup
+
+1. Install and start Docker Desktop or Colima with Docker Compose v2. The runner
+   user must be able to run `docker info` and `docker compose version`. Keep the
+   Docker runtime running, the MacBook plugged in, and automatic sleep disabled.
+2. Register a GitHub self-hosted macOS runner with the custom label
+   `fotosinteze-production`. Install/start its service with `./svc.sh install`
+   and `./svc.sh start` from the runner directory.
+3. Create the persistent data and configuration directory as the runner user:
+
+   ```bash
+   mkdir -p "$HOME/fotosinteze-backend"
+   chmod 700 "$HOME/fotosinteze-backend"
+   ```
+
+   Create `$HOME/fotosinteze-backend/.env`:
+
+   ```dotenv
+   JWT_SECRET=replace-with-a-long-random-secret
+   CLIENT_URL=http://localhost:8080
+   ```
+
+   Restrict it with `chmod 600 "$HOME/fotosinteze-backend/.env"`. Set `CLIENT_URL`
+   to the actual frontend browser origin when using a public domain. Other
+   production settings can also go here. Secrets are injected at runtime and
+   excluded from Docker build contexts.
+4. SQLite lives at `$HOME/fotosinteze-backend/database.sqlite`, mounted into the
+   backend as `/data/database.sqlite`. Compose sets this database URL regardless
+   of an older `DATABASE_URL` in `.env`. An existing database at that host path
+   is preserved. To move another existing database here, stop its writer and use
+   SQLite's backup facility before the first container startup. An empty data
+   directory creates a fresh database. Backups are retained in its `backups/`
+   subdirectory; keep off-device backups as well.
+5. If you used the previous deployment, stop the `com.fotosinteze.backend`
+   LaunchAgent and host Caddy server before starting containers, so ports 8000
+   and 8080 are available. Keep the persistent database and `.env`.
+
+### Run locally on the deployment host
+
+From the repository root, with the production directory prepared:
+
+```bash
+export BACKEND_ENV_FILE="$HOME/fotosinteze-backend/.env"
+export BACKEND_DATA_DIR="$HOME/fotosinteze-backend"
+docker compose build
+docker compose run --rm --no-deps backend alembic upgrade head
+docker compose up -d --wait
+docker compose ps
+docker compose logs --tail=100 backend frontend
+```
+
+The frontend is at `http://localhost:8080`, and the API at
+`http://localhost:8000`. Ports bind to loopback; use an HTTPS reverse proxy or
+tunnel for remote access. No host Node, Python, Nginx, or Caddy service is needed.
+Containers survive the CI job and restart with the Docker daemon unless manually
+stopped. They still depend on the MacBook and Docker runtime being awake/running.
+
+Backend deployments have brief downtime during backup, migration and restart.
+A failed migration leaves the backend stopped; inspect the CD output before
+repairing data and rerunning deployment. There is no automatic
+database downgrade. Frontend and backend update separately and must tolerate the
+brief version mismatch. Old Docker images and SQLite backups are retained for
+manual cleanup; do not delete the persistent data directory.
+
+References: [the deployment example](https://medium.com/@williamtijesuni/deploying-a-fastapi-application-with-ci-cd-pipeline-7641f6ce7c16),
+[Docker Compose health waiting](https://docs.docker.com/reference/cli/docker/compose/up/),
+and [Nginx proxy configuration](https://nginx.org/en/docs/http/ngx_http_proxy_module.html).
+
 ## Requirements
 
 - Python 3.12 or newer
