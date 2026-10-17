@@ -107,5 +107,5 @@ class ExpenseMigrationTests(unittest.TestCase):
         command.upgrade(self.config, 'head')
         with self.engine.connect() as db:
             self.assertIn('workspace_id', {column['name'] for column in inspect(db).get_columns('budgets')})
-            self.assertEqual(db.execute(text('SELECT version_num FROM alembic_version')).scalars().all(), ['e8c031b47f62'])
+            self.assertEqual(db.execute(text('SELECT version_num FROM alembic_version')).scalars().all(), ['f0af51ce271b'])
             self.assertEqual(db.execute(text('PRAGMA foreign_key_check')).all(), [])
