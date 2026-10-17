@@ -2,30 +2,30 @@ import enum
 from datetime import datetime
 from typing import List, TYPE_CHECKING
 
-from sqlalchemy import Enum, String, DateTime, ForeignKey
+from sqlalchemy import Enum, String, DateTime, ForeignKey, ForeignKeyConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 if TYPE_CHECKING:
-    from app.models import User, Category, Account, Department, Project, Expense, Transaction
+    from app.models import User, Category, Account, Department, Project, Expense, Transaction, Budget
 
 
 class WorkspaceTypeEnum(enum.Enum):
-    personal = "PERSONAL"
-    business = "BUSINESS"
+    PERSONAL = "PERSONAL"
+    BUSINESS = "BUSINESS"
 
 
 class WorkspaceRole(enum.Enum):
-    owner = "OWNER"
-    employee = "EMPLOYEE"
+    OWNER = "OWNER"
+    EMPLOYEE = "EMPLOYEE"
 
 class Workspace(Base):
     __tablename__ = "workspaces"
 
     workspace_id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(unique=True)
-    type: Mapped[WorkspaceTypeEnum] = mapped_column(Enum(WorkspaceTypeEnum), default=WorkspaceTypeEnum.personal)
+    type: Mapped[WorkspaceTypeEnum] = mapped_column(Enum(WorkspaceTypeEnum), default=WorkspaceTypeEnum.PERSONAL)
     base_currency: Mapped[str] = mapped_column(String(3), default="EUR")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
@@ -50,19 +50,34 @@ class Workspace(Base):
     expenses: Mapped[List["Expense"]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan",
     )
-    transactions: Mapped["Transaction"] = relationship(
-        back_populates="account",
+    transactions: Mapped[List["Transaction"]] = relationship(
+        back_populates="workspace",
+        cascade="all, delete-orphan"
+    )
+    budgets: Mapped[List["Budget"]] = relationship(
+        back_populates="workspace",
         cascade="all, delete-orphan"
     )
 
 
 class WorkspaceUsers(Base):
     __tablename__ = "workspace_users"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["department_id", "workspace_id"],
+            ["departments.department_id", "departments.workspace_id"],
+            name="fk_workspace_users_department",
+        ),
+    )
 
     user_id: Mapped[int] = mapped_column("user_id", ForeignKey("users.user_id"), primary_key=True)
     workspace_id: Mapped[int] = mapped_column("workspace_id", ForeignKey("workspaces.workspace_id"), primary_key=True)
-    role: Mapped[WorkspaceRole] = mapped_column("role", Enum(WorkspaceRole), default=WorkspaceRole.owner, nullable=False)
+    role: Mapped[WorkspaceRole] = mapped_column("role", Enum(WorkspaceRole), default=WorkspaceRole.OWNER, nullable=False)
+    department_id: Mapped[int | None] = mapped_column(nullable=True, index=True)
     joined_at: Mapped[datetime] = mapped_column("joined_at", DateTime, default=datetime.now, nullable=False)
 
     workspace: Mapped["Workspace"] = relationship(back_populates="memberships")
     user: Mapped["User"] = relationship(back_populates="workspace_memberships")
+    department: Mapped["Department | None"] = relationship(
+        primaryjoin="and_(foreign(WorkspaceUsers.department_id) == Department.department_id, WorkspaceUsers.workspace_id == Department.workspace_id)",
+    )

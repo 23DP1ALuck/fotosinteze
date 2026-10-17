@@ -1,7 +1,8 @@
 import decimal
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class CreateAccountResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     account_id: int
     name: str
     currency: str

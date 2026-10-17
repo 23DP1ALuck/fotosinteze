@@ -1,5 +1,5 @@
 from app.models.user import User
-from app.models.workspace import Workspace, WorkspaceUsers
+from app.models.workspace import Workspace, WorkspaceUsers, WorkspaceRole
 from app.models.auth_sessions import AuthSession
 from app.models.category import Category
 from app.models.revolut_connection import RevolutConnection
@@ -8,6 +8,7 @@ from app.models.account import Account
 from app.models.projects import Project
 from app.models.expenses import Expense
 from app.models.transaction import Transaction
+from app.models.budget import Budget, BudgetPeriod
 
 __all__ = [
     "User",
@@ -17,8 +18,11 @@ __all__ = [
     "RevolutConnection",
     "Department",
     "WorkspaceUsers",
+    "WorkspaceRole",
     "Account",
     "Project",
     "Expense",
     "Transaction",
+    "Budget",
+    "BudgetPeriod",
 ]

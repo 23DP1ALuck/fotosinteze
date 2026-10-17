@@ -27,6 +27,7 @@ async def register(create_user_request: CreateUserDTO, db: AsyncSession = Depend
     result = await db.execute(stmt)
     exists = result.scalar()
     if not exists:
+        # Store a password hash instead of the original password.
         hashed_password = bcrypt.hashpw(create_user_request.password.encode(), bcrypt.gensalt())
         user = User(
             display_name=create_user_request.display_name,
@@ -35,11 +36,12 @@ async def register(create_user_request: CreateUserDTO, db: AsyncSession = Depend
         )
 
         db.add(user)
+        # Get the generated user ID before creating the workspace membership.
         await db.flush()
 
         personal_workspace = Workspace( # user has his own personal workspace after successful registration
             name=f"{user.display_name} Personal Workspace",
-            type=WorkspaceTypeEnum.personal,
+            type=WorkspaceTypeEnum.PERSONAL,
             )
 
         db.add(personal_workspace)
@@ -49,7 +51,7 @@ async def register(create_user_request: CreateUserDTO, db: AsyncSession = Depend
         workspace_users = WorkspaceUsers(
             user_id=user.user_id,
             workspace_id=personal_workspace.workspace_id,
-            role=WorkspaceRole.owner, # user is an owner in its personal workspace by default
+            role=WorkspaceRole.OWNER, # user is an owner in its personal workspace by default
         )
         db.add(workspace_users)
 
@@ -75,6 +77,7 @@ async def login(login_user_request: LoginUserRequestDTO, db: AsyncSession = Depe
     # compare passwords only if user was found
     if not bcrypt.checkpw(login_user_request.password.encode(), exists.password.encode()):
         raise HTTPException(status_code=401, detail="Incorrect password")
+    # Both tokens belong to the same session; the refresh token also has a unique ID.
     refresh_jti = str(uuid4())
     session = await create_session(exists.user_id, refresh_jti, db)
     access_token = jwt.encode({
@@ -99,6 +102,7 @@ async def login(login_user_request: LoginUserRequestDTO, db: AsyncSession = Depe
     return response
 
 async def create_session(user_id: int, jti: str, db: AsyncSession = Depends(get_db_session)) -> AuthSession:
+    # Keep the refresh token's ID and expiry in the database so the session can be revoked.
     session_id = str(uuid4())
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
     auth_session = AuthSession(
@@ -192,6 +196,7 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db_se
     return LoginUserResponseDTO(access_token=new_access_token, refresh_token=new_refresh_token)
 
 async def logout(refresh_token: str, db: AsyncSession = Depends(get_db_session)) -> dict:
+    # Identify the session from a signed refresh token before revoking it.
     try:
         payload: dict = jwt.decode(
             refresh_token,
@@ -217,6 +222,7 @@ async def logout(refresh_token: str, db: AsyncSession = Depends(get_db_session))
     session = result.scalar()
     if not session:
         raise HTTPException(status_code=401, detail="Invalid session")
+    # Repeated logout requests for an already revoked session still succeed.
     if session.revoked_at is not None:
         return {"detail": "Successfully logged out"}
 

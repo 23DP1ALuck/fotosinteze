@@ -130,29 +130,6 @@ h1,
 h2 {
   font-family: var(--heading);
   font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
 }
 
 code,
@@ -254,3 +231,32 @@ code {
     @apply bg-background text-foreground;}
   html {
     @apply font-sans;}}
+
+.landing-page {
+  color-scheme: light;
+}
+
+/* Layered so Tailwind utilities on the landing page can override these. */
+@layer base {
+  html:has(.landing-page) {
+    scroll-behavior: smooth;
+  }
+
+  .landing-page a:focus-visible {
+    outline: 2px solid #213d33;
+    outline-offset: 3px;
+  }
+
+  .landing-page h1,
+  .landing-page h2 {
+    color: #213d33;
+  }
+
+  .landing-page h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 6vw, 4.25rem);
+    letter-spacing: -0.04em;
+    line-height: 1.08;
+    font-weight: 500;
+  }
+}

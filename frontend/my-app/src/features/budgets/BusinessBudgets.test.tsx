@@ -1,0 +1,85 @@
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, expect, it, vi } from 'vitest'
+import { clearSession, setAccessToken } from '@/features/auth/storage'
+import { BusinessBudgets } from './BusinessBudgets'
+
+const budget = { id: 1, workspace_id: 42, name: 'Travel plan', target_type: 'CATEGORY', target_id: 9, target_name: 'Travel', limit_amount: '100.00', currency: 'EUR', period_start: '2026-10-01', period_end: '2026-11-01', period_length: 'MONTHLY', duration_days: null, spent: '85.00', remaining: '15.00', status: 'WARNING' }
+const targets = { CATEGORY: [{ id: 9, name: 'Travel' }], DEPARTMENT: [{ id: 7, name: 'Design' }], PROJECT: [{ id: 10, name: 'Launch' }] }
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); clearSession() })
+function setup(owner = true) {
+  setAccessToken(`header.${btoa(JSON.stringify({ exp: Date.now()/1000+3600 }))}.signature`)
+  const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).endsWith('/workspaces')) return Response.json([{ id: 42, name: 'Acme', type: 'BUSINESS', role: 'OWNER' }])
+    expect(new Headers(init?.headers).get('Workspace-ID')).toBe('42')
+    if (init?.method === 'DELETE') return new Response(null, { status: 204 })
+    if (init?.method === 'POST' || init?.method === 'PUT') {
+      const body = JSON.parse(String(init.body))
+      return Response.json({ ...budget, ...body, id: init.method === 'POST' ? 2 : 1, target_name: targets[body.target_type as keyof typeof targets][0].name })
+    }
+    return Response.json({ workspace_id: 42, can_manage: owner, progress_scope: owner ? 'WORKSPACE' : 'ASSIGNED_DEPARTMENT', targets: owner ? targets : {}, budgets: [budget] })
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+it('saves a project target, edits a budget and deletes only after confirmation', async () => {
+  const fetchMock = setup()
+  const user = userEvent.setup()
+  render(<BusinessBudgets workspaceId={42} onConnect={vi.fn()} />)
+  expect(await screen.findByText('Almost there')).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Create budget' }))
+  let form = within(screen.getByRole('form', { name: 'Create business budget' }))
+  await user.type(form.getByLabelText('Budget name'), 'Launch budget')
+  await user.type(form.getByLabelText('Limit'), '250')
+  fireEvent.input(form.getByLabelText('Period start'), { target: { value: '2026-10-01' } })
+  await user.selectOptions(form.getByLabelText('Target entity'), '9')
+  await user.selectOptions(form.getByLabelText('Target type'), 'PROJECT')
+  expect(form.getByLabelText('Target entity')).toHaveValue('')
+  await user.selectOptions(form.getByLabelText('Target entity'), '10')
+  await user.selectOptions(form.getByLabelText('Period'), 'CUSTOM')
+  await user.clear(form.getByLabelText('Duration (days)'))
+  await user.type(form.getByLabelText('Duration (days)'), '14')
+  await user.click(form.getByRole('button', { name: 'Save budget' }))
+  expect(await screen.findByText('Budget created.')).toBeInTheDocument()
+  const call = fetchMock.mock.calls.find(([,init]) => init?.method === 'POST')
+  expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ target_type: 'PROJECT', target_id: 10, limit_amount: '250', period_start: '2026-10-01', period_length: 'CUSTOM', duration_days: 14 })
+  await user.click(screen.getByRole('button', { name: 'Edit Travel plan' }))
+  form = within(screen.getByRole('form', { name: 'Edit business budget' }))
+  await user.selectOptions(form.getByLabelText('Target type'), 'DEPARTMENT')
+  await user.selectOptions(form.getByLabelText('Target entity'), '7')
+  await user.click(form.getByRole('button', { name: 'Save budget' }))
+  expect(await screen.findByText('Budget updated.')).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Delete Travel plan' }))
+  expect(fetchMock.mock.calls.some(([,init]) => init?.method === 'DELETE')).toBe(false)
+  await user.click(screen.getByRole('button', { name: 'Confirm delete' }))
+  expect(await screen.findByText('Budget deleted.')).toBeInTheDocument()
+  expect(screen.queryByRole('article', { name: 'Budget Travel plan' })).not.toBeInTheDocument()
+})
+it('shows employees progress without management controls', async () => {
+  setup(false)
+  render(<BusinessBudgets workspaceId={42} onConnect={vi.fn()} />)
+  expect(await screen.findByText('Almost there')).toBeInTheDocument()
+  expect(screen.getByText(/Read-only progress/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Create budget' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Edit Travel plan' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Delete Travel plan' })).not.toBeInTheDocument()
+})
+it('retains a failed save and its input without claiming success', async () => {
+  const fetchMock = setup()
+  const original = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (url, init) => init?.method === 'PUT' ? Response.json({ detail: 'Workspace owner required' }, { status: 403 }) : original(url, init))
+  render(<BusinessBudgets workspaceId={42} onConnect={vi.fn()} />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit Travel plan' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Save budget' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Workspace owner required')
+  expect(screen.getByLabelText('Budget name')).toHaveValue('Travel plan')
+  expect(screen.queryByText('Budget updated.')).not.toBeInTheDocument()
+})
+it('offers accessible business workspaces when no workspace is connected', async () => {
+  setup()
+  const onConnect = vi.fn()
+  render(<BusinessBudgets onConnect={onConnect} />)
+  await screen.findByRole('option', { name: 'Acme' })
+  await userEvent.selectOptions(screen.getByLabelText('Business workspace'), '42')
+  expect(onConnect).toHaveBeenCalledWith(42)
+})

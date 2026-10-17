@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 from app.database import Base
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import BigInteger, CHAR, String, DECIMAL, ForeignKey
+from sqlalchemy import BigInteger, Integer, CHAR, String, DECIMAL, ForeignKey
 
 if TYPE_CHECKING:
     from app.models import Workspace, RevolutConnection, Transaction
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 class Account(Base):
     __tablename__ = "accounts"
 
-    account_id: Mapped[int] = mapped_column(BigInteger,primary_key=True, autoincrement=True)
+    account_id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"),primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     currency: Mapped[str] = mapped_column(CHAR(3), nullable=False)
     balance: Mapped[Decimal] = mapped_column(DECIMAL(10,2), nullable=False)
@@ -30,7 +30,7 @@ class Account(Base):
 
     connection: Mapped["RevolutConnection"] = relationship(back_populates="account")
 
-    transactions: Mapped["Transaction"] = relationship(
+    transactions: Mapped[list["Transaction"]] = relationship(
         back_populates="account",
         cascade="all, delete-orphan"
     )

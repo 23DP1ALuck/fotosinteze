@@ -7,7 +7,7 @@ from sqlalchemy import String, Enum, ForeignKey
 from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
-    from app.models import Workspace, Expense, Transaction
+    from app.models import Budget, Workspace, Expense, Transaction
 
 
 class CategoryType(enum.Enum):
@@ -25,4 +25,5 @@ class Category(Base):
     workspace: Mapped["Workspace"] = relationship(back_populates="categories")
     expenses: Mapped[List["Expense"]] = relationship(back_populates="category")
 
-    transaction: Mapped["Transaction"] = relationship(back_populates="account")
+    transactions: Mapped[List["Transaction"]] = relationship(back_populates="category")
+    budgets: Mapped[List["Budget"]] = relationship(back_populates="category")

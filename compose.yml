@@ -1,0 +1,38 @@
+name: fotosinteze
+
+services:
+  backend:
+    build: ./backend
+    image: fotosinteze-backend:latest
+    restart: unless-stopped
+    env_file:
+      - ${BACKEND_ENV_FILE:?Set BACKEND_ENV_FILE to the production .env path}
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////data/database.sqlite
+      ECHO_SQL: "false"
+    volumes:
+      - type: bind
+        source: ${BACKEND_DATA_DIR:?Set BACKEND_DATA_DIR to the persistent data directory}
+        target: /data
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+
+  frontend:
+    build: ./frontend/my-app
+    image: fotosinteze-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 3s
+      retries: 6

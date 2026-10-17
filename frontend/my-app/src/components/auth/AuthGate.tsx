@@ -33,7 +33,7 @@ function GuestRoute() {
   }
 
   if (status === 'authenticated') {
-    return <Navigate to="/" replace />
+    return <Navigate to="/app" replace />
   }
 
   return <Outlet />
