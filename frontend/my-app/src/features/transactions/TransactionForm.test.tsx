@@ -112,3 +112,36 @@ it('does not submit a form belonging to a workspace that is no longer active', a
   await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
   expect(fetch).not.toHaveBeenCalled()
 })
+
+
+it('preserves a workspace-wide project when department changes and clears only incompatible projects', async () => {
+  const catalog = { workspaceId: 7, projects: [
+    { id: 10, workspace_id: 7, name: 'Workspace plan', department_ids: [], status: null, start_date: null, end_date: null },
+    { id: 11, workspace_id: 7, name: 'Design plan', department_ids: [8], status: null, start_date: null, end_date: null },
+  ], departments: [{ id: 8, workspace_id: 7, name: 'Design' }, { id: 9, workspace_id: 7, name: 'Sales' }], loading: false, error: '', refresh() {}, upsert() {}, remove() {} }
+  render(<TransactionForm workspaceId={7} type="expense" options={options} catalog={catalog} onClose={() => {}} onSaved={() => {}} />)
+  await userEvent.selectOptions(screen.getByLabelText('Project'), '10')
+  await userEvent.selectOptions(screen.getByLabelText('Department'), '8')
+  expect(screen.getByLabelText('Project')).toHaveValue('10')
+  await userEvent.selectOptions(screen.getByLabelText('Project'), '11')
+  await userEvent.selectOptions(screen.getByLabelText('Department'), '9')
+  expect(screen.getByLabelText('Project')).toHaveValue('')
+  expect(screen.queryByRole('option', { name: 'Design plan' })).not.toBeInTheDocument()
+  expect(screen.getByRole('option', { name: 'Workspace plan' })).toBeInTheDocument()
+})
+
+
+it('clears a project removed from the catalog before submitting the transaction', async () => {
+  const catalog = { workspaceId: 7, projects: [{ id: 10, workspace_id: 7, name: 'Workspace plan', department_ids: [], status: null, start_date: null, end_date: null }], departments: [], loading: false, error: '', refresh() {}, upsert() {}, remove() {} }
+  const saved = vi.fn()
+  const { rerender } = render(<TransactionForm workspaceId={7} type="expense" options={options} catalog={catalog} onClose={() => {}} onSaved={saved} />)
+  await userEvent.selectOptions(screen.getByLabelText('Account'), '12')
+  await userEvent.selectOptions(screen.getByLabelText('Category'), '4')
+  await userEvent.type(screen.getByLabelText('Amount (EUR)'), '25')
+  await userEvent.selectOptions(screen.getByLabelText('Project'), '10')
+  rerender(<TransactionForm workspaceId={7} type="expense" options={options} catalog={{ ...catalog, projects: [] }} onClose={() => {}} onSaved={saved} />)
+  await userEvent.click(screen.getByRole('button', { name: 'Save expense' }))
+  await waitFor(() => expect(saved).toHaveBeenCalledTimes(1))
+  const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))
+  expect(body.project_id).toBeNull()
+})

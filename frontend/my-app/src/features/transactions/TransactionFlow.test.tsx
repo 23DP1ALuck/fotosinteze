@@ -139,3 +139,43 @@ it('identifies incomplete budget spending and excludes other currencies', async 
   expect(screen.queryByText('On track')).not.toBeInTheDocument()
   expect(screen.getAllByText('Partial data')).toHaveLength(2)
 })
+
+
+it('makes an owner-created project available in transaction and budget forms without reloading', async () => {
+  let projects = [{ id: 10, workspace_id: 42, name: 'Website', status: null, start_date: null, end_date: null, department_ids: [8] }]
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    if (String(url).endsWith('/projects')) {
+      if (init?.method === 'POST') {
+        const created = { ...projects[0], ...JSON.parse(String(init.body)), id: 11 }
+        projects = [...projects, created]
+        return Response.json(created, { status: 201 })
+      }
+      return Response.json(projects)
+    }
+    if (String(url).endsWith('/business-budgets')) return Response.json({ workspace_id: 42, can_manage: true, progress_scope: 'WORKSPACE', budgets: [], targets: { CATEGORY: [], DEPARTMENT: [{ id: 8, name: 'Design' }], PROJECT: [{ id: 10, name: 'Website' }] } })
+    return fallback(url, init)
+  }))
+  mount()
+  const user = userEvent.setup()
+  await user.click(await screen.findByRole('button', { name: 'Switch workspace, Personal' }))
+  await user.click(screen.getByRole('button', { name: 'Switch to Studio' }))
+  await user.click(screen.getByRole('button', { name: 'Projects' }))
+  await user.click(await screen.findByRole('button', { name: 'Add project' }))
+  const projectDialog = within(screen.getByRole('dialog', { name: 'Add project' }))
+  await user.type(projectDialog.getByLabelText('Project name'), 'Launch campaign')
+  await user.click(projectDialog.getByRole('button', { name: 'Add project' }))
+  await screen.findByRole('button', { name: 'Edit Launch campaign' })
+  await user.click(screen.getByRole('button', { name: 'Add expense' }))
+  const transactionDialog = within(screen.getByRole('dialog', { name: 'Add expense' }))
+  expect(await transactionDialog.findByRole('option', { name: 'Launch campaign' })).toBeInTheDocument()
+  await user.selectOptions(transactionDialog.getByLabelText('Project'), '11')
+  await user.click(transactionDialog.getByRole('button', { name: 'Close transaction form' }))
+  await user.click(screen.getByRole('button', { name: 'Budgets' }))
+  await user.click(await screen.findByRole('button', { name: 'Create budget' }))
+  const budgetForm = within(screen.getByRole('form', { name: 'Create business budget' }))
+  await user.selectOptions(budgetForm.getByLabelText('Target type'), 'PROJECT')
+  expect(budgetForm.getByRole('option', { name: 'Launch campaign' })).toBeInTheDocument()
+  await user.selectOptions(budgetForm.getByLabelText('Project'), '11')
+  expect(budgetForm.getByLabelText('Project')).toHaveValue('11')
+})
