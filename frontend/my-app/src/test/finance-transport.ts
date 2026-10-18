@@ -30,7 +30,14 @@ export function createFinanceTransport() {
     if (path === '/dashboard') return Response.json({ workspace_id: workspaceId, currency: 'EUR', period_start: '2026-10-01', period_end: '2026-11-01', expenses: expenses.toFixed(2), ...(business ? { revenue: income.toFixed(2), profit: (income - expenses).toFixed(2), spending_by_category: [], spending_by_department: [], spending_by_project: [] } : { income: income.toFixed(2), savings: (income - expenses).toFixed(2), balance: balance.toFixed(2), recent_transactions: list.slice(0, 10) }) })
     if (path === '/transactions' && method === 'GET') {
       const offset = Number(url.searchParams.get('offset') || 0)
-      return Response.json({ items: list.slice(offset, offset + 50), offset, limit: 50, has_more: list.length > offset + 50 })
+      const filtered = list.filter(row => {
+        const category = categories(workspaceId).find(item => item.category_id === row.category_id)
+        return row.description.toLowerCase().includes((url.searchParams.get('search') || '').trim().toLowerCase()) &&
+          (!url.searchParams.has('type') || category?.type === url.searchParams.get('type')) &&
+          (!url.searchParams.has('source') || (Array.isArray(row.source) ? row.source[0] : row.source) === url.searchParams.get('source')) &&
+          (['category_id', 'department_id', 'project_id'] as const).every(key => !url.searchParams.has(key) || row[key] === Number(url.searchParams.get(key)))
+      })
+      return Response.json({ items: filtered.slice(offset, offset + 50), offset, limit: 50, has_more: filtered.length > offset + 50 })
     }
     if ((path === '/transactions' && method === 'POST') || (/^\/transactions\/\d+$/.test(path) && method === 'PUT')) {
       if (state.failSave) return Response.json({ detail: 'Account not found' }, { status: 404 })

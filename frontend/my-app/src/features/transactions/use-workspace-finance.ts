@@ -3,12 +3,12 @@ import { listCategories } from '@/features/categories/api'
 import type { WorkspaceTransaction } from '@/features/workspaces/TransactionsView'
 import type { ProjectCatalog } from '@/features/projects/use-project-catalog'
 import { workspaceQueryKey } from '@/features/workspaces/workspace-state'
-import { listTransactionAccounts, listTransactions, loadTransactionDashboard } from './api'
+import { listTransactionAccounts, listTransactions, loadTransactionDashboard, type TransactionFilters } from './api'
 
-export function useWorkspaceFinance(workspaceId: number, enabled: boolean, catalog: ProjectCatalog) {
+export function useWorkspaceFinance(workspaceId: number, enabled: boolean, catalog: ProjectCatalog, filters: TransactionFilters = {}) {
   const client = useQueryClient()
   const transactionKey = workspaceQueryKey('transactions', workspaceId)
-  const transactionQuery = useInfiniteQuery({ queryKey: transactionKey, initialPageParam: 0, queryFn: ({ signal, pageParam }) => listTransactions(workspaceId, pageParam, signal), getNextPageParam: page => page.has_more ? page.offset + page.limit : undefined, enabled })
+  const transactionQuery = useInfiniteQuery({ queryKey: [...transactionKey, filters], initialPageParam: 0, queryFn: ({ signal, pageParam }) => listTransactions(workspaceId, pageParam, signal, filters), getNextPageParam: page => page.has_more ? page.offset + page.limit : undefined, enabled })
   const dashboardQuery = useQuery({ queryKey: workspaceQueryKey('dashboard', workspaceId), queryFn: ({ signal }) => loadTransactionDashboard(workspaceId, signal), enabled })
   const accountQuery = useQuery({ queryKey: workspaceQueryKey('accounts', workspaceId), queryFn: ({ signal }) => listTransactionAccounts(workspaceId, signal), enabled })
   const categoryQuery = useQuery({ queryKey: workspaceQueryKey('categories', workspaceId), queryFn: ({ signal }) => listCategories(workspaceId, signal), enabled })

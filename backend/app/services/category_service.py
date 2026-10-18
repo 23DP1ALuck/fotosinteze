@@ -14,8 +14,8 @@ async def get_categories(current_user: dict[str, str], active_workspace: Workspa
     membership = {}
     if active_workspace.type == WorkspaceTypeEnum.BUSINESS:
         membership = await get_workspace_membership(
-            current_user, active_workspace.workspace_id, db, True
-        )  # in business workspace only owner can create a category, so owner_only = True
+            current_user, active_workspace.workspace_id, db
+        )
     categories_stmt: Select = (select(Category)
                                .where(
         Category.workspace_id == membership.workspace_id
@@ -41,8 +41,8 @@ async def get_category_by_id(
     membership = {}
     if active_workspace.type == WorkspaceTypeEnum.BUSINESS:
         membership = await get_workspace_membership(
-            current_user, active_workspace.workspace_id, db, True
-        )  # in business workspace only owner can create a category, so owner_only = True
+            current_user, active_workspace.workspace_id, db
+        )
     workspace_id = membership.workspace_id if membership else active_workspace.workspace_id
     category = await db.scalar(
         select(Category).where(

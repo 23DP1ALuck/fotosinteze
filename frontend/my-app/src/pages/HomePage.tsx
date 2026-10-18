@@ -20,7 +20,7 @@ import { ExpenseRequests } from '@/features/expenses/ExpenseRequests'
 import { RevolutConnect } from '@/features/revolut/RevolutConnect'
 import { TransactionForm } from '@/features/transactions/TransactionForm'
 import { useWorkspaceFinance } from '@/features/transactions/use-workspace-finance'
-import type { ApiTransaction } from '@/features/transactions/api'
+import type { ApiTransaction, TransactionFilters } from '@/features/transactions/api'
 
 const navigation = ['Dashboard', 'Transactions', 'Budgets', 'Categories', 'Statistics', 'Revolut'] as const
 const formatDate = (date: string) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${date}T12:00:00`))
@@ -42,7 +42,8 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   const backendWorkspaceId = Number(workspace.id)
   const projectCatalog = useProjectCatalog(backendWorkspaceId, isBusiness && active)
   const canManageProjects = workspace.role !== 'EMPLOYEE'
-  const finance = useWorkspaceFinance(backendWorkspaceId, active, projectCatalog)
+  const [transactionFilters, setTransactionFilters] = useState<TransactionFilters>({})
+  const finance = useWorkspaceFinance(backendWorkspaceId, active, projectCatalog, transactionFilters)
   const [transactionAction, setTransactionAction] = useState<{ type: 'income' | 'expense'; transaction?: ApiTransaction } | null>(null)
   const [budgetTargets, setBudgetTargets] = useState<Record<string, { departmentId: string; projectId: string }>>({})
   const [budgetDraft, setBudgetDraft] = useState<typeof budgetTargets>({})
@@ -69,7 +70,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   const initials = displayName.split(' ').map((word) => word[0]).slice(0, 2).join('').toUpperCase()
   const periodLabel = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(summary ? new Date(`${summary.period_start}T12:00:00`) : new Date())
 
-  function navigate(next: string) { setView(next); setMobileMenu(false) }
+  function navigate(next: string) { if (next !== 'Transactions') setTransactionFilters({}); setView(next); setMobileMenu(false) }
   function connectBackendWorkspace() { setNotice('Use the workspace switcher to choose another accessible workspace.') }
   function openDialog(type: 'profile' | 'budget' | 'transaction', entry: 'income' | 'expense' = 'income') {
     if (type === 'transaction') { setTransactionAction({ type: entry }); return }
@@ -149,11 +150,11 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       </section><div className="my-[25px] grid grid-cols-[minmax(0,1.92fr)_minmax(270px,1fr)] gap-6 max-[1200px]:grid-cols-[minmax(0,1.6fr)_minmax(235px,1fr)] max-[1200px]:gap-[18px] max-[900px]:grid-cols-1 min-[1600px]:my-[30px] min-[1600px]:gap-[30px]">{renderChart()}{renderBudgets()}</div></>}
       {!isBusiness && view === 'Dashboard' && !finance.loading && !finance.error && renderTransactions()}
       {active && isBusiness && (view === 'Dashboard' || view === 'Statistics') && <BusinessDashboard finance={finance} workspaceName={workspace.name} role={workspace.role ?? 'EMPLOYEE'} onViewTransactions={() => navigate('Transactions')} showRecent={view === 'Dashboard'} />}
-      {view === 'Transactions' && !finance.loading && !finance.error && <TransactionsView transactions={transactions} income={income} expenses={expenses} workspaceName={workspace.name} workspaceKind={workspace.kind} currency={currency} onEdit={editTransaction} />}
+      {view === 'Transactions' && <TransactionsView transactions={transactions} income={income} expenses={expenses} workspaceName={workspace.name} workspaceKind={workspace.kind} currency={currency} onEdit={editTransaction} loading={finance.loading} error={finance.error} hasMore={finance.hasMore} filterOptions={{ categories: finance.options.categories, departments: projectCatalog.departments, projects: projectCatalog.projects }} onFilterChange={next => setTransactionFilters(previous => ({ ...previous, ...next }))} />}
       {view === 'Transactions' && finance.hasMore && <button type="button" disabled={finance.loadingMore} onClick={finance.loadMore} className="mt-5 rounded-xl bg-[#eaf0e6] px-5 py-3 text-sm disabled:opacity-50">{finance.loadingMore ? 'Loading…' : 'Load more transactions'}</button>}
       {isBusiness && view === 'Expense requests' && <ExpenseRequests key={backendWorkspaceId} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} catalog={projectCatalog} onApproved={() => finance.refresh()} />}
       {active && view === 'Budgets' && (isBusiness ? <BusinessBudgets key={backendWorkspaceId} workspaceId={backendWorkspaceId} catalog={projectCatalog} onConnect={connectBackendWorkspace} /> : renderBudgets())}
-      {active && view === 'Categories' && <CategoryManager workspaceName={workspace.name} workspaceKind={workspace.kind} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} />}
+      {active && view === 'Categories' && <CategoryManager canManage={!isBusiness || workspace.role === 'OWNER'} workspaceName={workspace.name} workspaceKind={workspace.kind} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} />}
       {active && !isBusiness && (view === 'Dashboard' || view === 'Revolut') && <RevolutConnect key={backendWorkspaceId} workspaceId={backendWorkspaceId} />}
 
       {active && isBusiness && view === 'Projects' && <ProjectManager catalog={projectCatalog} workspaceName={workspace.name} canManage={canManageProjects} />}

@@ -114,7 +114,7 @@ it('does not submit a form belonging to a workspace that is no longer active', a
 })
 
 
-it('preserves a workspace-wide project when department changes and clears only incompatible projects', async () => {
+it('offers workspace-wide projects only without a department and clears incompatible selections', async () => {
   const catalog = { workspaceId: 7, projects: [
     { id: 10, workspace_id: 7, name: 'Workspace plan', department_ids: [], status: null, start_date: null, end_date: null },
     { id: 11, workspace_id: 7, name: 'Design plan', department_ids: [8], status: null, start_date: null, end_date: null },
@@ -122,11 +122,13 @@ it('preserves a workspace-wide project when department changes and clears only i
   render(<TransactionForm workspaceId={7} type="expense" options={options} catalog={catalog} onClose={() => {}} onSaved={() => {}} />)
   await userEvent.selectOptions(screen.getByLabelText('Project'), '10')
   await userEvent.selectOptions(screen.getByLabelText('Department'), '8')
-  expect(screen.getByLabelText('Project')).toHaveValue('10')
+  expect(screen.getByLabelText('Project')).toHaveValue('')
+  expect(screen.queryByRole('option', { name: 'Workspace plan' })).not.toBeInTheDocument()
   await userEvent.selectOptions(screen.getByLabelText('Project'), '11')
   await userEvent.selectOptions(screen.getByLabelText('Department'), '9')
   expect(screen.getByLabelText('Project')).toHaveValue('')
   expect(screen.queryByRole('option', { name: 'Design plan' })).not.toBeInTheDocument()
+  await userEvent.selectOptions(screen.getByLabelText('Department'), '')
   expect(screen.getByRole('option', { name: 'Workspace plan' })).toBeInTheDocument()
 })
 

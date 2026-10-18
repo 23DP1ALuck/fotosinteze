@@ -179,3 +179,83 @@ it('makes an owner-created project available in transaction and budget forms wit
   await user.selectOptions(budgetForm.getByLabelText('Project'), '11')
   expect(budgetForm.getByLabelText('Project')).toHaveValue('11')
 })
+
+it('combines history filters before pagination and resets them when cleared', async () => {
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  const base = { transaction_id: 1, workspace_id: 7, amount: '12.00', currency: 'EUR', description: 'Recent', source: 'MANUAL', account_id: 12, category_id: 4, department_id: null, project_id: null, expense_id: null, created_at: '2026-10-17T12:00:00', updated_at: '2026-10-17T12:00:00' }
+  const savedRows = Array.from({ length: 51 }, (_, i) => ({ ...base, transaction_id: i + 1, description: i === 50 ? 'Old train ticket' : `Recent ${i}`, category_id: i === 50 ? 7 : 4, source: i === 50 ? 'BANK' : 'MANUAL' }))
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    if (String(url).includes('/transactions?')) {
+      const params = new URL(String(url), 'http://localhost').searchParams
+      const offset = Number(params.get('offset'))
+      const matches = savedRows.filter(row => row.description.toLowerCase().includes((params.get('search') ?? '').trim().toLowerCase()) &&
+        (!params.has('category_id') || row.category_id === Number(params.get('category_id'))) &&
+        (!params.has('source') || row.source === params.get('source')) &&
+        (!params.has('type') || params.get('type') === 'EXPENSE'))
+      return Response.json({ items: matches.slice(offset, offset + 50), limit: 50, offset, has_more: matches.length > offset + 50 })
+    }
+    return fallback(url, init)
+  }))
+  mount()
+  await userEvent.click(await screen.findByRole('button', { name: 'Transactions' }))
+  await screen.findByRole('button', { name: 'Edit Recent 0' })
+  await userEvent.selectOptions(screen.getByLabelText('Filter by source'), 'Revolut')
+  expect(await screen.findByRole('button', { name: 'Edit Old train ticket' })).toBeInTheDocument()
+  await userEvent.selectOptions(screen.getByLabelText('Filter by category'), '7')
+  await userEvent.click(screen.getByRole('button', { name: 'Expenses' }))
+  await userEvent.type(screen.getByLabelText('Search personal transactions'), 'Old train ticket')
+  expect(await screen.findByRole('button', { name: 'Edit Old train ticket' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Load more transactions' })).not.toBeInTheDocument()
+  await userEvent.clear(screen.getByLabelText('Search personal transactions'))
+  await userEvent.selectOptions(screen.getByLabelText('Filter by source'), 'All sources')
+  await userEvent.selectOptions(screen.getByLabelText('Filter by category'), 'All categories')
+  await userEvent.click(screen.getByRole('button', { name: 'All' }))
+  expect(await screen.findByRole('button', { name: 'Edit Recent 0' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Load more transactions' })).toBeInTheDocument()
+})
+
+it('refreshes dashboard totals when changing a category type', async () => {
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  let changed = false
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    if (String(url).endsWith('/categories/4') && init?.method === 'PUT') {
+      changed = true
+      return Response.json({ category_id: 4, workspace_id: 7, name: 'Groceries', type: 'INCOME' })
+    }
+    const response = await fallback(url, init)
+    if (String(url).endsWith('/categories') && changed) return Response.json((await response.json()).map((row: { category_id: number }) => row.category_id === 4 ? { ...row, type: 'INCOME' } : row))
+    if (String(url).endsWith('/dashboard') && changed) return Response.json({ ...await response.json(), income: '3228.54', expenses: '1813.81', savings: '1414.73' })
+    return response
+  }))
+  mount()
+  await screen.findByRole('region', { name: 'Monthly overview' })
+  await userEvent.click(screen.getByRole('button', { name: 'Categories' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit Groceries' }))
+  const modal = within(screen.getByRole('dialog', { name: 'Edit category' }))
+  await userEvent.selectOptions(modal.getByLabelText('Type'), 'income')
+  await userEvent.click(modal.getByRole('button', { name: 'Save changes' }))
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit category' })).not.toBeInTheDocument())
+  await userEvent.click(screen.getByRole('button', { name: 'Dashboard' }))
+  expect(await within(screen.getByRole('region', { name: 'Monthly overview' })).findByText('€3,228.54')).toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Monthly overview' })).toHaveTextContent('€1,813.81')
+  expect(screen.getByRole('row', { name: /Rimi.*28.54/ })).toHaveTextContent('+ €28.54')
+})
+
+it('lets an employee browse categories and save a transaction without showing category write controls', async () => {
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => String(url).endsWith('/workspaces') ? Response.json([{ id: 42, name: 'Studio', type: 'BUSINESS', role: 'EMPLOYEE' }]) : fallback(url, init)))
+  mount()
+  await userEvent.click(await screen.findByRole('button', { name: 'Categories' }))
+  await screen.findByText('Groceries')
+  expect(screen.queryByRole('button', { name: 'Create category' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Edit Groceries' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Add expense' }))
+  const modal = within(screen.getByRole('dialog', { name: 'Add expense' }))
+  await waitFor(() => expect(modal.getByLabelText('Account')).toBeEnabled())
+  await userEvent.selectOptions(modal.getByLabelText('Account'), '13')
+  await userEvent.selectOptions(modal.getByLabelText('Category'), '4')
+  await userEvent.type(modal.getByLabelText('Amount (EUR)'), '12')
+  await userEvent.click(modal.getByRole('button', { name: 'Save expense' }))
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add expense' })).not.toBeInTheDocument())
+  expect(screen.getByRole('status')).toHaveTextContent('Transaction saved.')
+})

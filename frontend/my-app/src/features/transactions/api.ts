@@ -45,8 +45,11 @@ function parseTransaction(value: unknown, workspaceId: number) {
   if (!parsed.success || parsed.data.workspace_id !== workspaceId) throw new Error('The server returned unexpected transaction data. Please refresh and try again.')
   return parsed.data
 }
-export async function listTransactions(workspaceId: number, offset: number, signal?: AbortSignal) {
-  const parsed = pageSchema.safeParse(await (await request(workspaceId, `/transactions?limit=50&offset=${offset}`, { signal })).json())
+export type TransactionFilters = { search?: string; type?: 'INCOME' | 'EXPENSE'; category_id?: number; department_id?: number; project_id?: number; source?: 'MANUAL' | 'BANK' | 'EXPENSE' }
+export async function listTransactions(workspaceId: number, offset: number, signal?: AbortSignal, filters: TransactionFilters = {}) {
+  const params = new URLSearchParams({ limit: '50', offset: String(offset) })
+  for (const [key, value] of Object.entries(filters)) if (value !== undefined && value !== '') params.set(key, String(value))
+  const parsed = pageSchema.safeParse(await (await request(workspaceId, `/transactions?${params}`, { signal })).json())
   if (!parsed.success || parsed.data.offset !== offset || parsed.data.items.some(item => item.workspace_id !== workspaceId)) throw new Error('The server returned unexpected transaction data. Please refresh and try again.')
   return parsed.data
 }

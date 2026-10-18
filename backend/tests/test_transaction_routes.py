@@ -141,6 +141,18 @@ class TransactionRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([row['transaction_id'] for row in response.json()['items']], [3])
         self.assertFalse(response.json()['has_more'])
 
+    async def test_source_filter_applies_before_pagination_and_preserves_access(self):
+        self.db.add(Transaction(transaction_id=2, workspace_id=1, account_id=1, category_id=1,
+                                department_id=2, amount=5, currency='EUR', description='Bank ticket',
+                                source=TransactionSourceEnum.BANK))
+        await self.db.commit()
+        response = await self.client.get('/transactions', params={'source': 'BANK', 'search': 'ticket', 'limit': 1})
+        self.assertEqual([row['transaction_id'] for row in response.json()['items']], [2])
+        self.user = {'sub': '2'}
+        response = await self.client.get('/transactions', params={'source': 'MANUAL'})
+        self.assertEqual(response.json()['items'], [])
+        self.assertEqual((await self.client.get('/transactions', params={'source': 'INVALID'})).status_code, 422)
+
     async def test_search_filters(self):
         transaction = await self.db.get(Transaction, 1)
         transaction.description = 'Office 50%_ supplies'
