@@ -464,7 +464,8 @@ the workspace switcher uses your accessible backend memberships.
 
 `GET /transactions` accepts optional, combinable query parameters:
 `search` (trimmed, case-insensitive literal substring of description, max 255 characters),
-`type` (`INCOME` or `EXPENSE`, determined by category), `category_id`,
+`type` (`INCOME` or `EXPENSE`, determined by category),
+`source` (`MANUAL`, `BANK`, or `EXPENSE`), `category_id`,
 `date_from` and `date_to` (inclusive `YYYY-MM-DD` creation dates),
 `department_id`, and `project_id`. Transactions currently have no separate name field.
 Blank search behaves like omitted search. Uncategorized transactions do not match a type filter.

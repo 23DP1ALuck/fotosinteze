@@ -1,6 +1,7 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
 import { AuthContext, type AuthContextValue } from '@/features/auth/use-auth'
@@ -14,8 +15,9 @@ const token = `h.${btoa(JSON.stringify({ sub: '1', exp: Math.floor(Date.now()/10
 const auth: AuthContextValue = { status: 'authenticated', user: { id: 1, email: 'a@test.com', displayName: 'A' }, token, login: async()=>{}, register: async()=>{}, logout: async()=>{} }
 function Probe() {
   const workspace = useWorkspace()
+  const [creationError, setCreationError] = useState('')
   const data = useQuery({ queryKey: workspaceQueryKey('categories',workspace.activeWorkspace?.id), enabled: Boolean(workspace.activeWorkspace), queryFn: async ({signal}) => (await authenticatedFetch('/categories',{signal})).json() })
-  return <><p>{workspace.status}</p><p>Selected: {workspace.activeWorkspace?.name || 'None'}</p>{workspace.workspaces.map(item=><button key={item.id} onClick={()=>workspace.selectWorkspace(item.id)}>{item.name}</button>)}{workspace.error && <p role="alert">{workspace.error}</p>}<button onClick={workspace.retry}>Retry</button>{data.data && <p>Data: {data.data[0]?.name}</p>}</>
+  return <><p>{workspace.status}</p><p>Selected: {workspace.activeWorkspace?.name || 'None'}</p>{workspace.workspaces.map(item=><button key={item.id} onClick={()=>workspace.selectWorkspace(item.id)}>{item.name}</button>)}{workspace.error && <p role="alert">{workspace.error}</p>}<button onClick={workspace.retry}>Retry</button><button onClick={() => { void workspace.createBusiness({ name: 'New Studio', base_currency: 'EUR' }).catch(error => setCreationError(error.message)) }}>Create</button>{creationError && <p role="alert">{creationError}</p>}{data.data && <p>Data: {data.data[0]?.name}</p>}</>
 }
 function mount(value=auth) {
   const client=new QueryClient({defaultOptions:{queries:{retry:false}}})
@@ -133,4 +135,65 @@ it.each(['logout','account change'])('does not retry an old 401 after %s',async 
   else { const other=`h.${btoa(JSON.stringify({sub:'2',exp:Math.floor(Date.now()/1000)+3600}))}.s`;setAccessToken(other);setWorkspace(2,7) }
   finish(Response.json({detail:'Unauthorized'},{status:401}));const response=await pending
   expect(response.status).toBe(401);expect(calls).toBe(1)
+})
+
+
+it('falls back to Personal after active membership is removed even if another tab saved a different Business', async () => {
+  const available = [...rows]
+  transport(available)
+  const view = mount()
+  await screen.findByText('Selected: Personal')
+  await userEvent.click(screen.getByRole('button', { name: 'Studio' }))
+  await screen.findByText('Data: Workspace 42')
+  localStorage.setItem('fotosinteze.workspace.1', '43')
+  available.splice(1, 1)
+  await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+  await screen.findByText('Selected: Personal')
+  await screen.findByText('Data: Workspace 7')
+  expect(localStorage.getItem('fotosinteze.workspace.1')).toBe('7')
+  expect(view.client.getQueryCache().findAll({ queryKey: ['categories', 1, 42] })).toHaveLength(0)
+})
+
+it.each(['/transactions', '/categories', '/budgets', '/dashboard', '/business-budgets', '/expenses', '/accounts', '/projects', '/departments'])('scopes %s to the chosen workspace', async path => {
+  const { setWorkspace } = await import('./workspace-state')
+  setWorkspace(1, 42)
+  const fetcher = vi.fn<(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () => Response.json([]))
+  vi.stubGlobal('fetch', fetcher)
+  await authenticatedFetch(path, { headers: { 'X-Workspace-ID': '7', 'Workspace-ID': '7' } })
+  const headers = new Headers(fetcher.mock.calls[0]?.[1]?.headers)
+  expect(headers.get('X-Workspace-ID')).toBe('42')
+  expect(headers.get('Authorization')).toBe(`Bearer ${token}`)
+})
+
+it('removes supplied workspace headers when listing accessible workspaces', async () => {
+  const fetcher = vi.fn<(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () => Response.json(rows))
+  vi.stubGlobal('fetch', fetcher)
+  await authenticatedFetch('/workspaces', { headers: { 'X-Workspace-ID': '42', 'Workspace-ID': '42' } })
+  const headers = new Headers(fetcher.mock.calls[0][1]?.headers)
+  expect(headers.has('X-Workspace-ID')).toBe(false)
+  expect(headers.has('Workspace-ID')).toBe(false)
+})
+
+
+it('discards a late creation result after the account changes', async () => {
+  transport()
+  const view = mount()
+  await screen.findByText('Selected: Personal')
+  let finish: (response: Response) => void = () => {}
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  vi.stubGlobal('fetch', vi.fn((url, init) => {
+    if (String(url).endsWith('/workspaces/business')) return new Promise<Response>(resolve => { finish = resolve })
+    return fallback(url, init)
+  }))
+  await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+  const otherToken = `h.${btoa(JSON.stringify({ sub: '2', exp: Math.floor(Date.now() / 1000) + 3600 }))}.s`
+  vi.stubGlobal('fetch', vi.fn(async url => Response.json(String(url).endsWith('/workspaces') ? [{ id: 9, name: 'Second Personal', type: 'PERSONAL', role: 'OWNER' }] : [])))
+  act(() => setAccessToken(otherToken))
+  view.change({ ...auth, user: { id: 2, email: 'b@test.com', displayName: 'B' }, token: otherToken })
+  await screen.findByText('Selected: Second Personal')
+  await act(async () => finish(Response.json({ id: 81, name: 'New Studio', type: 'BUSINESS', role: 'OWNER' }, { status: 201 })))
+  expect(screen.getByText('Selected: Second Personal')).toBeInTheDocument()
+  expect(view.client.getQueryData(['workspaces', 1])).toBeUndefined()
+  expect(localStorage.getItem('fotosinteze.workspace.1')).toBeNull()
+  expect(localStorage.getItem('fotosinteze.workspace.2')).toBe('9')
 })
