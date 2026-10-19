@@ -28,7 +28,7 @@ export function useWorkspaceFinance(workspaceId: number, enabled: boolean, catal
   })
   const error = transactionQuery.error || dashboardQuery.error || categoryQuery.error
   function refresh() {
-    for (const feature of ['transactions', 'dashboard', 'accounts', 'categories']) void client.invalidateQueries({ queryKey: workspaceQueryKey(feature, workspaceId) })
+    for (const feature of ['statistics', 'transactions', 'dashboard', 'accounts', 'categories']) void client.invalidateQueries({ queryKey: workspaceQueryKey(feature, workspaceId) })
   }
   return {
     rows, transactions, dashboard: dashboardQuery.data, accounts,

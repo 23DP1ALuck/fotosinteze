@@ -83,7 +83,7 @@ function ConnectedCategories({ workspaceId, workspaceKind, onConnect, canManage 
     })
     setNotice(deleted ? 'Category deleted.' : action?.kind === 'create' ? 'Category created.' : 'Category updated.')
     reload()
-    for (const feature of ['dashboard', 'transactions', 'budgets', 'business-budgets']) void client.invalidateQueries({ queryKey: workspaceQueryKey(feature, workspaceId) })
+    for (const feature of ['statistics', 'dashboard', 'transactions', 'budgets', 'business-budgets']) void client.invalidateQueries({ queryKey: workspaceQueryKey(feature, workspaceId) })
   }
   const label = workspaceKind === 'personal' ? 'Personal' : 'Business'
   return <>

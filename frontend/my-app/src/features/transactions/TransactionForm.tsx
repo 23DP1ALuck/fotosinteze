@@ -30,7 +30,7 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
   const needsType = Boolean(transaction && !options.categories.some(item => item.id === transaction.category_id))
   const accounts = options.accounts.filter(item => item.workspace_id === workspaceId)
   const requiresDepartment = Boolean(catalog && role === 'EMPLOYEE')
-  const departments = useMemo(() => catalog?.workspaceId === workspaceId ? catalog.departments.filter(item => item.workspace_id === workspaceId) : [], [catalog?.workspaceId, catalog?.departments, workspaceId])
+  const departments = useMemo(() => catalog?.workspaceId === workspaceId ? catalog.departments.filter(item => item.workspace_id === workspaceId) : [], [catalog, workspaceId])
   const validator = schema.superRefine((value, ctx) => {
     if (!accounts.some(item => String(item.account_id) === value.account_id)) ctx.addIssue({ code: 'custom', path: ['account_id'], message: 'Choose an available account' })
     const categoryType = needsType ? value.transaction_type : type
@@ -77,7 +77,7 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
     try {
       await mutation.mutateAsync(value)
       if (authAccountId() !== ownerId) return
-      await Promise.all(['transactions', 'dashboard', 'accounts', 'budgets', 'business-budgets'].map(feature => client.invalidateQueries({ queryKey: [feature, ownerId, workspaceId] })))
+      await Promise.all(['statistics', 'transactions', 'dashboard', 'accounts', 'budgets', 'business-budgets'].map(feature => client.invalidateQueries({ queryKey: [feature, ownerId, workspaceId] })))
       if (authAccountId() === ownerId && activeWorkspaceId() === workspaceId) onSaved()
     } catch (error) {
       if (authAccountId() === ownerId && activeWorkspaceId() === workspaceId) setError('root', { message: error instanceof Error ? error.message : 'Could not save the transaction. Please retry.' })
