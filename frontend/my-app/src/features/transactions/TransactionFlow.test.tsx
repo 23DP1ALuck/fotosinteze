@@ -259,3 +259,59 @@ it('lets an employee browse categories and save a transaction without showing ca
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add expense' })).not.toBeInTheDocument())
   expect(screen.getByRole('status')).toHaveTextContent('Transaction saved.')
 })
+
+it('confirms deletion, refreshes history and balances, and allows cancelling first', async () => {
+  mount()
+  const user = userEvent.setup()
+  await user.click(await screen.findByRole('button', { name: 'Transactions' }))
+  await user.click(await screen.findByRole('button', { name: 'Delete Rimi' }))
+  let modal = within(screen.getByRole('dialog', { name: 'Delete transaction?' }))
+  await user.click(modal.getByRole('button', { name: 'Cancel' }))
+  expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)
+  await user.click(screen.getByRole('button', { name: 'Delete Rimi' }))
+  modal = within(screen.getByRole('dialog', { name: 'Delete transaction?' }))
+  await user.click(modal.getByRole('button', { name: 'Delete transaction' }))
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete transaction?' })).not.toBeInTheDocument())
+  expect(screen.queryByRole('button', { name: 'Edit Rimi' })).not.toBeInTheDocument()
+  const call = vi.mocked(fetch).mock.calls.find(([url, init]) => String(url).endsWith('/transactions/2') && init?.method === 'DELETE')!
+  expect(new Headers(call[1]?.headers).get('X-Workspace-ID')).toBe('7')
+  await user.click(screen.getByRole('button', { name: 'Dashboard' }))
+  const overview = within(screen.getByRole('region', { name: 'Monthly overview' }))
+  expect(await overview.findByText('€4,849.04')).toBeInTheDocument()
+  expect(overview.getByText('€1,813.81')).toBeInTheDocument()
+})
+
+it('keeps a transaction when deletion is denied and lets the user retry', async () => {
+  finance.state.failSave = true
+  mount()
+  await userEvent.click(await screen.findByRole('button', { name: 'Transactions' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Delete Rimi' }))
+  const modal = within(screen.getByRole('dialog', { name: 'Delete transaction?' }))
+  await userEvent.click(modal.getByRole('button', { name: 'Delete transaction' }))
+  expect(await modal.findByRole('alert')).toHaveTextContent('No access to this transaction')
+  expect(screen.getByRole('button', { name: 'Edit Rimi' })).toBeInTheDocument()
+  finance.state.failSave = false
+  await userEvent.click(modal.getByRole('button', { name: 'Delete transaction' }))
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete transaction?' })).not.toBeInTheDocument())
+  expect(screen.queryByRole('button', { name: 'Edit Rimi' })).not.toBeInTheDocument()
+})
+
+it('shows approved expense transactions as read only while preserving their details', async () => {
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    const response = await fallback(url, init)
+    if (!String(url).includes('/transactions?')) return response
+    const page = await response.json()
+    return Response.json({ ...page, items: page.items.map((item: { transaction_id: number }) => item.transaction_id === 2 ? { ...item, expense_id: 20 } : item) })
+  }))
+  mount()
+  await userEvent.click(await screen.findByRole('button', { name: 'Transactions' }))
+  await screen.findByText('Approved expense · read only')
+  expect(screen.queryByRole('button', { name: 'Edit Rimi' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Delete Rimi' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'View Rimi details' }))
+  const modal = within(screen.getByRole('dialog', { name: 'Transaction details' }))
+  expect(modal.getByText('Expense')).toBeInTheDocument()
+  expect(modal.getByText('− €28.54')).toBeInTheDocument()
+  expect(modal.getByText('17 Oct 2026')).toBeInTheDocument()
+})

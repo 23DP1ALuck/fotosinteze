@@ -39,6 +39,17 @@ export function createFinanceTransport() {
       })
       return Response.json({ items: filtered.slice(offset, offset + 50), offset, limit: 50, has_more: filtered.length > offset + 50 })
     }
+    if (/^\/transactions\/\d+$/.test(path) && method === 'DELETE') {
+      if (state.failSave) return Response.json({ detail: 'No access to this transaction' }, { status: 403 })
+      const old = list.find(item => item.transaction_id === Number(path.split('/').at(-1)))
+      if (!old) return Response.json({ detail: 'Transaction not found' }, { status: 404 })
+      const wasIncome = categories(workspaceId).find(item => item.category_id === old.category_id)?.type === 'INCOME'
+      delta[wasIncome ? 'income' : 'expenses'] -= Number(old.amount)
+      delta.balance -= (wasIncome ? 1 : -1) * Number(old.amount)
+      changes.set(workspaceId, delta)
+      rows.set(workspaceId, list.filter(item => item !== old))
+      return new Response(null, { status: 204 })
+    }
     if ((path === '/transactions' && method === 'POST') || (/^\/transactions\/\d+$/.test(path) && method === 'PUT')) {
       if (state.failSave) return Response.json({ detail: 'Account not found' }, { status: 404 })
       const body = JSON.parse(String(init?.body))
