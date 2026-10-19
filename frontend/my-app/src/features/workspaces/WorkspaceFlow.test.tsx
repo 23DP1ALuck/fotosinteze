@@ -162,3 +162,16 @@ it('allows creation when the account has no accessible workspaces', async () => 
   await userEvent.click(screen.getByRole('button', { name: 'Create business workspace' }))
   expect(screen.getByRole('dialog', { name: 'Make room for your business.' })).toBeInTheDocument()
 })
+
+it('opens account management from personal and business navigation with scoped balances', async () => {
+  await renderWorkspace()
+  await userEvent.click(screen.getByRole('button', { name: 'Accounts' }))
+  expect(await screen.findByRole('list', { name: 'Accounts' })).toHaveTextContent('€4,820.50')
+  await switchWorkspace('Personal', 'Acme Studio')
+  await userEvent.click(screen.getByRole('button', { name: 'Accounts' }))
+  const business = await screen.findByRole('list', { name: 'Accounts' })
+  expect(business).toHaveTextContent('€0.00')
+  expect(business).not.toHaveTextContent('€4,820.50')
+  await switchWorkspace('Acme Studio', 'Personal')
+  expect(await screen.findByRole('list', { name: 'Accounts' })).toHaveTextContent('€4,820.50')
+})

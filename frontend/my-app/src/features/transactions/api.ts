@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { listAccounts, type ApiAccount } from '@/features/accounts/api'
 import { authenticatedFetch } from '@/features/auth/authenticated-fetch'
 import { readApiErrorMessage } from '@/features/auth/api-error'
 
@@ -12,8 +13,7 @@ export const transactionSchema = z.object({
   created_at: z.iso.datetime({ local: true, offset: true }), updated_at: z.iso.datetime({ local: true, offset: true }),
 })
 export type ApiTransaction = z.infer<typeof transactionSchema>
-const accountSchema = z.object({ account_id: id, workspace_id: id, name: z.string(), currency, balance: decimal, connection_id: id.nullable().default(null) })
-export type TransactionAccount = z.infer<typeof accountSchema>
+export type TransactionAccount = ApiAccount
 export type TransactionInput = Pick<ApiTransaction, 'amount' | 'currency' | 'description' | 'account_id' | 'department_id' | 'project_id' | 'expense_id'> & { category_id: number }
 const pageSchema = z.object({ items: z.array(transactionSchema), limit: z.number().int().positive(), offset: z.number().int().nonnegative(), has_more: z.boolean() })
 const dashboardBase = z.object({ workspace_id: id, currency, period_start: z.iso.date(), period_end: z.iso.date(), expenses: decimal })
@@ -53,11 +53,7 @@ export async function listTransactions(workspaceId: number, offset: number, sign
   if (!parsed.success || parsed.data.offset !== offset || parsed.data.items.some(item => item.workspace_id !== workspaceId)) throw new Error('The server returned unexpected transaction data. Please refresh and try again.')
   return parsed.data
 }
-export async function listTransactionAccounts(workspaceId: number, signal?: AbortSignal) {
-  const parsed = z.array(accountSchema).safeParse(await (await request(workspaceId, '/accounts', { signal })).json())
-  if (!parsed.success || parsed.data.some(item => item.workspace_id !== workspaceId)) throw new Error('The server returned unexpected account data. Please refresh and try again.')
-  return parsed.data
-}
+export const listTransactionAccounts = listAccounts
 export async function loadTransactionDashboard(workspaceId: number, signal?: AbortSignal) {
   const parsed = dashboardSchema.safeParse(await (await request(workspaceId, '/dashboard', { signal })).json())
   if (!parsed.success || parsed.data.workspace_id !== workspaceId || ('recent_transactions' in parsed.data && parsed.data.recent_transactions.some(item => item.workspace_id !== workspaceId))) throw new Error('The server returned unexpected dashboard data. Please refresh and try again.')
