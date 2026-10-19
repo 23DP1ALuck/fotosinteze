@@ -1,11 +1,11 @@
 import { z } from 'zod'
 import { authenticatedFetch } from '@/features/auth/authenticated-fetch'
+import { listDepartments, type Department } from '@/features/departments/api'
 import { readApiErrorMessage } from '@/features/auth/api-error'
 
 const projectSchema = z.object({ id: z.number().int().positive(), workspace_id: z.number().int().positive(), name: z.string(), status: z.string().nullable().default(null), start_date: z.string().nullable().default(null), end_date: z.string().nullable().default(null), department_ids: z.array(z.number().int().positive()).default([]) })
-const departmentSchema = z.object({ id: z.number().int().positive(), name: z.string(), workspace_id: z.number().int().positive() })
 export type ApiProject = z.infer<typeof projectSchema>
-export type ApiDepartment = z.infer<typeof departmentSchema>
+export type ApiDepartment = Department
 export type ProjectInput = Pick<ApiProject, 'name' | 'status' | 'start_date' | 'end_date' | 'department_ids'>
 
 async function request(workspaceId: number, path: string, init: RequestInit): Promise<Response> {
@@ -26,13 +26,13 @@ async function request(workspaceId: number, path: string, init: RequestInit): Pr
   }
   return response
 }
+export async function listProjects(workspaceId: number, signal?: AbortSignal) {
+  const projects = z.array(projectSchema).parse(await (await request(workspaceId, '/projects', { method: 'GET', signal })).json())
+  if (projects.some(item => item.workspace_id !== workspaceId)) throw new Error('The server returned data for another workspace. Please retry.')
+  return projects
+}
 export async function loadProjectCatalog(workspaceId: number, signal?: AbortSignal) {
-  const [projectsResponse, departmentsResponse] = await Promise.all([
-    request(workspaceId, '/projects', { method: 'GET', signal }), request(workspaceId, '/departments', { method: 'GET', signal }),
-  ])
-  const projects = z.array(projectSchema).parse(await projectsResponse.json())
-  const departments = z.array(departmentSchema).parse(await departmentsResponse.json())
-  if ([...projects, ...departments].some(item => item.workspace_id !== workspaceId)) throw new Error('The server returned data for another workspace. Please retry.')
+  const [projects, departments] = await Promise.all([listProjects(workspaceId, signal), listDepartments(workspaceId, signal)])
   return { projects, departments }
 }
 export async function saveProject(workspaceId: number, input: ProjectInput, id?: number): Promise<ApiProject> {
