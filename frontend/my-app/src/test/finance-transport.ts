@@ -33,11 +33,24 @@ export function createFinanceTransport() {
       const filtered = list.filter(row => {
         const category = categories(workspaceId).find(item => item.category_id === row.category_id)
         return row.description.toLowerCase().includes((url.searchParams.get('search') || '').trim().toLowerCase()) &&
+          (!url.searchParams.has('date_from') || row.created_at.slice(0, 10) >= url.searchParams.get('date_from')!) &&
+          (!url.searchParams.has('date_to') || row.created_at.slice(0, 10) <= url.searchParams.get('date_to')!) &&
           (!url.searchParams.has('type') || category?.type === url.searchParams.get('type')) &&
           (!url.searchParams.has('source') || (Array.isArray(row.source) ? row.source[0] : row.source) === url.searchParams.get('source')) &&
           (['category_id', 'department_id', 'project_id'] as const).every(key => !url.searchParams.has(key) || row[key] === Number(url.searchParams.get(key)))
       })
       return Response.json({ items: filtered.slice(offset, offset + 50), offset, limit: 50, has_more: filtered.length > offset + 50 })
+    }
+    if (/^\/transactions\/\d+$/.test(path) && method === 'DELETE') {
+      if (state.failSave) return Response.json({ detail: 'No access to this transaction' }, { status: 403 })
+      const old = list.find(item => item.transaction_id === Number(path.split('/').at(-1)))
+      if (!old) return Response.json({ detail: 'Transaction not found' }, { status: 404 })
+      const wasIncome = categories(workspaceId).find(item => item.category_id === old.category_id)?.type === 'INCOME'
+      delta[wasIncome ? 'income' : 'expenses'] -= Number(old.amount)
+      delta.balance -= (wasIncome ? 1 : -1) * Number(old.amount)
+      changes.set(workspaceId, delta)
+      rows.set(workspaceId, list.filter(item => item !== old))
+      return new Response(null, { status: 204 })
     }
     if ((path === '/transactions' && method === 'POST') || (/^\/transactions\/\d+$/.test(path) && method === 'PUT')) {
       if (state.failSave) return Response.json({ detail: 'Account not found' }, { status: 404 })
@@ -52,7 +65,7 @@ export function createFinanceTransport() {
       delta[newIncome ? 'income' : 'expenses'] += Number(body.amount)
       delta.balance += (newIncome ? 1 : -1) * Number(body.amount)
       changes.set(workspaceId, delta)
-      const row: Row = { ...body, transaction_id: id, workspace_id: workspaceId, source: ['MANUAL'], created_at: old?.created_at ?? '2026-10-17T13:00:00', updated_at: '2026-10-17T13:00:00' }
+      const row: Row = { ...body, transaction_id: id, workspace_id: workspaceId, source: old?.source ?? (business ? 'EXPENSE' : 'MANUAL'), created_at: old?.created_at ?? '2026-10-17T13:00:00', updated_at: '2026-10-17T13:00:00' }
       rows.set(workspaceId, [row, ...list.filter(item => item.transaction_id !== id)])
       return Response.json(row, { status: method === 'POST' ? 201 : 200 })
     }
