@@ -30,7 +30,7 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
   const needsType = Boolean(transaction && !options.categories.some(item => item.id === transaction.category_id))
   const accounts = options.accounts.filter(item => item.workspace_id === workspaceId)
   const requiresDepartment = Boolean(catalog && role === 'EMPLOYEE')
-  const departments = useMemo(() => catalog?.workspaceId === workspaceId ? catalog.departments.filter(item => item.workspace_id === workspaceId) : [], [catalog?.workspaceId, catalog?.departments, workspaceId])
+  const departments = useMemo(() => catalog?.workspaceId === workspaceId ? catalog.departments.filter(item => item.workspace_id === workspaceId) : [], [catalog, workspaceId])
   const validator = schema.superRefine((value, ctx) => {
     if (!accounts.some(item => String(item.account_id) === value.account_id)) ctx.addIssue({ code: 'custom', path: ['account_id'], message: 'Choose an available account' })
     const categoryType = needsType ? value.transaction_type : type
