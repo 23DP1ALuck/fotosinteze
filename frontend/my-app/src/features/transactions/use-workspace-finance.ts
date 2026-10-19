@@ -18,12 +18,12 @@ export function useWorkspaceFinance(workspaceId: number, enabled: boolean, catal
   const transactions: WorkspaceTransaction[] = rows.map(row => {
     const category = categories.find(item => item.id === row.category_id)
     return {
-      id: row.transaction_id, name: row.description || (category?.type === 'income' ? 'Income' : 'Expense'),
+      id: row.transaction_id, canModify: row.expense_id === null, name: row.description || (category?.type === 'income' ? 'Income' : 'Expense'),
       category: category?.name ?? (row.category_id === null ? 'Uncategorised' : `Category #${row.category_id}`), type: category?.type ?? 'unknown', currency: row.currency,
       amount: Number(row.amount) * (category?.type === 'expense' ? -1 : 1), source: row.source === 'MANUAL' ? 'Manual' : row.source === 'BANK' ? 'Revolut' : 'Expense',
       date: row.created_at.slice(0, 10), departmentId: row.department_id ?? undefined, projectId: row.project_id ?? undefined,
-      department: catalog.departments.find(item => item.id === row.department_id)?.name,
-      project: catalog.projects.find(item => item.id === row.project_id)?.name,
+      department: catalog.departments.find(item => item.id === row.department_id)?.name ?? (row.department_id === null ? undefined : `Department #${row.department_id}`),
+      project: catalog.projects.find(item => item.id === row.project_id)?.name ?? (row.project_id === null ? undefined : `Project #${row.project_id}`),
     }
   })
   const error = transactionQuery.error || dashboardQuery.error || categoryQuery.error
