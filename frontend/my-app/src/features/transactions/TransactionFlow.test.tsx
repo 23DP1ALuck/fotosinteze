@@ -202,11 +202,16 @@ it('combines history filters before pagination and resets them when cleared', as
   await userEvent.click(await screen.findByRole('button', { name: 'Transactions' }))
   await screen.findByRole('button', { name: 'Edit Recent 0' })
   await userEvent.selectOptions(screen.getByLabelText('Filter by source'), 'Revolut')
-  expect(await screen.findByRole('button', { name: 'Edit Old train ticket' })).toBeInTheDocument()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Edit Old train ticket' })).toBeInTheDocument())
   await userEvent.selectOptions(screen.getByLabelText('Filter by category'), '7')
   await userEvent.click(screen.getByRole('button', { name: 'Expenses' }))
   await userEvent.type(screen.getByLabelText('Search personal transactions'), 'Old train ticket')
-  expect(await screen.findByRole('button', { name: 'Edit Old train ticket' })).toBeInTheDocument()
+  await waitFor(() => {
+    const request = vi.mocked(fetch).mock.calls.map(([url]) => new URL(String(url), 'http://localhost')).reverse().find(url => url.pathname.endsWith('/transactions'))!
+    expect(request.searchParams.get('search')).toBe('Old train ticket')
+    expect(screen.getByRole('table', { name: 'Transaction history' })).toHaveAttribute('aria-busy', 'false')
+  })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Edit Old train ticket' })).toBeInTheDocument())
   expect(screen.queryByRole('button', { name: 'Load more transactions' })).not.toBeInTheDocument()
   fireEvent.change(screen.getByLabelText('From date'), { target: { value: '2026-10-18' } })
   await userEvent.click(screen.getByRole('button', { name: 'Apply dates' }))
@@ -214,7 +219,7 @@ it('combines history filters before pagination and resets them when cleared', as
   fireEvent.change(screen.getByLabelText('From date'), { target: { value: '2026-10-17' } })
   fireEvent.change(screen.getByLabelText('To date'), { target: { value: '2026-10-17' } })
   await userEvent.click(screen.getByRole('button', { name: 'Apply dates' }))
-  expect(await screen.findByRole('button', { name: 'Edit Old train ticket' })).toBeInTheDocument()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Edit Old train ticket' })).toBeInTheDocument())
   await waitFor(() => {
     const filteredRequest = vi.mocked(fetch).mock.calls.map(([url]) => new URL(String(url), 'http://localhost')).reverse().find(url => url.pathname.endsWith('/transactions'))!
     expect(Object.fromEntries(filteredRequest.searchParams)).toMatchObject({ offset: '0', search: 'Old train ticket', source: 'BANK', category_id: '7', type: 'EXPENSE', date_from: '2026-10-17', date_to: '2026-10-17' })
