@@ -22,8 +22,12 @@ from app.dto.create_account_request import CreateAccountRequest
 from app.dto.create_account_response import CreateAccountResponse
 from app.dto.create_budget_request import CreateBudgetRequest
 from app.dto.budget_response import BudgetResponseDTO
+from app.dto.add_workspace_employee_request import AddWorkspaceEmployeeRequest
+from app.dto.workspace_member_response import WorkspaceMemberResponse
 
 __all__ = [
+    "AddWorkspaceEmployeeRequest",
+    "WorkspaceMemberResponse",
     "CreateBudgetRequest",
     "BudgetResponseDTO",
     "AccessTokenResponseDTO",
