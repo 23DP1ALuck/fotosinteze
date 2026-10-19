@@ -147,3 +147,23 @@ it('clears a project removed from the catalog before submitting the transaction'
   const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))
   expect(body.project_id).toBeNull()
 })
+
+
+it('prevents an employee without an assigned department from saving', async () => {
+  const catalog = { workspaceId: 7, projects: [], departments: [], loading: false, error: '', refresh() {}, upsert() {}, remove() {} }
+  render(<TransactionForm workspaceId={7} type="expense" role="EMPLOYEE" options={options} catalog={catalog} onClose={() => {}} onSaved={() => {}} />)
+  expect(screen.getByText(/Ask your workspace owner to assign you/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Save expense' })).toBeDisabled()
+  expect(screen.queryByRole('option', { name: 'No department' })).not.toBeInTheDocument()
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it('clears a removed department and project before an owner saves an edit', async () => {
+  const catalog = { workspaceId: 7, projects: [], departments: [], loading: false, error: '', refresh() {}, upsert() {}, remove() {} }
+  render(<TransactionForm workspaceId={7} type="expense" transaction={{ ...transaction, department_id: 8, project_id: 11 }} options={options} catalog={catalog} onClose={() => {}} onSaved={() => {}} />)
+  await waitFor(() => expect(screen.getByLabelText('Department')).toHaveValue(''))
+  expect(screen.getByLabelText('Project')).toHaveValue('')
+  await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+  expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toMatchObject({ department_id: null, project_id: null })
+})

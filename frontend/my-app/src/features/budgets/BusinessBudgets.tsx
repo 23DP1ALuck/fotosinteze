@@ -45,11 +45,12 @@ export function BusinessBudgets({ workspaceId, onConnect, catalog }: { workspace
     }
     void load()
     return () => controller.abort()
-  }, [workspaceId, revision, catalog?.projects])
+  }, [workspaceId, revision, catalog?.projects, catalog?.departments])
   const current = data?.workspace_id === workspaceId ? data : null
   const currentProjectDepartment = projectDepartment === 'workspace' || catalog?.departments.some(item => String(item.id) === projectDepartment) ? projectDepartment : ''
   const projectChoices = catalog ? catalog.workspaceId === workspaceId ? catalog.projects.filter(project => matchesProjectDepartment(project, currentProjectDepartment)) : [] : current?.targets.PROJECT ?? []
-  const targetChoices = draft?.target_type === 'PROJECT' ? projectChoices : current?.targets[draft?.target_type ?? 'CATEGORY'] ?? []
+  const departmentChoices = catalog ? catalog.workspaceId === workspaceId ? catalog.departments.filter(item => item.workspace_id === workspaceId) : [] : current?.targets.DEPARTMENT ?? []
+  const targetChoices = draft?.target_type === 'DEPARTMENT' ? departmentChoices : draft?.target_type === 'PROJECT' ? projectChoices : current?.targets[draft?.target_type ?? 'CATEGORY'] ?? []
   const projectOptionsBusy = Boolean(catalog && (catalog.workspaceId !== workspaceId || catalog.loading || catalog.error))
   const canManage = current?.can_manage && !loading && !error
   function refresh() { setLoading(true); setError(''); setDraft(null); setDeleting(null); setRevision(value => value + 1) }
@@ -60,7 +61,7 @@ export function BusinessBudgets({ workspaceId, onConnect, catalog }: { workspace
   async function save(event: FormEvent) {
     event.preventDefault()
     if (!draft || workspaceId === undefined || busy) return
-    if (!targetChoices.some(item => item.id === draft.target_id) || (draft.target_type === 'PROJECT' && projectOptionsBusy)) {
+    if (!targetChoices.some(item => item.id === draft.target_id) || (draft.target_type !== 'CATEGORY' && projectOptionsBusy)) {
       setError(`Choose an available ${labels[draft.target_type].toLowerCase()} before saving.`)
       return
     }
@@ -100,20 +101,20 @@ export function BusinessBudgets({ workspaceId, onConnect, catalog }: { workspace
         const selected = catalog.projects.find(item => item.id === draft.target_id)
         if (selected && !matchesProjectDepartment(selected, department)) setDraft({ ...draft, target_id: 0 })
       }}><option value="">All departments</option><option value="workspace">Workspace-wide only</option>{catalog.departments.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><span className="mt-2 block text-xs text-[#68796e]">Includes workspace-wide projects. The budget applies to the selected project.</span></label>}
-      <label className="text-sm">{labels[draft.target_type]}<select aria-label={labels[draft.target_type]} className={field} value={targetChoices.some(item => item.id === draft.target_id) ? draft.target_id : ''} onChange={event => setDraft({ ...draft, target_id: Number(event.target.value) })} disabled={busy || (draft.target_type === 'PROJECT' && projectOptionsBusy)} required><option value="" disabled>Select {labels[draft.target_type].toLowerCase()}</option>{targetChoices.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select>{!targetChoices.length && <span className="mt-1 block text-xs">{draft.target_type === 'PROJECT' && currentProjectDepartment ? 'No projects match this department filter.' : `Create a ${labels[draft.target_type].toLowerCase()} before choosing this target.`}</span>}</label>
-      {draft.target_type === 'PROJECT' && catalog?.loading && <p role="status" className="text-sm text-[#68796e] sm:col-span-2">Loading project options…</p>}
-      {draft.target_type === 'PROJECT' && catalog?.error && <div className="text-sm text-[#a43b32] sm:col-span-2"><p role="alert">{catalog.error}</p><button type="button" onClick={catalog.refresh} className="mt-2 underline">Retry project options</button></div>}
+      <label className="text-sm">{labels[draft.target_type]}<select aria-label={labels[draft.target_type]} className={field} value={targetChoices.some(item => item.id === draft.target_id) ? draft.target_id : ''} onChange={event => setDraft({ ...draft, target_id: Number(event.target.value) })} disabled={busy || (draft.target_type !== 'CATEGORY' && projectOptionsBusy)} required><option value="" disabled>Select {labels[draft.target_type].toLowerCase()}</option>{targetChoices.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select>{!targetChoices.length && <span className="mt-1 block text-xs">{draft.target_type === 'PROJECT' && currentProjectDepartment ? 'No projects match this department filter.' : `Create a ${labels[draft.target_type].toLowerCase()} before choosing this target.`}</span>}</label>
+      {draft.target_type !== 'CATEGORY' && catalog?.loading && <p role="status" className="text-sm text-[#68796e] sm:col-span-2">Loading {labels[draft.target_type].toLowerCase()} options…</p>}
+      {draft.target_type !== 'CATEGORY' && catalog?.error && <div className="text-sm text-[#a43b32] sm:col-span-2"><p role="alert">{catalog.error}</p><button type="button" onClick={catalog.refresh} className="mt-2 underline">Retry {labels[draft.target_type].toLowerCase()} options</button></div>}
       <label className="text-sm">Currency<input className={field} value={draft.currency} pattern="[A-Z]{3}" minLength={3} maxLength={3} onChange={e => setDraft({ ...draft, currency: e.target.value.toUpperCase() })} required /></label>
       <label className="text-sm">Period start<input className={field} type="date" value={draft.period_start} onInput={e => setDraft({ ...draft, period_start: e.currentTarget.value })} required /></label>
       <label className="text-sm">Period<select className={field} value={draft.period_length} onChange={e => setDraft({ ...draft, period_length: e.target.value as BudgetInput['period_length'], duration_days: e.target.value === 'CUSTOM' ? 30 : null })}><option value="MONTHLY">Monthly</option><option value="WEEKLY">Weekly</option><option value="CUSTOM">Custom</option></select></label>
       {draft.period_length === 'CUSTOM' && <label className="text-sm">Duration (days)<input className={field} type="number" min="1" max="3660" step="1" value={draft.duration_days ?? ''} onChange={e => setDraft({ ...draft, duration_days: Number(e.target.value) })} required /></label>}
-      <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" className={secondary} onClick={() => setDraft(null)} disabled={busy}>Cancel</button><button className={button} disabled={busy || (draft.target_type === 'PROJECT' && projectOptionsBusy)}>{busy ? 'Saving…' : 'Save budget'}</button></div>
+      <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" className={secondary} onClick={() => setDraft(null)} disabled={busy}>Cancel</button><button className={button} disabled={busy || (draft.target_type !== 'CATEGORY' && projectOptionsBusy)}>{busy ? 'Saving…' : 'Save budget'}</button></div>
     </form>}
     {deleting && current?.can_manage && <div role="group" aria-label="Confirm budget deletion" className="mt-5 rounded-xl bg-[#fae8e5] p-4"><p>Delete “{deleting.name}”?</p><div className="mt-3 flex gap-2"><button className={button} disabled={busy} onClick={() => void remove()}>Confirm delete</button><button className={secondary} disabled={busy} onClick={() => setDeleting(null)}>Cancel deletion</button></div></div>}
     {!loading && current && !current.budgets.length && !error && <p className="mt-6 rounded-xl border border-dashed p-8 text-center">No budgets available for this workspace.</p>}
     <div className="mt-6 grid gap-4 lg:grid-cols-2">{current?.budgets.map(row => <article key={row.id} aria-label={`Budget ${row.name}`} className="rounded-xl border border-[#dce4d8] p-5">
       <div className="flex items-start justify-between gap-3"><h3 className="font-semibold!">{row.name}</h3><span className={`rounded-full px-2 py-1 text-xs ${row.status === 'EXCEEDED' ? 'bg-[#fae8e5] text-[#a43b32]' : row.status === 'WARNING' ? 'bg-[#fff3d6] text-[#8a6200]' : 'bg-[#eaf0e6]'}`}>{row.status === 'EXCEEDED' ? 'Exceeded' : row.status === 'WARNING' ? 'Almost there' : 'On track'}</span></div>
-      <p className="mt-2 text-sm">{labels[row.target_type]}: {row.target_type === 'PROJECT' ? catalog?.projects.find(item => item.id === row.target_id)?.name ?? row.target_name : row.target_name}</p><p className="mt-2 text-xs text-[#68796e]">{row.period_length.toLowerCase()} · {row.period_start} to {row.period_end} (end excluded)</p>
+      <p className="mt-2 text-sm">{labels[row.target_type]}: {row.target_type === 'DEPARTMENT' ? departmentChoices.find(item => item.id === row.target_id)?.name ?? row.target_name : row.target_type === 'PROJECT' ? catalog?.projects.find(item => item.id === row.target_id)?.name ?? row.target_name : row.target_name}</p><p className="mt-2 text-xs text-[#68796e]">{row.period_length.toLowerCase()} · {row.period_start} to {row.period_end} (end excluded)</p>
       <p className="mt-4 text-sm">{money(row.spent, row.currency)} spent of {money(row.limit_amount, row.currency)}</p><p className="mt-1 text-sm">{row.remaining < 0 ? `${money(-row.remaining, row.currency)} over budget` : `${money(row.remaining, row.currency)} remaining`}</p>
       <progress className="mt-3 h-2 w-full accent-[#193f33]" aria-label={`${row.name} budget used`} value={Math.min(row.spent, row.limit_amount)} max={row.limit_amount} />
       {canManage && <div className="mt-4 flex gap-2"><button className={secondary} disabled={busy} onClick={() => edit(row)} aria-label={`Edit ${row.name}`}>Edit</button><button className={secondary} disabled={busy} onClick={() => { setDraft(null); setDeleting(row) }} aria-label={`Delete ${row.name}`}>Delete</button></div>}

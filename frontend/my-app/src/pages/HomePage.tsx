@@ -7,12 +7,13 @@ import { BrandMark } from '@/components/brand/BrandMark'
 import { useAuth } from '@/features/auth/use-auth'
 import { CategoryManager } from '@/features/categories/CategoryManager'
 import { CreateBusinessDialog, WorkspaceSwitcher, type Workspace } from '@/features/workspaces/WorkspaceControls'
+import { DepartmentManager } from '@/features/departments/DepartmentManager'
 import { TeamManager } from '@/features/workspaces/TeamManager'
 import { ProjectManager, ProjectFields } from '@/features/projects/ProjectManager'
 import { useProjectCatalog } from '@/features/projects/use-project-catalog'
 import { WorkspaceProvider } from '@/features/workspaces/WorkspaceProvider'
 import { useWorkspace } from '@/features/workspaces/use-workspace'
-import type { TeamData, TeamSection } from '@/features/workspaces/team-types'
+import type { TeamData } from '@/features/workspaces/team-types'
 import { TransactionsView } from '@/features/workspaces/TransactionsView'
 import { BusinessDashboard } from '@/features/dashboard/BusinessDashboard'
 import { BusinessBudgets } from '@/features/budgets/BusinessBudgets'
@@ -37,7 +38,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   workspace: Workspace; workspaces: Workspace[]; active: boolean; onSwitch: (id: string) => void; onCreate: () => void
 }) {
   const isBusiness = workspace.kind === 'business'
-  const workspaceNavigation = isBusiness ? workspace.role === 'EMPLOYEE' ? ['Dashboard', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Projects', 'Statistics'] : ['Dashboard', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics', 'Settings'] : navigation
+  const workspaceNavigation = isBusiness ? workspace.role === 'EMPLOYEE' ? ['Dashboard', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Statistics'] : ['Dashboard', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics', 'Settings'] : navigation
   const { user, logout } = useAuth()
   const [team, setTeam] = useState<TeamData>({ departments: [], employees: [], projects: [] })
   const backendWorkspaceId = Number(workspace.id)
@@ -160,7 +161,8 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       {active && !isBusiness && (view === 'Dashboard' || view === 'Revolut') && <RevolutConnect key={backendWorkspaceId} workspaceId={backendWorkspaceId} />}
 
       {active && isBusiness && view === 'Projects' && <ProjectManager catalog={projectCatalog} workspaceName={workspace.name} canManage={canManageProjects} />}
-      {isBusiness && ['Departments', 'Employees'].includes(view) && <TeamManager key={view} section={view as TeamSection} data={team} onChange={setTeam} ownerName={displayName} />}
+      {active && isBusiness && view === 'Departments' && <DepartmentManager key={backendWorkspaceId} workspaceId={backendWorkspaceId} workspaceName={workspace.name} canManage={workspace.role === 'OWNER'} />}
+      {active && isBusiness && workspace.role === 'OWNER' && view === 'Employees' && <TeamManager section="Employees" data={team} onChange={setTeam} ownerName={displayName} />}
       {isBusiness && view === 'Settings' && <section className={cardClasses}><h2>{workspace.name}</h2><p className="mt-3 text-sm text-[#68796e]">Business workspace · {workspace.role === 'EMPLOYEE' ? 'Employee' : 'Owner'} · Currency: EUR</p></section>}
     </main>
     <dialog ref={dialog} className="m-auto max-h-[calc(100svh-40px)] w-[min(460px,calc(100%_-_32px))] overflow-y-auto rounded-[18px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/35 backdrop:backdrop-blur-[3px] [&_h2]:m-0 [&_h2]:text-[23px] [&_h2]:font-semibold" aria-labelledby="dashboard-dialog-title">
@@ -169,7 +171,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       {dialogType === 'profile' && <div className={formClasses}><strong>{displayName}</strong><p>{user?.email}</p><p className="text-xs text-[#7d877f]">{workspace.name} workspace</p><button className={primaryButtonClasses} onClick={handleLogout}>Log out</button>{logoutError && <p role="alert">{logoutError}</p>}</div>}
     </dialog>
     {active && deletingTransaction && <DeleteTransactionDialog key={`${backendWorkspaceId}-${deletingTransaction.transaction_id}`} workspaceId={backendWorkspaceId} transaction={deletingTransaction} onClose={() => setDeletingTransaction(null)} onDeleted={() => { setDeletingTransaction(null); setNotice('Transaction deleted.') }} />}
-    {active && transactionAction && <TransactionForm key={`${backendWorkspaceId}-${transactionAction.transaction?.transaction_id ?? transactionAction.type}`} workspaceId={backendWorkspaceId} type={transactionAction.type} transaction={transactionAction.transaction} options={finance.options} catalog={isBusiness ? projectCatalog : undefined} onClose={() => setTransactionAction(null)} onSaved={() => { setTransactionAction(null); setNotice(transactionAction.transaction ? 'Transaction updated.' : 'Transaction saved.') }} />}
+    {active && transactionAction && <TransactionForm key={`${backendWorkspaceId}-${transactionAction.transaction?.transaction_id ?? transactionAction.type}`} workspaceId={backendWorkspaceId} type={transactionAction.type} transaction={transactionAction.transaction} options={finance.options} role={workspace.role} catalog={isBusiness ? projectCatalog : undefined} onClose={() => setTransactionAction(null)} onSaved={() => { setTransactionAction(null); setNotice(transactionAction.transaction ? 'Transaction updated.' : 'Transaction saved.') }} />}
   </div>
 }
 
