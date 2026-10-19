@@ -67,3 +67,7 @@ export async function saveTransaction(workspaceId: number, input: TransactionInp
   const response = await request(workspaceId, transactionId === undefined ? '/transactions' : `/transactions/${transactionId}`, { method: transactionId === undefined ? 'POST' : 'PUT', body: JSON.stringify(input) })
   return parseTransaction(await response.json(), workspaceId)
 }
+
+export async function deleteTransaction(workspaceId: number, transactionId: number) {
+  await request(workspaceId, `/transactions/${transactionId}`, { method: 'DELETE' })
+}

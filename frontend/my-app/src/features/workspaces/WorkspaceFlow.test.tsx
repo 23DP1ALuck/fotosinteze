@@ -77,7 +77,7 @@ it('uses active backend project IDs in Business transaction selectors',async()=>
   await user.click(screen.getByRole('button',{name:'Add expense'}));const modal=within(screen.getByRole('dialog'))
   await user.selectOptions(modal.getByLabelText('Account'), '13');await user.selectOptions(modal.getByLabelText('Category'), '5');await user.type(modal.getByLabelText('Description'),'Website promotion');await user.type(modal.getByLabelText('Amount (EUR)'),'900')
   await user.selectOptions(modal.getByLabelText('Department'),'7');await user.selectOptions(modal.getByLabelText('Project'),'10');await user.click(modal.getByRole('button',{name:'Save expense'}));await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add expense' })).not.toBeInTheDocument())
-  await user.click(screen.getByRole('button',{name:'Transactions'}));expect(screen.getByRole('row',{name:/Website promotion Marketing Development Website/})).toBeInTheDocument()
+  await user.click(screen.getByRole('button',{name:'Transactions'}));expect(screen.getByRole('row',{name:/Website promotion Expense Marketing Development Website/})).toBeInTheDocument()
 })
 
 
