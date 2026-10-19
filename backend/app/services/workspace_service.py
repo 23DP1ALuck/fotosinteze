@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.dto.update_business_workspace_request import UpdateBusinessWorkspaceRequest
 from app.dto.workspace_response import WorkspaceResponse
-from app.models import User, Account, Budget, RevolutConnection
+from app.models import User, Account, Budget, Department, RevolutConnection
 
 from app.database import AsyncSession
 from app.models import WorkspaceUsers
@@ -101,10 +101,31 @@ def assert_business_owner(workspace: Workspace, membership: WorkspaceUsers) -> N
         raise HTTPException(status_code=403, detail='Workspace owner required')
 
 
+async def get_workspace_members(workspace_id: int, current_user: dict,
+                                db: AsyncSession) -> list[WorkspaceMemberResponse]:
+    caller = await load_workspace_member(workspace_id, current_user, db)
+    assert_business_owner(caller.workspace, caller)
+    rows = await db.execute(select(WorkspaceUsers, User.display_name, User.email)
+                            .join(User, User.user_id == WorkspaceUsers.user_id)
+                            .where(WorkspaceUsers.workspace_id == workspace_id)
+                            .order_by(WorkspaceUsers.user_id)
+                            .execution_options(populate_existing=True))
+    return [WorkspaceMemberResponse(user_id=member.user_id, workspace_id=member.workspace_id,
+                                    display_name=name, email=email, role=member.role,
+                                    department_id=member.department_id, joined_at=member.joined_at)
+            for member, name, email in rows]
+
+
 async def add_workspace_employee(workspace_id: int, request: AddWorkspaceEmployeeRequest,
                                  current_user: dict, db: AsyncSession) -> WorkspaceMemberResponse:
     caller = await load_workspace_member(workspace_id, current_user, db)
     assert_business_owner(caller.workspace, caller)
+    if request.department_id is not None:
+        department = await db.get(Department, request.department_id)
+        if department is None:
+            raise HTTPException(status_code=404, detail='Department not found')
+        if department.workspace_id != workspace_id:
+            raise HTTPException(status_code=400, detail='Department does not belong to this workspace')
     # shortcut: Unicode matching scans users; add an indexed normalized email if this becomes slow.
     users = [user for user in await db.execute(select(User.user_id, User.display_name, User.email))
              if user.email.casefold() == request.email.casefold()]
@@ -117,7 +138,7 @@ async def add_workspace_employee(workspace_id: int, request: AddWorkspaceEmploye
     if await db.get(WorkspaceUsers, (user_id, workspace_id)) is not None:
         raise HTTPException(status_code=409, detail='User is already a workspace member')
     membership = WorkspaceUsers(user_id=user_id, workspace_id=workspace_id,
-                                role=WorkspaceRole.EMPLOYEE, department_id=None)
+                                role=WorkspaceRole.EMPLOYEE, department_id=request.department_id)
     db.add(membership)
     try:
         await db.commit()

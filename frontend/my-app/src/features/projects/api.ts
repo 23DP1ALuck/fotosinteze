@@ -6,7 +6,7 @@ import { readApiErrorMessage } from '@/features/auth/api-error'
 const projectSchema = z.object({ id: z.number().int().positive(), workspace_id: z.number().int().positive(), name: z.string(), status: z.string().nullable().default(null), start_date: z.string().nullable().default(null), end_date: z.string().nullable().default(null), department_ids: z.array(z.number().int().positive()).default([]) })
 export type ApiProject = z.infer<typeof projectSchema>
 export type ApiDepartment = Department
-export type ProjectInput = Pick<ApiProject, 'name' | 'status' | 'start_date' | 'end_date' | 'department_ids'>
+export type ProjectInput = Pick<ApiProject, 'name' | 'status' | 'start_date' | 'end_date'> & Partial<Pick<ApiProject, 'department_ids'>>
 
 async function request(workspaceId: number, path: string, init: RequestInit): Promise<Response> {
   if (!Number.isSafeInteger(workspaceId) || workspaceId < 1) throw new Error('Enter a valid workspace ID.')

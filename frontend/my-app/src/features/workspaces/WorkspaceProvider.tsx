@@ -9,6 +9,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const auth = useAuth()
   const accountId = auth.status === 'authenticated' ? auth.user?.id ?? null : null
   const queryClient = useQueryClient()
+  const previousRoles = useRef<{ accountId: number | null; roles: Map<number, AccessibleWorkspace['role']> }>({ accountId: null, roles: new Map() })
   const previousAccount = useRef<number | null>(null)
   const selection = useSyncExternalStore(subscribeWorkspace, workspaceSnapshot)
   const query = useQuery({ queryKey: ['workspaces', accountId], queryFn: ({signal}) => listAccessibleWorkspaces(signal), enabled: accountId !== null, retry: false, staleTime: 30_000, refetchOnWindowFocus: false })
@@ -28,6 +29,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [accountId, queryClient])
   useEffect(() => {
     if (accountId === null || !query.data) return
+    const previous = previousRoles.current
+    const changed = new Set(previous.accountId === accountId ? query.data.filter(item => previous.roles.has(item.id) && previous.roles.get(item.id) !== item.role).map(item => item.id) : [])
+    previousRoles.current = { accountId, roles: new Map(query.data.map(item => [item.id, item.role])) }
+    if (changed.size) {
+      // Reset every workspace-scoped result, including inactive financial views.
+      // Active observers refetch under the refreshed membership permissions.
+      void queryClient.resetQueries({ predicate: cached => cached.queryKey[1] === accountId && typeof cached.queryKey[2] === 'number' && changed.has(cached.queryKey[2]) })
+    }
     const accessible = new Set(query.data.map(item => item.id))
     const inaccessibleQueries = { predicate: (query: { queryKey: readonly unknown[] }) => query.queryKey[1] === accountId && typeof query.queryKey[2] === 'number' && !accessible.has(query.queryKey[2]) }
     void queryClient.cancelQueries(inaccessibleQueries)

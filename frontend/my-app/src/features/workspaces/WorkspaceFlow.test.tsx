@@ -1,3 +1,4 @@
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { render } from '@/test/render'
 import { createFinanceTransport } from '@/test/finance-transport'
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
@@ -50,10 +51,10 @@ it('keeps business and personal transaction data separate across switches',async
   await switchWorkspace('Acme Studio','Personal');expect(within(screen.getByRole('main')).getByText('Personal groceries')).toBeInTheDocument()
   expect(within(screen.getByRole('main')).queryByText('Client project')).not.toBeInTheDocument()
 })
-it('shows employee role and hides owner-only project management',async()=>{
+it('lets employees manage assigned project details while reserving deletion for owners',async()=>{
   await renderWorkspace(); await switchWorkspace('Personal','Beta Studio')
   await userEvent.click(within(screen.getByRole('navigation',{name:'Workspace'})).getByRole('button',{name:'Projects'}))
-  await within(screen.getByRole('list',{name:'Projects'})).findByText('Website');expect(screen.queryByRole('button',{name:'Add project'})).not.toBeInTheDocument()
+  await within(screen.getByRole('list',{name:'Projects'})).findByText('Website');expect(screen.getByRole('button',{name:'Add project'})).toBeInTheDocument();expect(screen.getByRole('button',{name:'Edit Website'})).toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'Delete Website'})).not.toBeInTheDocument()
 })
 it('uses the shared Personal transaction menu with source filters and details',async()=>{
@@ -174,4 +175,77 @@ it('opens account management from personal and business navigation with scoped b
   expect(business).not.toHaveTextContent('€4,820.50')
   await switchWorkspace('Acme Studio', 'Personal')
   expect(await screen.findByRole('list', { name: 'Accounts' })).toHaveTextContent('€4,820.50')
+})
+
+
+it('loads saved members and adds an existing user by email through the owner Employees page', async () => {
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  const owner = { user_id: 1, workspace_id: 42, display_name: 'Ada', email: 'ada@example.com', role: 'OWNER', department_id: null, joined_at: '2026-10-01T12:00:00' }
+  const employee = { ...owner, user_id: 8, display_name: 'Anna', email: 'anna@example.com', role: 'EMPLOYEE' }
+  let members = [owner]
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    const path = new URL(String(url), 'http://test').pathname.replace(/^\/api/, '')
+    if (path === '/workspaces/42/members') return Response.json(members)
+    if (path === '/workspaces/42/employees' && init?.method === 'POST') {
+      expect(JSON.parse(String(init.body))).toEqual({ email: 'anna@example.com', department_id: 7 })
+      expect(new Headers(init.headers).get('Authorization')).toBe(`Bearer ${token}`)
+      expect(new Headers(init.headers).has('Workspace-ID')).toBe(false)
+      members = [owner, employee]
+      return Response.json(employee, { status: 201 })
+    }
+    return fallback(url, init)
+  }))
+  await renderWorkspace()
+  await switchWorkspace('Personal', 'Acme Studio')
+  await userEvent.click(screen.getByRole('button', { name: 'Employees' }))
+  expect(await screen.findByRole('list', { name: 'Workspace members' })).toHaveTextContent('ada@example.com')
+  await userEvent.click(screen.getByRole('button', { name: 'Add employee' }))
+  const modal = within(screen.getByRole('dialog', { name: 'Add employee' }))
+  expect(modal.queryByLabelText('Full name')).not.toBeInTheDocument()
+  await userEvent.type(modal.getByLabelText('Email address'), 'anna@example.com')
+  await userEvent.selectOptions(modal.getByLabelText('Department'), '7')
+  await userEvent.click(modal.getByRole('button', { name: 'Add employee' }))
+  expect(await screen.findByText('anna@example.com')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Remove Ada' })).not.toBeInTheDocument()
+  await switchWorkspace('Acme Studio', 'Beta Studio')
+  expect(screen.queryByRole('button', { name: 'Employees' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Employees management' })).not.toBeInTheDocument()
+})
+
+it('refreshes role-scoped catalogs on demotion and excludes a late owner mutation', async () => {
+  let client: QueryClient | undefined
+  function CaptureClient() { client = useQueryClient(); return null }
+  let employee = false
+  let finishOwnerSave: (response: Response) => void = () => {}
+  const secret = { id: 10, workspace_id: 42, name: 'Owner secret', status: 'Active', department_ids: [8], start_date: null, end_date: null }
+  const assigned = { ...secret, id: 11, name: 'Assigned project', department_ids: [7], }
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    const path = new URL(String(url), 'http://test').pathname.replace(/^\/api/, '')
+    if (path === '/workspaces') return Response.json(workspaces.map(row => row.id === 42 && employee ? { ...row, role: 'EMPLOYEE' } : row))
+    if (path === '/projects/10' && init?.method === 'PUT') return new Promise<Response>(resolve => { finishOwnerSave = resolve })
+    if (path === '/projects') return Response.json(employee ? [assigned] : [secret, assigned])
+    if (path === '/departments') return Response.json(employee ? [{ id: 7, workspace_id: 42, name: 'Development' }] : [{ id: 7, workspace_id: 42, name: 'Development' }, { id: 8, workspace_id: 42, name: 'Secret department' }])
+    return fallback(url, init)
+  }))
+  render(<><CaptureClient /><AuthContext.Provider value={{status:'authenticated',user:{id:1,displayName:'Ada',email:'ada@example.com'},token,login:async()=>{},register:async()=>{},logout:async()=>{}}}><MemoryRouter><HomePage /></MemoryRouter></AuthContext.Provider></>)
+  await screen.findByRole('button', { name: 'Switch workspace, Personal' })
+  await switchWorkspace('Personal', 'Acme Studio')
+  await userEvent.click(screen.getByRole('button', { name: 'Projects' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit Owner secret' }))
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save changes' }))
+  await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save changes' })).toBeDisabled())
+  client!.setQueryData(['statistics', 1, 42, 'cached-owner-report'], { secret: true })
+  employee = true
+  await act(async () => { await client!.invalidateQueries({ queryKey: ['workspaces', 1], exact: true }) })
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  await screen.findByRole('button', { name: 'Edit Assigned project' })
+  expect(screen.queryByText('Owner secret')).not.toBeInTheDocument()
+  expect(screen.queryByRole('option', { name: 'Secret department' })).not.toBeInTheDocument()
+  expect(client!.getQueryData(['statistics', 1, 42, 'cached-owner-report'])).toBeUndefined()
+  expect(client!.getQueryData(['workspaces', 1])).toBeDefined()
+  await act(async () => finishOwnerSave(Response.json({ ...secret, name: 'Late owner response' })))
+  expect(screen.queryByText('Late owner response')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Edit Assigned project' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Delete Assigned project' })).not.toBeInTheDocument()
 })

@@ -42,7 +42,7 @@ function DepartmentDialog({ action, onChange, onClose }: { action: Action; onCha
 export function DepartmentManager({ workspaceId, workspaceName, canManage }: { workspaceId: number; workspaceName: string; canManage: boolean }) {
   const client = useQueryClient()
   const accountId = authAccountId()
-  const catalog = useDepartments(workspaceId)
+  const catalog = useDepartments(workspaceId, true, canManage ? 'OWNER' : 'EMPLOYEE')
   const [action, setAction] = useState<Action | null>(null)
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState('')
@@ -52,7 +52,7 @@ export function DepartmentManager({ workspaceId, workspaceName, canManage }: { w
     if (next.kind === 'delete') await deleteDepartment(workspaceId, next.department.id)
     const updated = next.kind === 'delete' ? undefined : await saveDepartment(workspaceId, name ?? '', next.kind === 'rename' ? next.department.id : undefined)
     if (accountId !== authAccountId()) return false
-    const key = ['departments', accountId, workspaceId]
+    const key = ['departments', accountId, workspaceId, canManage ? 'OWNER' : 'EMPLOYEE']
     await client.cancelQueries({ queryKey: key, exact: true })
     if (accountId !== authAccountId()) return false
     client.setQueryData<Department[]>(key, previous => next.kind === 'delete' ? previous?.filter(item => item.id !== next.department.id) : updated ? [...(previous ?? []).filter(item => item.id !== updated.id), updated] : previous)
