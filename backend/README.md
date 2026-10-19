@@ -230,6 +230,46 @@ alembic downgrade -1
 
 ## Department assignments and shared projects
 
+### Add and remove employees (ROLE-02)
+
+Business Workspace owners can add an existing registered user by email:
+
+```http
+POST /workspaces/12/employees
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{"email": "employee@example.com"}
+```
+
+The response is `201` with `user_id`, `workspace_id`, `display_name`, `email`,
+`role` (`EMPLOYEE`), nullable `department_id`, and `joined_at`. Surrounding email
+whitespace is trimmed and lookup is case-insensitive; legacy accounts that
+match the same email ambiguously return `409`. The user must already exist.
+The request accepts only `email` (at most 100 characters), never a role.
+
+New employees are unassigned. They can discover the workspace through
+`GET /workspaces`, but department-scoped operations are denied until an owner
+assigns them with `PUT /departments/{department_id}/employees/{user_id}`.
+
+Remove an employee with `DELETE /workspaces/12/employees/42`, using the same
+Bearer authentication. Success returns an empty `204`. This deletes only the
+employee's membership in that workspace: the user account, other memberships,
+expenses and transaction history remain intact. The same token loses access
+to the workspace on its next request, without logging the user out globally.
+Every OWNER membership is protected from removal, including the last owner.
+
+Both routes use the workspace ID in the path and require no `Workspace-ID`
+header. Only owners of that Business Workspace can call them. Personal
+Workspaces return `400`; missing authentication returns `401`; unauthorized
+callers or OWNER removal return `403`; missing workspace/user/membership
+returns `404`; adding an existing member or an ambiguous email returns `409`;
+invalid email, extra body fields or nonpositive path IDs return `422`.
+Repeated removal returns `404`. Neither operation sends invitations or creates
+user accounts.
+
+### Assignments and project access
+
 Run migrations from `backend` before starting the updated API:
 
 ```bash
