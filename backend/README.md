@@ -428,6 +428,40 @@ to their assigned department, including only that department's spending on share
 projects. Employees without a valid department assignment receive `403`.
 Budgets and frontend dashboard rendering are outside this endpoint's scope.
 
+## Analytics aggregation (MET-01)
+
+The following read-only endpoints require a bearer access token, `Workspace-ID`,
+and ISO `date_from` and `date_to` query parameters, for example
+`GET /statistics/summary?date_from=2026-10-01&date_to=2026-10-31`.
+Both dates are inclusive and use transaction `created_at` in the same naive
+server-local time convention as transactions and the dashboard.
+
+Every response contains `workspace_id`, `currency`, `date_from`, and `date_to`,
+plus these fields:
+
+| Endpoint | Response fields |
+| --- | --- |
+| `GET /statistics/summary` | `income`, `expenses`: decimal strings, e.g. `"1000.25"`, `"250.10"` |
+| `GET /statistics/categories` | `items: [{"id": 11, "name": "Food", "amount": "250.10"}]`; expense categories ordered by amount descending, then ID |
+| `GET /statistics/timeseries` | `items: [{"date": "2026-10-01", "amount": "250.10"}]`; daily expense totals in ascending date order, including `"0.00"` for days without spending |
+
+Aggregates use all matching transactions, regardless of transaction-list
+pagination. Income/expense classification follows the current category type.
+Only the workspace's base currency counts, with no currency conversion;
+uncategorized transactions and categories from other workspaces are excluded.
+Approved expenses count through their linked transaction exactly once; pending
+expense requests do not count. Changes and deletions are reflected on the next
+request. Empty periods return zero summary totals, no category groups, and zero
+daily points for each selected date.
+
+Personal workspace members and business owners see workspace totals. Business
+employees see only their assigned department; shared projects do not widen
+access. Missing/invalid employee department assignments and inaccessible
+workspaces return `403`; unauthenticated requests return `401`. Missing or
+malformed dates/headers return `422`; reversed date ranges return `400`.
+Daily series are limited to **3660 inclusive days** to bound response size;
+larger daily ranges return `400`. Summary and category ranges have no such limit.
+
 ## Business budget management (BBUD-03)
 
 `GET /business-budgets` returns saved budgets with target labels, spent/remaining
