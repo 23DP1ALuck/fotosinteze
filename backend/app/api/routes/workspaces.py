@@ -60,13 +60,25 @@ async def delete_business_workspace(workspace_id: int, current_user: dict = Depe
     return Response(status_code=204)
 
 
+@router.get('/workspaces/{workspace_id}/members', response_model=list[WorkspaceMemberResponse],
+            tags=['workspaces'], summary='List business workspace members (owner only)',
+            responses={400: {'description': 'Business workspace required'},
+                       401: {'description': 'Authentication required'},
+                       403: {'description': 'Workspace owner required'},
+                       404: {'description': 'Workspace not found'}})
+async def get_workspace_members(workspace_id: Annotated[int, Path(gt=0)],
+                                current_user: dict = Depends(get_current_user),
+                                db: AsyncSession = Depends(get_db_session)) -> list[WorkspaceMemberResponse]:
+    return await workspace_service.get_workspace_members(workspace_id, current_user, db)
+
+
 @router.post('/workspaces/{workspace_id}/employees', status_code=201,
              response_model=WorkspaceMemberResponse, tags=['workspaces'],
-             summary='Add a registered user as an employee (business owner only)',
-             responses={400: {'description': 'Business workspace required'},
+             summary='Add a registered employee with an optional department (business owner only)',
+             responses={400: {'description': 'Business workspace required or department belongs to another workspace'},
                         401: {'description': 'Authentication required'},
                         403: {'description': 'Workspace owner required'},
-                        404: {'description': 'Workspace or user not found'},
+                        404: {'description': 'Workspace, user or department not found'},
                         409: {'description': 'Existing membership or ambiguous email'}})
 async def add_workspace_employee(workspace_id: Annotated[int, Path(gt=0)], request: AddWorkspaceEmployeeRequest,
                                  current_user: dict = Depends(get_current_user),
