@@ -9,12 +9,11 @@ import { AccountManager } from '@/features/accounts/AccountManager'
 import { CategoryManager } from '@/features/categories/CategoryManager'
 import { CreateBusinessDialog, WorkspaceSwitcher, type Workspace } from '@/features/workspaces/WorkspaceControls'
 import { DepartmentManager } from '@/features/departments/DepartmentManager'
-import { TeamManager } from '@/features/workspaces/TeamManager'
+import { EmployeeManager } from '@/features/employees/EmployeeManager'
 import { ProjectManager, ProjectFields } from '@/features/projects/ProjectManager'
 import { useProjectCatalog } from '@/features/projects/use-project-catalog'
 import { WorkspaceProvider } from '@/features/workspaces/WorkspaceProvider'
 import { useWorkspace } from '@/features/workspaces/use-workspace'
-import type { TeamData } from '@/features/workspaces/team-types'
 import { TransactionsView } from '@/features/workspaces/TransactionsView'
 import { Statistics } from '@/features/statistics/Statistics'
 import { BusinessDashboard } from '@/features/dashboard/BusinessDashboard'
@@ -42,9 +41,8 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   const isBusiness = workspace.kind === 'business'
   const workspaceNavigation = isBusiness ? workspace.role === 'EMPLOYEE' ? ['Dashboard', 'Accounts', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Statistics'] : ['Dashboard', 'Accounts', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics', 'Settings'] : navigation
   const { user, logout } = useAuth()
-  const [team, setTeam] = useState<TeamData>({ departments: [], employees: [], projects: [] })
   const backendWorkspaceId = Number(workspace.id)
-  const projectCatalog = useProjectCatalog(backendWorkspaceId, isBusiness && active)
+  const projectCatalog = useProjectCatalog(backendWorkspaceId, isBusiness && active, workspace.role)
   const canManageProjects = workspace.role !== 'EMPLOYEE'
   const [transactionFilters, setTransactionFilters] = useState<TransactionFilters>({})
   const finance = useWorkspaceFinance(backendWorkspaceId, active, projectCatalog, transactionFilters)
@@ -164,9 +162,9 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       {active && view === 'Categories' && <CategoryManager canManage={!isBusiness || workspace.role === 'OWNER'} workspaceName={workspace.name} workspaceKind={workspace.kind} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} />}
       {active && !isBusiness && (view === 'Dashboard' || view === 'Revolut') && <RevolutConnect key={backendWorkspaceId} workspaceId={backendWorkspaceId} />}
 
-      {active && isBusiness && view === 'Projects' && <ProjectManager catalog={projectCatalog} workspaceName={workspace.name} canManage={canManageProjects} />}
-      {active && isBusiness && view === 'Departments' && <DepartmentManager key={backendWorkspaceId} workspaceId={backendWorkspaceId} workspaceName={workspace.name} canManage={workspace.role === 'OWNER'} />}
-      {active && isBusiness && workspace.role === 'OWNER' && view === 'Employees' && <TeamManager section="Employees" data={team} onChange={setTeam} ownerName={displayName} />}
+      {active && isBusiness && view === 'Projects' && <ProjectManager catalog={projectCatalog} workspaceName={workspace.name} canManage={canManageProjects} canCreate={canManageProjects || projectCatalog.departments.length > 0} />}
+      {active && isBusiness && view === 'Departments' && <DepartmentManager key={`${backendWorkspaceId}-${workspace.role}`} workspaceId={backendWorkspaceId} workspaceName={workspace.name} canManage={workspace.role === 'OWNER'} />}
+      {active && isBusiness && workspace.role === 'OWNER' && view === 'Employees' && <EmployeeManager key={backendWorkspaceId} workspaceId={backendWorkspaceId} workspaceName={workspace.name} canManage={workspace.role === 'OWNER'} />}
       {isBusiness && view === 'Settings' && <section className={cardClasses}><h2>{workspace.name}</h2><p className="mt-3 text-sm text-[#68796e]">Business workspace · {workspace.role === 'EMPLOYEE' ? 'Employee' : 'Owner'} · Currency: EUR</p></section>}
     </main>
     <dialog ref={dialog} className="m-auto max-h-[calc(100svh-40px)] w-[min(460px,calc(100%_-_32px))] overflow-y-auto rounded-[18px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/35 backdrop:backdrop-blur-[3px] [&_h2]:m-0 [&_h2]:text-[23px] [&_h2]:font-semibold" aria-labelledby="dashboard-dialog-title">

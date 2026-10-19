@@ -3,9 +3,10 @@ import { workspaceQueryKey } from '@/features/workspaces/workspace-state'
 import { listDepartments, type Department } from './api'
 
 const empty: Department[] = []
-export function useDepartments(workspaceId: number | undefined, enabled = true) {
+export function useDepartments(workspaceId: number | undefined, enabled = true, accessRole?: 'OWNER' | 'EMPLOYEE') {
   const client = useQueryClient()
-  const key = workspaceQueryKey('departments', workspaceId)
+  const baseKey = workspaceQueryKey('departments', workspaceId)
+  const key = accessRole === undefined ? baseKey : [...baseKey, accessRole] as const
   const query = useQuery({ queryKey: key, queryFn: ({ signal }) => listDepartments(workspaceId!, signal), enabled: enabled && workspaceId !== undefined })
   return {
     departments: enabled && !query.isError ? query.data ?? empty : empty,

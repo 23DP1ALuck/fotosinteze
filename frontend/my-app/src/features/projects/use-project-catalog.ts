@@ -4,10 +4,11 @@ import { useDepartments } from '@/features/departments/use-departments'
 import { authAccountId, workspaceQueryKey } from '@/features/workspaces/workspace-state'
 type ProjectData = { projects: ApiProject[] }
 const emptyProjects: ApiProject[] = []
-export function useProjectCatalog(workspaceId: number | undefined, enabled: boolean) {
+export function useProjectCatalog(workspaceId: number | undefined, enabled: boolean, accessRole?: 'OWNER' | 'EMPLOYEE') {
   const client = useQueryClient()
-  const key = workspaceQueryKey('projects',workspaceId)
-  const departments = useDepartments(workspaceId, enabled)
+  const baseKey = workspaceQueryKey('projects',workspaceId)
+  const key = accessRole === undefined ? baseKey : [...baseKey, accessRole] as const
+  const departments = useDepartments(workspaceId, enabled, accessRole)
   const query = useQuery({ queryKey: key, queryFn: async ({signal}) => ({ projects: await listProjects(workspaceId!,signal) }), enabled: enabled && workspaceId !== undefined })
   const data = enabled && !query.isError ? query.data : undefined
   return {

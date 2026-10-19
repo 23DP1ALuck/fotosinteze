@@ -14,7 +14,7 @@ it('updates the original cache when deletion finishes after a workspace switch',
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value() { this.setAttribute('open', '') } })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } })
   const department = { id: 8, workspace_id: 42, name: 'Design' }
-  client.setQueryData(['departments', 1, 42], [department])
+  client.setQueryData(['departments', 1, 42, 'OWNER'], [department])
   client.setQueryData(['projects', 1, 42], { projects: [] })
   let finish: (response: Response) => void = () => {}
   vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { finish = resolve })))
@@ -25,8 +25,8 @@ it('updates the original cache when deletion finishes after a workspace switch',
   view.unmount()
   setWorkspace(1, 43)
   await act(async () => finish(Response.json(null)))
-  await waitFor(() => expect(client.getQueryData(['departments', 1, 42])).toEqual([]))
-  expect(client.getQueryState(['departments', 1, 42])?.isInvalidated).toBe(true)
+  await waitFor(() => expect(client.getQueryData(['departments', 1, 42, 'OWNER'])).toEqual([]))
+  expect(client.getQueryState(['departments', 1, 42, 'OWNER'])?.isInvalidated).toBe(true)
   expect(client.getQueryState(['projects', 1, 42])?.isInvalidated).toBe(true)
   expect(client.getQueryData(['departments', 1, 43])).toBeUndefined()
   client.clear()
