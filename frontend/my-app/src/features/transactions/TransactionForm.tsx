@@ -77,7 +77,7 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
     try {
       await mutation.mutateAsync(value)
       if (authAccountId() !== ownerId) return
-      await Promise.all(['transactions', 'dashboard', 'accounts', 'budgets', 'business-budgets'].map(feature => client.invalidateQueries({ queryKey: [feature, ownerId, workspaceId] })))
+      await Promise.all(['statistics', 'transactions', 'dashboard', 'accounts', 'budgets', 'business-budgets'].map(feature => client.invalidateQueries({ queryKey: [feature, ownerId, workspaceId] })))
       if (authAccountId() === ownerId && activeWorkspaceId() === workspaceId) onSaved()
     } catch (error) {
       if (authAccountId() === ownerId && activeWorkspaceId() === workspaceId) setError('root', { message: error instanceof Error ? error.message : 'Could not save the transaction. Please retry.' })

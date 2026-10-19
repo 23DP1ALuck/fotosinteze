@@ -56,7 +56,7 @@ export function DepartmentManager({ workspaceId, workspaceName, canManage }: { w
     await client.cancelQueries({ queryKey: key, exact: true })
     if (accountId !== authAccountId()) return false
     client.setQueryData<Department[]>(key, previous => next.kind === 'delete' ? previous?.filter(item => item.id !== next.department.id) : updated ? [...(previous ?? []).filter(item => item.id !== updated.id), updated] : previous)
-    await Promise.all(['departments', 'projects', 'dashboard', 'transactions', 'budgets', 'business-budgets'].map(feature => client.invalidateQueries({ queryKey: [feature, accountId, workspaceId] })))
+    await Promise.all(['statistics', 'departments', 'projects', 'dashboard', 'transactions', 'budgets', 'business-budgets'].map(feature => client.invalidateQueries({ queryKey: [feature, accountId, workspaceId] })))
     if (accountId !== authAccountId() || activeWorkspaceId() !== workspaceId) return false
     setNotice(next.kind === 'create' ? 'Department created.' : next.kind === 'rename' ? 'Department renamed.' : 'Department deleted.')
     return true
