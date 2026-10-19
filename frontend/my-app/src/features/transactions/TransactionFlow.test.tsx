@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -189,6 +189,8 @@ it('combines history filters before pagination and resets them when cleared', as
       const params = new URL(String(url), 'http://localhost').searchParams
       const offset = Number(params.get('offset'))
       const matches = savedRows.filter(row => row.description.toLowerCase().includes((params.get('search') ?? '').trim().toLowerCase()) &&
+        (!params.has('date_from') || row.created_at.slice(0, 10) >= params.get('date_from')!) &&
+        (!params.has('date_to') || row.created_at.slice(0, 10) <= params.get('date_to')!) &&
         (!params.has('category_id') || row.category_id === Number(params.get('category_id'))) &&
         (!params.has('source') || row.source === params.get('source')) &&
         (!params.has('type') || params.get('type') === 'EXPENSE'))
@@ -206,10 +208,20 @@ it('combines history filters before pagination and resets them when cleared', as
   await userEvent.type(screen.getByLabelText('Search personal transactions'), 'Old train ticket')
   expect(await screen.findByRole('button', { name: 'Edit Old train ticket' })).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Load more transactions' })).not.toBeInTheDocument()
-  await userEvent.clear(screen.getByLabelText('Search personal transactions'))
-  await userEvent.selectOptions(screen.getByLabelText('Filter by source'), 'All sources')
-  await userEvent.selectOptions(screen.getByLabelText('Filter by category'), 'All categories')
-  await userEvent.click(screen.getByRole('button', { name: 'All' }))
+  fireEvent.change(screen.getByLabelText('From date'), { target: { value: '2026-10-18' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Apply dates' }))
+  expect(await screen.findByText('No transactions match these filters.')).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('From date'), { target: { value: '2026-10-17' } })
+  fireEvent.change(screen.getByLabelText('To date'), { target: { value: '2026-10-17' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Apply dates' }))
+  expect(await screen.findByRole('button', { name: 'Edit Old train ticket' })).toBeInTheDocument()
+  await waitFor(() => {
+    const filteredRequest = vi.mocked(fetch).mock.calls.map(([url]) => new URL(String(url), 'http://localhost')).reverse().find(url => url.pathname.endsWith('/transactions'))!
+    expect(Object.fromEntries(filteredRequest.searchParams)).toMatchObject({ offset: '0', search: 'Old train ticket', source: 'BANK', category_id: '7', type: 'EXPENSE', date_from: '2026-10-17', date_to: '2026-10-17' })
+  })
+  await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+  expect(screen.getByLabelText('From date')).toHaveValue('')
+  expect(screen.getByLabelText('Search personal transactions')).toHaveValue('')
   expect(await screen.findByRole('button', { name: 'Edit Recent 0' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Load more transactions' })).toBeInTheDocument()
 })
@@ -296,22 +308,85 @@ it('keeps a transaction when deletion is denied and lets the user retry', async 
   expect(screen.queryByRole('button', { name: 'Edit Rimi' })).not.toBeInTheDocument()
 })
 
-it('shows approved expense transactions as read only while preserving their details', async () => {
+it('shows approved business expense transactions as read only while preserving their details', async () => {
   const fallback = vi.mocked(fetch).getMockImplementation()!
   vi.stubGlobal('fetch', vi.fn(async (url, init) => {
-    const response = await fallback(url, init)
-    if (!String(url).includes('/transactions?')) return response
-    const page = await response.json()
-    return Response.json({ ...page, items: page.items.map((item: { transaction_id: number }) => item.transaction_id === 2 ? { ...item, expense_id: 20 } : item) })
+    if (String(url).includes('/transactions?') && new Headers(init?.headers).get('X-Workspace-ID') === '42') {
+      return Response.json({ items: [{ transaction_id: 200, workspace_id: 42, description: 'Approved travel', amount: '28.54', currency: 'EUR', source: 'EXPENSE', account_id: 13, category_id: 4, department_id: 8, project_id: 10, expense_id: 20, created_at: '2026-10-17T12:00:00', updated_at: '2026-10-17T12:00:00' }], offset: 0, limit: 50, has_more: false })
+    }
+    return fallback(url, init)
   }))
   mount()
-  await userEvent.click(await screen.findByRole('button', { name: 'Transactions' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Switch workspace, Personal' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Switch to Studio' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Transactions' }))
   await screen.findByText('Approved expense · read only')
-  expect(screen.queryByRole('button', { name: 'Edit Rimi' })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Delete Rimi' })).not.toBeInTheDocument()
-  await userEvent.click(screen.getByRole('button', { name: 'View Rimi details' }))
+  expect(screen.queryByRole('button', { name: 'Edit Approved travel' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Delete Approved travel' })).not.toBeInTheDocument()
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filter by source' }), 'Expense')
+  await userEvent.click(await screen.findByRole('button', { name: 'View Approved travel details' }))
   const modal = within(screen.getByRole('dialog', { name: 'Transaction details' }))
   expect(modal.getByText('Expense')).toBeInTheDocument()
   expect(modal.getByText('− €28.54')).toBeInTheDocument()
   expect(modal.getByText('17 Oct 2026')).toBeInTheDocument()
+})
+
+it('combines business filters and keeps search and filter state scoped to each workspace', async () => {
+  const user = userEvent.setup()
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  const businessRows = [
+    { transaction_id: 200, description: 'Website hosting', category_id: 7, department_id: 8, project_id: 10 },
+    { transaction_id: 201, description: 'Other hosting', category_id: 4, department_id: 8, project_id: null },
+  ].map(row => ({ ...row, workspace_id: 42, amount: '20.00', currency: 'EUR', account_id: 13, source: 'EXPENSE', expense_id: null, created_at: '2026-10-17T12:00:00', updated_at: '2026-10-17T12:00:00' }))
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    const request = new URL(String(url), 'http://localhost')
+    if (request.pathname.endsWith('/transactions') && new Headers(init?.headers).get('X-Workspace-ID') === '42') {
+      const params = request.searchParams
+      const items = businessRows.filter(row =>
+        row.description.toLowerCase().includes((params.get('search') ?? '').toLowerCase()) &&
+        (!params.has('type') || params.get('type') === 'EXPENSE') &&
+        (!params.has('source') || row.source === params.get('source')) &&
+        (['category_id', 'department_id', 'project_id'] as const).every(key => !params.has(key) || row[key] === Number(params.get(key))),
+      )
+      return Response.json({ items, limit: 50, offset: 0, has_more: false })
+    }
+    return fallback(url, init)
+  }))
+  mount()
+  await user.click(await screen.findByRole('button', { name: 'Transactions' }))
+  expect(screen.queryByRole('combobox', { name: 'Filter by department' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('combobox', { name: 'Filter by project' })).not.toBeInTheDocument()
+  await user.type(screen.getByRole('searchbox'), 'Rimi')
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Edit Monthly salary' })).not.toBeInTheDocument())
+  expect(await screen.findByRole('button', { name: 'Edit Rimi' })).toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: 'Switch workspace, Personal' }))
+  await user.click(screen.getByRole('button', { name: 'Switch to Studio' }))
+  await user.click(screen.getByRole('button', { name: 'Transactions' }))
+  expect(screen.getByRole('searchbox')).toHaveValue('')
+  await screen.findByRole('button', { name: 'Edit Other hosting' })
+  expect(screen.queryByRole('button', { name: 'Edit Rimi' })).not.toBeInTheDocument()
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by department' }), '8')
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by project' }), '10')
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by category' }), '7')
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by source' }), 'Expense')
+  await user.click(screen.getByRole('button', { name: 'Expenses' }))
+  await user.type(screen.getByRole('searchbox'), 'hosting')
+  await waitFor(() => {
+    const latest = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/transactions?')).at(-1)!
+    expect(new Headers(latest[1]?.headers).get('X-Workspace-ID')).toBe('42')
+    expect(Object.fromEntries(new URL(String(latest[0]), 'http://localhost').searchParams)).toMatchObject({ search: 'hosting', source: 'EXPENSE', category_id: '7', department_id: '8', project_id: '10', type: 'EXPENSE', offset: '0' })
+  })
+  expect(await screen.findByRole('button', { name: 'Edit Website hosting' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Edit Other hosting' })).not.toBeInTheDocument()
+  await user.type(screen.getByRole('searchbox'), ' missing')
+  expect(await screen.findByText('No transactions match these filters.')).toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: 'Switch workspace, Studio' }))
+  await user.click(screen.getByRole('button', { name: 'Switch to Personal' }))
+  expect(screen.getByRole('searchbox')).toHaveValue('Rimi')
+  expect(screen.queryByRole('combobox', { name: 'Filter by department' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('combobox', { name: 'Filter by project' })).not.toBeInTheDocument()
+  expect(await screen.findByRole('button', { name: 'Edit Rimi' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Edit Website hosting' })).not.toBeInTheDocument()
 })
