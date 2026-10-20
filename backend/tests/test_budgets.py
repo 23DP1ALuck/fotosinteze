@@ -52,7 +52,7 @@ class BudgetEndpointTests(unittest.IsolatedAsyncioTestCase):
         await self.db.close()
         await self.engine.dispose()
 
-    async def test_spending_uses_original_period_and_optional_scope_filters(self):
+    async def test_spending_uses_saved_period_currency_and_optional_scope_filters(self):
         self.db.add_all([
             Budget(budget_id=1, workspace_id=1, category_id=1, project_id=10,
                    department_id=20, name="Food", limit_amount=100, currency="EUR",
@@ -85,7 +85,7 @@ class BudgetEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         budgets = response.json()
         self.assertEqual([b["budget_id"] for b in budgets], [1, 2])
-        self.assertEqual(Decimal(budgets[0]["current_spent"]), Decimal("112.30"))
+        self.assertEqual(Decimal(budgets[0]["current_spent"]), Decimal("12.30"))
         self.assertEqual(Decimal(budgets[1]["current_spent"]), 0)
         self.assertEqual(set(budgets[0]), {
             "budget_id", "workspace_id", "category_id", "project_id", "department_id",
@@ -100,7 +100,7 @@ class BudgetEndpointTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get("/budgets", headers={"Workspace-ID": "999"})
         self.assertEqual(response.status_code, 403)
 
-    async def test_unfiltered_budget_keeps_original_income_and_uncategorized_totals(self):
+    async def test_unfiltered_budget_counts_only_expense_categories(self):
         self.db.add(Budget(workspace_id=1, name="General", limit_amount=100,
                            currency="EUR", period_start=date(2024, 1, 1),
                            period_length="WEEKLY"))
@@ -118,7 +118,32 @@ class BudgetEndpointTests(unittest.IsolatedAsyncioTestCase):
         await self.db.commit()
         response = await self.client.get("/budgets", headers={"Workspace-ID": "1"})
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(Decimal(response.json()[0]["current_spent"]), Decimal("117.30"))
+        self.assertEqual(Decimal(response.json()[0]["current_spent"]), Decimal("12.30"))
+
+    async def test_weekly_and_custom_spending_exclude_period_end_and_other_scopes(self):
+        for period, duration, end_day in [("WEEKLY", None, 8), ("CUSTOM", 3, 4)]:
+            with self.subTest(period=period):
+                response = await self.client.post("/budgets", headers={"Workspace-ID": "1"},
+                    json=self.budget_input(period_length=period, duration_days=duration))
+                self.assertEqual(response.status_code, 201, response.text)
+                budget_id = response.json()["budget_id"]
+                transactions = []
+                for day, hour, currency, category, workspace, amount in [
+                    (1, 0, "EUR", 1, 1, 10), (end_day - 1, 23, "EUR", 1, 1, 20),
+                    (end_day, 0, "EUR", 1, 1, 100), (end_day, 12, "EUR", 1, 1, 100),
+                    (2, 12, "USD", 1, 1, 100), (2, 12, "EUR", 3, 1, 100),
+                    (2, 12, "EUR", 1, 2, 100),
+                ]:
+                    transactions.append(Transaction(amount=amount, currency=currency, description="Test",
+                        source=TransactionSourceEnum.MANUAL, account_id=1, workspace_id=workspace,
+                        category_id=category, created_at=datetime(2025, 1, day, hour)))
+                self.db.add_all(transactions)
+                await self.db.commit()
+                response = await self.client.get(f"/budgets/{budget_id}", headers={"Workspace-ID": "1"})
+                self.assertEqual(Decimal(response.json()["current_spent"]), Decimal("30"))
+                for transaction in transactions:
+                    await self.db.delete(transaction)
+                await self.db.commit()
 
     async def test_business_budgets_require_owner(self):
         membership = await self.db.get(WorkspaceUsers, (1, 2))

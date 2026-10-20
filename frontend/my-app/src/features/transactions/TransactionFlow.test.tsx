@@ -40,14 +40,26 @@ async function fillAndSave(type: 'income' | 'expense', description: string, amou
   await user.click(modal.getByRole('button', { name: `Save ${type}` }))
 }
 
-it('refreshes saved transactions, dashboard totals, and account balances after adding an expense', async () => {
+it('refreshes saved transactions, dashboard totals, account balances and budget progress after adding an expense', async () => {
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  let spent = 28.54
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    if (String(url).endsWith('/budgets')) return Response.json([{ budget_id: 1, workspace_id: 7,
+      category_id: 4, name: 'Groceries', limit_amount: '300', currency: 'EUR', current_spent: spent.toFixed(2),
+      period_start: '2026-10-01', period_length: 'MONTHLY', duration_days: null }])
+    const response = await fallback(url, init)
+    if (String(url).endsWith('/transactions') && init?.method === 'POST' && response.ok) spent += 50
+    return response
+  }))
   mount()
+  await waitFor(() => expect(screen.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('value', '28.54'))
   await fillAndSave('expense', 'Weekly groceries', '50')
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add expense' })).not.toBeInTheDocument())
   const overview = within(screen.getByRole('region', { name: 'Monthly overview' }))
   expect(await overview.findByText('€4,770.50')).toBeInTheDocument()
   expect(overview.getByText('€1,892.35')).toBeInTheDocument()
   expect(await screen.findByText('Weekly groceries')).toBeInTheDocument()
+  await waitFor(() => expect(screen.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('value', '78.54'))
   const requests = vi.mocked(fetch).mock.calls.map(([url]) => String(url))
   expect(requests.filter(url => url.endsWith('/dashboard')).length).toBeGreaterThan(1)
   expect(requests.filter(url => url.endsWith('/accounts')).length).toBeGreaterThan(1)
@@ -121,25 +133,12 @@ it('allows an uncategorised transaction to be classified and edited', async () =
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit transaction' })).not.toBeInTheDocument())
 })
 
-it('identifies incomplete budget spending and excludes other currencies', async () => {
-  const fallback = vi.mocked(fetch).getMockImplementation()!
-  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
-    const response = await fallback(url, init)
-    if (String(url).includes('/transactions?')) {
-      const page = await response.json()
-      page.items.push({ ...page.items[1], transaction_id: 55, amount: '1000.00', currency: 'USD' })
-      page.has_more = true
-      return Response.json(page)
-    }
-    return response
-  }))
+it('links to saved personal budgets instead of estimating totals from loaded transactions', async () => {
   mount()
-  expect(await screen.findByText(/Spending is based on loaded transactions/)).toBeInTheDocument()
-  expect(screen.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('value', '28.54')
-  expect(screen.queryByText('On track')).not.toBeInTheDocument()
-  expect(screen.getAllByText('Partial data')).toHaveLength(2)
+  await userEvent.click(await screen.findByRole('button', { name: 'Manage budgets' }))
+  expect(await screen.findByRole('region', { name: 'Personal budgets' })).toBeInTheDocument()
+  expect(screen.queryByText(/Spending is based on loaded transactions/)).not.toBeInTheDocument()
 })
-
 
 it('makes an owner-created project available in transaction and budget forms without reloading', async () => {
   let projects = [{ id: 10, workspace_id: 42, name: 'Website', status: null, start_date: null, end_date: null, department_ids: [8] }]

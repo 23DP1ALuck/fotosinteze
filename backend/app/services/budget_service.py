@@ -35,12 +35,13 @@ async def assert_budget_access(current_user: dict, workspace: Workspace, db: Asy
 
 
 async def budget_response(budget: Budget, db: AsyncSession) -> BudgetResponseDTO:
-    # Keep the original fixed period
     end : date = calculate_budget_period_bounds(budget.period_start, budget.period_length, budget.duration_days)
-    # Preserve the original total: no currency or income/expense filter, and SQL BETWEEN bounds.
-    stmt = select(func.coalesce(func.sum(Transaction.amount), 0)).where(
+    stmt = select(func.coalesce(func.sum(Transaction.amount), 0)).join(Category, Transaction.category_id == Category.category_id).where(
         Transaction.workspace_id == budget.workspace_id,
-        Transaction.created_at.between(budget.period_start, end),
+        Transaction.created_at >= budget.period_start,
+        Transaction.created_at < end,
+        Transaction.currency == budget.currency,
+        Category.type == CategoryType.expense,
     )
     # add to select statement filters from budget
     for field in ("category_id", "project_id", "department_id"):

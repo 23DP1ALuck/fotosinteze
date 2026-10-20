@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { matchesProjectDepartment } from '@/features/projects/project-filter'
 import type { ProjectCatalog } from '@/features/projects/use-project-catalog'
 import { listAccessibleWorkspaces, type AccessibleWorkspace } from '@/features/workspaces/api'
-import { deleteBusinessBudget, loadBusinessBudgets, saveBusinessBudget, targetTypes, type BudgetCatalog, type BudgetInput, type BusinessBudget, type TargetType } from './api'
+import { deletePersonalBudget, loadPersonalBudgets, savePersonalBudget, deleteBusinessBudget, loadBusinessBudgets, saveBusinessBudget, targetTypes, type BudgetCatalog, type BudgetInput, type BusinessBudget, type TargetType } from './api'
 
 const button = 'rounded-xl bg-[#193f33] px-4 py-2 text-sm text-white disabled:opacity-50'
 const secondary = 'rounded-xl bg-[#eaf0e6] px-4 py-2 text-sm text-[#193f33] disabled:opacity-50'
@@ -15,7 +15,7 @@ function blank(): BudgetInput {
   return { name: '', target_type: 'CATEGORY', target_id: 0, limit_amount: '', currency: 'EUR', period_start: today, period_length: 'MONTHLY', duration_days: null }
 }
 
-export function BusinessBudgets({ workspaceId, onConnect, catalog }: { workspaceId?: number; onConnect: (id: number) => void; catalog?: ProjectCatalog }) {
+export function BusinessBudgets({ workspaceId, onConnect, catalog, personal = false }: { workspaceId?: number; onConnect: (id: number) => void; catalog?: ProjectCatalog; personal?: boolean }) {
   const [data, setData] = useState<BudgetCatalog | null>(null)
   const [workspaces, setWorkspaces] = useState<AccessibleWorkspace[]>([])
   const [revision, setRevision] = useState(0)
@@ -36,7 +36,7 @@ export function BusinessBudgets({ workspaceId, onConnect, catalog }: { workspace
           const rows = await listAccessibleWorkspaces(controller.signal)
           if (!controller.signal.aborted) setWorkspaces(rows.filter(row => row.type === 'BUSINESS'))
         } else {
-          const result = await loadBusinessBudgets(workspaceId, controller.signal)
+          const result = await (personal ? loadPersonalBudgets : loadBusinessBudgets)(workspaceId, controller.signal)
           if (!controller.signal.aborted) setData(result)
         }
       } catch (failure) {
@@ -45,7 +45,7 @@ export function BusinessBudgets({ workspaceId, onConnect, catalog }: { workspace
     }
     void load()
     return () => controller.abort()
-  }, [workspaceId, revision, catalog?.projects, catalog?.departments])
+  }, [workspaceId, revision, personal, catalog?.projects, catalog?.departments])
   const current = data?.workspace_id === workspaceId ? data : null
   const currentProjectDepartment = projectDepartment === 'workspace' || catalog?.departments.some(item => String(item.id) === projectDepartment) ? projectDepartment : ''
   const projectChoices = catalog ? catalog.workspaceId === workspaceId ? catalog.projects.filter(project => matchesProjectDepartment(project, currentProjectDepartment)) : [] : current?.targets.PROJECT ?? []
@@ -67,7 +67,7 @@ export function BusinessBudgets({ workspaceId, onConnect, catalog }: { workspace
     }
     setBusy(true); setError(''); setNotice('')
     try {
-      const row = await saveBusinessBudget(workspaceId, draft, editing)
+      const row = personal ? await savePersonalBudget(workspaceId, draft, editing, current?.targets.CATEGORY) : await saveBusinessBudget(workspaceId, draft, editing)
       setData(previous => previous && ({ ...previous, budgets: editing === undefined ? [...previous.budgets, row] : previous.budgets.map(item => item.id === row.id ? row : item) }))
       setDraft(null); setNotice(editing === undefined ? 'Budget created.' : 'Budget updated.')
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not save budget.') }
@@ -77,24 +77,24 @@ export function BusinessBudgets({ workspaceId, onConnect, catalog }: { workspace
     if (!deleting || workspaceId === undefined || busy) return
     setBusy(true); setError(''); setNotice('')
     try {
-      await deleteBusinessBudget(workspaceId, deleting.id)
+      await (personal ? deletePersonalBudget : deleteBusinessBudget)(workspaceId, deleting.id)
       setData(previous => previous && ({ ...previous, budgets: previous.budgets.filter(row => row.id !== deleting.id) }))
       setDeleting(null); setNotice('Budget deleted.')
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not delete budget.') }
     finally { setBusy(false) }
   }
 
-  return <section aria-label="Business budgets" className="rounded-2xl bg-white p-6 text-[#193f33]">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold!">Business budgets</h2><p className="mt-2 text-sm text-[#68796e]">Plan spending by category, department or project.</p></div><div className="flex gap-2"><button className={secondary} onClick={refresh} disabled={loading || busy}>Refresh budgets</button>{canManage && <button className={button} disabled={busy} onClick={() => edit()}>Create budget</button>}</div></div>
+  return <section aria-label={personal ? "Personal budgets" : "Business budgets"} className="rounded-2xl bg-white p-6 text-[#193f33]">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold!">{personal ? 'Personal budgets' : 'Business budgets'}</h2><p className="mt-2 text-sm text-[#68796e]">{personal ? 'Plan spending by category, currency and saved period.' : 'Plan spending by category, department or project.'}</p></div><div className="flex gap-2"><button className={secondary} onClick={refresh} disabled={loading || busy}>Refresh budgets</button>{canManage && <button className={button} disabled={busy} onClick={() => edit()}>Create budget</button>}</div></div>
     {error && <p role="alert" className="mt-4 rounded-xl bg-[#fae8e5] p-3 text-sm text-[#a43b32]">{error}</p>}
     {notice && <p role="status" className="mt-4 text-sm">{notice}</p>}
     {loading && <p role="status" className="mt-6">Loading budgets…</p>}
     {workspaceId === undefined && !loading && <label className="mt-6 block max-w-md text-sm">Business workspace<select className={field} value="" onChange={event => onConnect(Number(event.target.value))}><option value="" disabled>Select a workspace</option>{workspaces.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select>{!workspaces.length && <span className="mt-2 block">No accessible Business workspaces. Ask an owner to add you or create a Business workspace first.</span>}</label>}
     {current?.progress_scope === 'ASSIGNED_DEPARTMENT' && <p className="mt-5 text-sm text-[#68796e]">Read-only progress for your assigned department and its projects. Spending includes only your department; category budgets are visible to owners.</p>}
-    {draft && current?.can_manage && <form aria-label={editing === undefined ? 'Create business budget' : 'Edit business budget'} onSubmit={save} className="mt-6 grid gap-4 rounded-xl bg-[#f7f8f2] p-5 sm:grid-cols-2">
+    {draft && current?.can_manage && <form aria-label={editing === undefined ? personal ? 'Create personal budget' : 'Create business budget' : personal ? 'Edit personal budget' : 'Edit business budget'} onSubmit={save} className="mt-6 grid gap-4 rounded-xl bg-[#f7f8f2] p-5 sm:grid-cols-2">
       <label className="text-sm">Budget name<input className={field} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} required maxLength={100} /></label>
       <label className="text-sm">Limit<input className={field} type="number" min="0.01" max="99999999.99" step="0.01" value={draft.limit_amount} onChange={e => setDraft({ ...draft, limit_amount: e.target.value })} required /></label>
-      <label className="text-sm">Target type<select className={field} value={draft.target_type} onChange={e => { setProjectDepartment(''); setDraft({ ...draft, target_type: e.target.value as TargetType, target_id: 0 }) }}>{targetTypes.map(kind => <option key={kind} value={kind}>{labels[kind]}</option>)}</select></label>
+      {!personal && <label className="text-sm">Target type<select className={field} value={draft.target_type} onChange={e => { setProjectDepartment(''); setDraft({ ...draft, target_type: e.target.value as TargetType, target_id: 0 }) }}>{targetTypes.map(kind => <option key={kind} value={kind}>{labels[kind]}</option>)}</select></label>}
       {draft.target_type === 'PROJECT' && catalog && <label className="text-sm">Filter projects by department<select aria-label="Filter projects by department" className={field} value={currentProjectDepartment} disabled={projectOptionsBusy || busy} onChange={event => {
         const department = event.target.value
         setProjectDepartment(department)

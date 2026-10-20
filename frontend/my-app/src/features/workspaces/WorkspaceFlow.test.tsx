@@ -82,28 +82,35 @@ it('uses active backend project IDs in Business transaction selectors',async()=>
 })
 
 
-it('creates, edits and deletes sample budgets, retains the period, and shows exceeded spending', async () => {
-  const user = userEvent.setup()
+it('shows saved budget progress on the dashboard and reloads edited limits', async () => {
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  let budget = { budget_id: 1, workspace_id: 7, category_id: 4, name: 'Groceries', limit_amount: '400',
+    currency: 'EUR', current_spent: '28.54', period_start: '2026-10-01', period_length: 'MONTHLY', duration_days: null }
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    if (String(url).endsWith('/budgets/1') && init?.method === 'PUT') {
+      budget = { ...budget, ...JSON.parse(String(init.body)) }
+      return Response.json(budget)
+    }
+    if (String(url).endsWith('/budgets')) return Response.json([budget])
+    return fallback(url, init)
+  }))
   await renderWorkspace()
-  await user.click(screen.getByRole('button', { name: /^Budgets$/ }))
-  await user.click(screen.getByRole('button', { name: 'Manage budgets' }))
-  let modal = within(screen.getByRole('dialog'))
-  await user.clear(modal.getByLabelText('Groceries (€)'))
-  await user.type(modal.getByLabelText('Groceries (€)'), '10')
-  await user.selectOptions(modal.getByLabelText('Period Groceries'), 'WEEKLY')
-  await user.type(modal.getByLabelText('New budget name'), 'Travel')
-  await user.click(modal.getByRole('button', { name: '+ Add budget' }))
-  await user.click(modal.getByRole('button', { name: 'Delete Transport' }))
-  await user.click(modal.getByRole('button', { name: 'Save budgets' }))
-  expect(screen.getByText('Exceeded')).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: /^Travel$/ })).toBeInTheDocument()
-  expect(screen.queryByRole('heading', { name: /^Transport$/ })).not.toBeInTheDocument()
-  await user.click(screen.getByRole('button', { name: 'Manage budgets' }))
-  modal = within(screen.getByRole('dialog'))
-  expect(modal.getByLabelText('Period Groceries')).toHaveValue('WEEKLY')
-  expect(modal.getByLabelText('Groceries (€)')).toHaveValue(10)
+  const summary = within(await screen.findByRole('region', { name: 'Budget overview' }))
+  expect(await summary.findByText('Groceries')).toBeInTheDocument()
+  expect(summary.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('value', '28.54')
+  expect(summary.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('max', '400')
+  expect(summary.getByText(/2026-10-01 to 2026-11-01/)).toBeInTheDocument()
+  await userEvent.click(summary.getByRole('button', { name: 'Manage budgets' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit Groceries' }))
+  const form = within(screen.getByRole('form', { name: 'Edit personal budget' }))
+  await userEvent.clear(form.getByLabelText('Limit'))
+  await userEvent.type(form.getByLabelText('Limit'), '450')
+  await userEvent.click(form.getByRole('button', { name: 'Save budget' }))
+  await waitFor(() => expect(screen.queryByRole('form')).not.toBeInTheDocument())
+  await userEvent.click(screen.getByRole('button', { name: 'Dashboard' }))
+  await waitFor(() => expect(screen.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('max', '450'))
+  expect(screen.queryByText(/session budget limits/)).not.toBeInTheDocument()
 })
-
 
 it('creates a business through the API and selects its persisted workspace ID', async () => {
   const user = userEvent.setup()

@@ -25,6 +25,7 @@ export function createFinanceTransport() {
     const income = (business ? 0 : 3200) + delta.income
     const expenses = (business ? 0 : 1842.35) + delta.expenses
     const balance = (business ? 0 : 4820.5) + delta.balance
+    if (path === '/budgets') return Response.json([])
     if (path === '/accounts') return Response.json(state.emptyAccounts ? [] : [{ account_id: accountId, name: 'Main account', currency: 'EUR', balance: balance.toFixed(2), workspace_id: workspaceId, connection_id: null }])
     if (path === '/categories') return Response.json(state.emptyCategories ? [] : categories(workspaceId))
     if (path === '/dashboard') return Response.json({ workspace_id: workspaceId, currency: 'EUR', period_start: '2026-10-01', period_end: '2026-11-01', expenses: expenses.toFixed(2), ...(business ? { revenue: income.toFixed(2), profit: (income - expenses).toFixed(2), spending_by_category: [], spending_by_department: [], spending_by_project: [] } : { income: income.toFixed(2), savings: (income - expenses).toFixed(2), balance: balance.toFixed(2), recent_transactions: list.slice(0, 10) }) })
