@@ -1,4 +1,5 @@
 import unittest
+from decimal import Decimal
 
 import httpx
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -6,7 +7,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.database import Base, get_db_session
 from app.dependencies.auth import get_current_user
 from app.main import app
-from app.models import Category, Department, Workspace, WorkspaceRole, WorkspaceUsers, User
+from app.models import Account, Budget, BudgetPeriod, Expense, Transaction, Category, Department, Workspace, WorkspaceRole, WorkspaceUsers, User
+from app.models.transaction import TransactionSourceEnum
+from app.models.expenses import ExpenseStatusEnum
 from app.models.category import CategoryType
 from app.models.workspace import WorkspaceTypeEnum
 
@@ -82,6 +85,44 @@ class CategoryEndpointTests(unittest.IsolatedAsyncioTestCase):
                 "/categories/1", headers={"Workspace-ID": "1"}
             )
             self.assertEqual(response.status_code, 404, response.text)
+
+    async def test_used_categories_cannot_be_deleted_and_financial_history_is_preserved(self):
+        self.db.add(Account(account_id=1, name="Cash", currency="EUR", workspace_id=1, balance=100))
+        records = []
+        for category_id, status in enumerate(ExpenseStatusEnum, start=10):
+            self.db.add(Category(category_id=category_id, name=status.value, type=CategoryType.expense, workspace_id=1))
+            records.append(Expense(workspace_id=1, submitted_by=1, category_id=category_id,
+                                   amount=25, currency="EUR", description="Travel", status=status))
+        self.db.add_all([
+            Category(category_id=20, name="Transactions", type=CategoryType.expense, workspace_id=1),
+            Category(category_id=21, name="Budgets", type=CategoryType.expense, workspace_id=1),
+        ])
+        await self.db.flush()
+        records.extend([
+            Transaction(workspace_id=1, account_id=1, category_id=20, amount=25, currency="EUR",
+                        description="Travel", source=TransactionSourceEnum.MANUAL),
+            Budget(workspace_id=1, category_id=21, name="Travel", limit_amount=25,
+                   currency="EUR", period_length=BudgetPeriod.MONTHLY),
+        ])
+        self.db.add_all(records)
+        await self.db.commit()
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+                                     base_url="http://test", headers={"Workspace-ID": "1"}) as client:
+            for record in records:
+                category_id = record.category_id
+                with self.subTest(record=type(record).__name__, category_id=category_id):
+                    response = await client.delete(f"/categories/{category_id}")
+                    self.assertEqual(response.status_code, 409, response.text)
+                    self.assertEqual(response.json()["detail"], "Category is used by expense requests, transactions or budgets and cannot be deleted")
+                    self.assertEqual((await client.get(f"/categories/{category_id}")).status_code, 200)
+                    await self.db.refresh(record)
+                    self.assertEqual(record.category_id, category_id)
+                    self.assertEqual(record.limit_amount if isinstance(record, Budget) else record.amount, Decimal("25"))
+                    if isinstance(record, Expense):
+                        self.assertEqual(record.status, list(ExpenseStatusEnum)[category_id - 10])
+            account = await self.db.get(Account, 1)
+            await self.db.refresh(account)
+            self.assertEqual(account.balance, Decimal("100"))
 
     async def test_create_category_uses_active_workspace(self):
         async with httpx.AsyncClient(

@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from app.models import Workspace, Category
 from app.database import AsyncSession
 
-from sqlalchemy import select, Select
+from sqlalchemy import select, Select, or_
 
 from app.dto import CategoryResponseDTO, CreateCategoryRequest, UpdateCategoryRequest
 from app.services.workspace_access import get_workspace_membership
@@ -118,6 +118,14 @@ async def delete_category(
     )
     if category is None:
         raise HTTPException(status_code=404, detail="Category not found")
+
+    in_use = await db.scalar(select(or_(
+        Category.expenses.any(),
+        Category.transactions.any(),
+        Category.budgets.any(),
+    )).where(Category.category_id == category_id))
+    if in_use:
+        raise HTTPException(status_code=409, detail="Category is used by expense requests, transactions or budgets and cannot be deleted")
 
     await db.delete(category)
     await db.commit()
