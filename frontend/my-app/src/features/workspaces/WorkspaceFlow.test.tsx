@@ -306,3 +306,62 @@ it('opens profile from the user identity and keeps workspace creation in the swi
   await userEvent.click(profile)
   expect(screen.getByRole('dialog', { name: 'Your account' })).toBeInTheDocument()
 })
+
+it('shows workspace settings only for business owners and saves name and currency in a modal', async () => {
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  let savedWorkspace = { ...workspaces[1], base_currency: 'USD' }
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    if (String(url).endsWith('/workspaces/42')) {
+      if (init?.method === 'PUT') savedWorkspace = { ...savedWorkspace, ...JSON.parse(String(init.body)) }
+      return Response.json(savedWorkspace)
+    }
+    return fallback(url, init)
+  }))
+  await renderWorkspace()
+  expect(screen.queryByRole('button', { name: 'Business workspace settings' })).not.toBeInTheDocument()
+  await switchWorkspace('Personal', 'Acme Studio')
+  expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Business workspace settings' }))
+  const modal = within(await screen.findByRole('dialog', { name: 'Business workspace settings' }))
+  await waitFor(() => expect(modal.getByLabelText('Base currency')).toHaveValue('USD'))
+  expect(modal.getByLabelText('Workspace name')).toHaveValue('Acme Studio')
+  await userEvent.clear(modal.getByLabelText('Workspace name'))
+  await userEvent.type(modal.getByLabelText('Workspace name'), 'Renamed Studio')
+  await userEvent.clear(modal.getByLabelText('Base currency'))
+  await userEvent.type(modal.getByLabelText('Base currency'), 'gbp')
+  await userEvent.click(modal.getByRole('button', { name: 'Save changes' }))
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Business workspace settings' })).not.toBeInTheDocument())
+  expect(screen.getByRole('button', { name: 'Switch workspace, Renamed Studio' })).toBeInTheDocument()
+  expect(savedWorkspace).toMatchObject({ name: 'Renamed Studio', base_currency: 'GBP' })
+  savedWorkspace = { ...savedWorkspace, base_currency: 'CHF' }
+  await userEvent.click(screen.getByRole('button', { name: 'Business workspace settings' }))
+  await waitFor(() => expect(within(screen.getByRole('dialog', { name: 'Business workspace settings' })).getByLabelText('Base currency')).toHaveValue('CHF'))
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Business workspace settings' })).getByRole('button', { name: 'Cancel' }))
+  await switchWorkspace('Renamed Studio', 'Beta Studio')
+  expect(screen.queryByRole('button', { name: 'Business workspace settings' })).not.toBeInTheDocument()
+})
+
+it('keeps workspace settings input after a save error and allows retry', async () => {
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  let fail = true
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    if (String(url).endsWith('/workspaces/42')) {
+      if (init?.method === 'PUT' && fail) return Response.json({ detail: 'Workspace name is already taken' }, { status: 409 })
+      return Response.json({ ...workspaces[1], base_currency: 'EUR', ...(init?.method === 'PUT' ? JSON.parse(String(init.body)) : {}) })
+    }
+    return fallback(url, init)
+  }))
+  await renderWorkspace()
+  await switchWorkspace('Personal', 'Acme Studio')
+  await userEvent.click(screen.getByRole('button', { name: 'Business workspace settings' }))
+  const modal = within(screen.getByRole('dialog', { name: 'Business workspace settings' }))
+  await waitFor(() => expect(modal.getByLabelText('Workspace name')).toHaveValue('Acme Studio'))
+  await userEvent.clear(modal.getByLabelText('Workspace name'))
+  await userEvent.type(modal.getByLabelText('Workspace name'), 'Updated Studio')
+  await userEvent.click(modal.getByRole('button', { name: 'Save changes' }))
+  expect(await modal.findByRole('alert')).toHaveTextContent('Workspace name is already taken')
+  expect(modal.getByLabelText('Workspace name')).toHaveValue('Updated Studio')
+  fail = false
+  await userEvent.click(modal.getByRole('button', { name: 'Save changes' }))
+  await screen.findByRole('button', { name: 'Switch workspace, Updated Studio' })
+})

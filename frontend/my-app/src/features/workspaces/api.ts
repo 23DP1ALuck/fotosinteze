@@ -42,3 +42,28 @@ export async function createBusinessWorkspace(input: BusinessWorkspaceInput): Pr
   }
   return result.data
 }
+
+const businessWorkspaceSettingsSchema = workspaceSchema.extend({ base_currency: z.string().regex(/^[A-Z]{3}$/) })
+export type BusinessWorkspaceSettings = z.infer<typeof businessWorkspaceSettingsSchema>
+
+async function workspaceSettingsRequest(workspaceId: number, init: RequestInit): Promise<BusinessWorkspaceSettings> {
+  let response: Response
+  try { response = await authenticatedFetch(`/workspaces/${workspaceId}`, init) }
+  catch (error) {
+    if (init.signal?.aborted) throw error
+    throw new Error('Cannot reach the server. Check your connection and try again.', { cause: error })
+  }
+  if (!response.ok) throw new Error(await readApiErrorMessage(response))
+  const result = businessWorkspaceSettingsSchema.safeParse(await response.json())
+  if (!result.success || result.data.id !== workspaceId || result.data.type !== 'BUSINESS') {
+    throw new Error('The server returned unexpected workspace settings. Please retry.')
+  }
+  if (result.data.role !== 'OWNER') throw new Error('Only the workspace owner can manage these settings.')
+  return result.data
+}
+export function getBusinessWorkspaceSettings(workspaceId: number, signal?: AbortSignal) {
+  return workspaceSettingsRequest(workspaceId, { method: 'GET', signal })
+}
+export function updateBusinessWorkspace(workspaceId: number, input: BusinessWorkspaceInput) {
+  return workspaceSettingsRequest(workspaceId, { method: 'PUT', body: JSON.stringify(businessWorkspaceInputSchema.parse(input)) })
+}
