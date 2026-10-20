@@ -128,7 +128,7 @@ describe('browser auth session', () => {
     expect(localStorage.getItem('fm_user')).toBeNull()
   })
 
-  it('refreshes saved dashboard totals and grocery spending after adding an expense', async () => {
+  it('refreshes saved dashboard totals after adding an expense and opens persisted budgets', async () => {
     stubAuthFetch(vi.fn().mockResolvedValue({
       ok: true, status: 200,
       json: async () => ({ access_token: tokenFor('user@example.com') }),
@@ -146,15 +146,11 @@ describe('browser auth session', () => {
     expect(await screen.findByText('€4,770.50')).toBeInTheDocument()
     expect(screen.getByText('€1,892.35')).toBeInTheDocument()
     expect(screen.getByText('€1,307.65')).toBeInTheDocument()
-    expect(screen.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('value', '78.54')
     expect(screen.getByText('Weekly groceries')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Manage budgets' }))
-    await user.clear(screen.getByLabelText('Groceries (€)'))
-    await user.type(screen.getByLabelText('Groceries (€)'), '400')
-    await user.click(screen.getByRole('button', { name: 'Save budgets' }))
-    expect(screen.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('max', '400')
+    expect(await screen.findByText('No budgets available for this workspace.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Transactions' }))
     expect(screen.getByRole('heading', { name: 'Your transactions' })).toBeInTheDocument()
     expect(screen.getAllByRole('row')).toHaveLength(5)

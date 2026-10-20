@@ -5,6 +5,7 @@ from app.models.workspace import WorkspaceTypeEnum
 from app.dto import CreateAccountRequest, CreateAccountResponse
 from app.dto.update_account_request import UpdateAccountRequest
 from app.database import AsyncSession
+from app.services.name_uniqueness import check_unique_name
 from app.services.workspace_access import get_workspace_membership
 
 
@@ -32,12 +33,10 @@ async def get_account(account_id: int, current_user: dict, workspace: Workspace,
 
 
 async def check_name(name: str, workspace_id: int, db: AsyncSession, account_id: int | None = None) -> None:
-    duplicate = await db.scalar(select(Account.account_id).where(
-        Account.workspace_id == workspace_id, Account.name == name,
+    await check_unique_name(db, Account.name, name,
+        Account.workspace_id == workspace_id,
         Account.account_id != account_id if account_id is not None else True,
-    ).limit(1))
-    if duplicate is not None:
-        raise HTTPException(status_code=409, detail='Account name is already taken in this workspace')
+        detail='Account name is already taken in this workspace')
 
 
 async def create_account(request: CreateAccountRequest, current_user: dict,
@@ -61,9 +60,9 @@ async def create_account(request: CreateAccountRequest, current_user: dict,
 
 async def update_account(account_id: int, request: UpdateAccountRequest, current_user: dict,
                          workspace: Workspace, db: AsyncSession) -> CreateAccountResponse:
+    await authorize_accounts(current_user, workspace, db, owner=True)
     fields = request.model_dump(exclude_unset=True)
     if 'is_main' in fields:
-        await authorize_accounts(current_user, workspace, db, owner=True)
         await lock_main_accounts(workspace.workspace_id, db)
     account = await get_account(account_id, current_user, workspace, db)
     if 'balance' in fields and account.connection_id is not None:

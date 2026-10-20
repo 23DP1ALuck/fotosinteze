@@ -61,7 +61,7 @@ it.each(['personal', 'business'] as const)('loads, creates, edits and deletes AP
 
 it.each([409, 500])('keeps a category when deletion fails with HTTP %s', async status => {
   vi.stubGlobal('fetch', vi.fn(async (_url, init) => init.method === 'DELETE'
-    ? Response.json({ detail: 'Category is used by transactions or budgets' }, { status })
+    ? Response.json({ detail: 'Category is used by expense requests, transactions or budgets and cannot be deleted' }, { status })
     : Response.json([{ category_id: 9, workspace_id: 42, name: 'Food', type: 'EXPENSE' }])))
   const user = userEvent.setup()
   render(<CategoryManager workspaceKind="business" workspaceId={42} onConnect={() => {}} />)
@@ -69,7 +69,7 @@ it.each([409, 500])('keeps a category when deletion fails with HTTP %s', async s
   await user.click(screen.getByRole('button', { name: 'Delete Food' }))
   const dialog = within(screen.getByRole('dialog'))
   await user.click(dialog.getByRole('button', { name: 'Delete category' }))
-  expect(await dialog.findByRole('alert')).toHaveTextContent(status === 500 ? 'HTTP 500' : 'used by transactions or budgets')
+  expect(await dialog.findByRole('alert')).toHaveTextContent(status === 500 ? 'HTTP 500' : 'used by expense requests, transactions or budgets and cannot be deleted')
   expect(screen.getByRole('list', { name: 'Business categories' })).toHaveTextContent('Food')
 })
 
