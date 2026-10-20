@@ -5,6 +5,7 @@ export type WorkspaceContextValue = {
   status: 'loading' | 'ready' | 'empty' | 'error' | 'unauthenticated'; error: string
   selectWorkspace: (id: number) => void; retry: () => void
   createBusiness: (input: BusinessWorkspaceInput) => Promise<void>
+  updateBusiness: (id: number, input: BusinessWorkspaceInput) => Promise<void>
 }
 export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
 export function useWorkspace() {
