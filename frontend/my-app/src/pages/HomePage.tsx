@@ -25,7 +25,7 @@ import { TransactionForm } from '@/features/transactions/TransactionForm'
 import { useWorkspaceFinance } from '@/features/transactions/use-workspace-finance'
 import type { ApiTransaction, TransactionFilters } from '@/features/transactions/api'
 
-const navigation = ['Dashboard', 'Accounts', 'Transactions', 'Budgets', 'Categories', 'Statistics', 'Revolut'] as const
+const navigation = ['Dashboard', 'Accounts', 'Transactions', 'Budgets', 'Categories', 'Statistics'] as const
 const formatDate = (date: string) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${date}T12:00:00`))
 
 const cardClasses =
@@ -50,7 +50,11 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   const [transactionAction, setTransactionAction] = useState<{ type: 'income' | 'expense'; transaction?: ApiTransaction } | null>(null)
   const [budgetTargets, setBudgetTargets] = useState<Record<string, { departmentId: string; projectId: string }>>({})
   const [budgetDraft, setBudgetDraft] = useState<typeof budgetTargets>({})
-  const [view, setView] = useState<string>('Dashboard')
+  const [selectedView, setView] = useState<string | null>(null)
+  const view = selectedView ?? 'Dashboard'
+  if (active && selectedView === null && finance.accountsReady) {
+    setView(finance.accounts.length === 0 ? 'Accounts' : 'Dashboard')
+  }
   const [mobileMenu, setMobileMenu] = useState(false)
   const transactions = finance.transactions
   const [dialogType, setDialogType] = useState<'profile' | 'budget' | null>(null)
@@ -160,7 +164,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       {active && view === 'Budgets' && (isBusiness ? <BusinessBudgets key={backendWorkspaceId} workspaceId={backendWorkspaceId} catalog={projectCatalog} onConnect={connectBackendWorkspace} /> : renderBudgets())}
       {active && view === 'Accounts' && <AccountManager workspaceId={backendWorkspaceId} workspaceName={workspace.name} canCreate={!isBusiness || workspace.role === 'OWNER'} />}
       {active && view === 'Categories' && <CategoryManager canManage={!isBusiness || workspace.role === 'OWNER'} workspaceName={workspace.name} workspaceKind={workspace.kind} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} />}
-      {active && !isBusiness && (view === 'Dashboard' || view === 'Revolut') && <RevolutConnect key={backendWorkspaceId} workspaceId={backendWorkspaceId} />}
+      {active && !isBusiness && view === 'Accounts' && <RevolutConnect key={backendWorkspaceId} workspaceId={backendWorkspaceId} />}
 
       {active && isBusiness && view === 'Projects' && <ProjectManager catalog={projectCatalog} workspaceName={workspace.name} canManage={canManageProjects} canCreate={canManageProjects || projectCatalog.departments.length > 0} />}
       {active && isBusiness && view === 'Departments' && <DepartmentManager key={`${backendWorkspaceId}-${workspace.role}`} workspaceId={backendWorkspaceId} workspaceName={workspace.name} canManage={workspace.role === 'OWNER'} />}

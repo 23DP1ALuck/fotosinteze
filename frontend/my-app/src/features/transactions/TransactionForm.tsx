@@ -29,6 +29,8 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
   const titleId = useId()
   const needsType = Boolean(transaction && !options.categories.some(item => item.id === transaction.category_id))
   const accounts = options.accounts.filter(item => item.workspace_id === workspaceId)
+  const mainAccountId = accounts.find(item => item.is_main)?.account_id
+  const mainAccountApplied = useRef(false)
   const requiresDepartment = Boolean(catalog && role === 'EMPLOYEE')
   const departments = useMemo(() => catalog?.workspaceId === workspaceId ? catalog.departments.filter(item => item.workspace_id === workspaceId) : [], [catalog, workspaceId])
   const validator = schema.superRefine((value, ctx) => {
@@ -42,9 +44,14 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
     if (value.project_id && (!project || (value.department_id && !project.department_ids.includes(Number(value.department_id))))) ctx.addIssue({ code: 'custom', path: ['project_id'], message: 'Choose a project in the selected department' })
   })
   const { register, control, handleSubmit, setError, clearErrors, setValue, getValues, formState: { errors, isSubmitting } } = useForm<Values>({ resolver: zodResolver(validator), defaultValues: {
-    transaction_type: needsType ? '' : type, amount: transaction?.amount ?? '', description: transaction?.description ?? '', account_id: transaction ? String(transaction.account_id) : '', category_id: transaction?.category_id ? String(transaction.category_id) : '',
+    transaction_type: needsType ? '' : type, amount: transaction?.amount ?? '', description: transaction?.description ?? '', account_id: transaction ? String(transaction.account_id) : mainAccountId ? String(mainAccountId) : '', category_id: transaction?.category_id ? String(transaction.category_id) : '',
     department_id: transaction?.department_id ? String(transaction.department_id) : '', project_id: transaction?.project_id ? String(transaction.project_id) : '',
   } })
+  useEffect(() => {
+    if (transaction || options.loading || options.error || mainAccountApplied.current) return
+    mainAccountApplied.current = true
+    if (!getValues('account_id') && mainAccountId) setValue('account_id', String(mainAccountId))
+  }, [transaction, options.loading, options.error, mainAccountId, getValues, setValue])
   const [accountId, departmentId, selectedType] = useWatch({ control, name: ['account_id', 'department_id', 'transaction_type'] })
   useEffect(() => {
     if (!catalog || catalog.loading || catalog.error) return
