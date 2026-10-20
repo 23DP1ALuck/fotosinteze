@@ -1,6 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy import select
 from app.database import AsyncSession
+from app.services.name_uniqueness import check_unique_name
 
 from app.models import Department, WorkspaceUsers, WorkspaceRole
 from app.dto import DepartmentResponseDTO, EmployeeDepartmentResponseDTO
@@ -11,15 +12,8 @@ async def create_department(workspace_id: int, name: str, current_user: dict, db
     # Check if the user can manage the department
     await can_manage_department(current_user, workspace_id, db)
 
-    # Department names must be unique within this workspace.
-    existing_department = await db.scalar(
-        select(Department.department_id).where(
-            Department.workspace_id == workspace_id,
-            Department.name == name,
-        )
-    )
-    if existing_department is not None:
-        raise HTTPException(status_code=409, detail="Department name is already taken in this workspace")
+    await check_unique_name(db, Department.name, name, Department.workspace_id == workspace_id,
+        detail='Department name is already taken in this workspace')
 
     # Create a new department
     new_department = Department(
@@ -78,16 +72,9 @@ async def update_department(department_id: int, name: str, current_user: dict, d
     # Check if the user can manage the department
     await can_manage_department(current_user, department.workspace_id, db)
 
-    # Allow keeping the current name, but reject another department's name.
-    existing_department = await db.scalar(
-        select(Department.department_id).where(
-            Department.workspace_id == department.workspace_id,
-            Department.name == name,
-            Department.department_id != department_id,
-        )
-    )
-    if existing_department is not None:
-        raise HTTPException(status_code=409, detail="Department name is already taken in this workspace")
+    await check_unique_name(db, Department.name, name,
+        Department.workspace_id == department.workspace_id, Department.department_id != department_id,
+        detail='Department name is already taken in this workspace')
 
     # Update the department with the provided data
     department.name = name

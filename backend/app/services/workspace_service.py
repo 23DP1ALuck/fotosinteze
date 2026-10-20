@@ -9,6 +9,7 @@ from app.dto.workspace_response import WorkspaceResponse
 from app.models import User, Account, Budget, RevolutConnection
 
 from app.database import AsyncSession
+from app.services.name_uniqueness import check_unique_name
 from app.models import WorkspaceUsers
 from sqlalchemy import select, Select
 from sqlalchemy.orm import selectinload
@@ -46,6 +47,7 @@ async def create_business_workspace(
         raise HTTPException(status_code=400, detail="Business currency is required")
     if len(request.base_currency.strip()) != 3:
         raise HTTPException(status_code=400, detail="Currency code must be 3 symbols")
+    await check_unique_name(db, Workspace.name, request.name, detail='Workspace name is already taken')
     workspace = Workspace(
         name=request.name.strip(),
         type=WorkspaceTypeEnum.BUSINESS,
@@ -177,6 +179,8 @@ async def update_business_workspace(workspace_id: int, request: UpdateBusinessWo
         raise HTTPException(status_code=400, detail='Business currency is required')
     if len(currency) != 3:
         raise HTTPException(status_code=400, detail='Currency code must be 3 symbols')
+    await check_unique_name(db, Workspace.name, name, Workspace.workspace_id != workspace_id,
+        detail='Workspace name is already taken')
     workspace.name = name
     workspace.base_currency = currency
     workspace.updated_at = datetime.now()

@@ -124,7 +124,7 @@ class BudgetEndpointTests(unittest.IsolatedAsyncioTestCase):
         for period, duration, end_day in [("WEEKLY", None, 8), ("CUSTOM", 3, 4)]:
             with self.subTest(period=period):
                 response = await self.client.post("/budgets", headers={"Workspace-ID": "1"},
-                    json=self.budget_input(period_length=period, duration_days=duration))
+                    json=self.budget_input(name=f"{period} budget", period_length=period, duration_days=duration))
                 self.assertEqual(response.status_code, 201, response.text)
                 budget_id = response.json()["budget_id"]
                 transactions = []

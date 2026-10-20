@@ -1,6 +1,7 @@
 from fastapi import HTTPException
 from app.models import Workspace, Category
 from app.database import AsyncSession
+from app.services.name_uniqueness import check_unique_name
 
 from sqlalchemy import select, Select, or_
 
@@ -84,7 +85,11 @@ async def update_category(
         raise HTTPException(status_code=404, detail="Category not found")
     if not request.name.strip():
         raise HTTPException(status_code=400, detail="Name cannot be empty")
+    await check_unique_name(db, Category.name, request.name,
+        Category.workspace_id == workspace_id, Category.category_id != category_id,
+        detail='Category name is already taken in this workspace')
     update_request_data = request.model_dump(exclude_unset=True)
+    update_request_data['name'] = request.name.strip()
     for field, value in update_request_data.items():
         setattr(category, field, value)
     await db.commit()
@@ -146,6 +151,8 @@ async def create_category(request: CreateCategoryRequest,
         raise HTTPException(status_code=400, detail="Name cannot be empty")
     if request.type not in (CategoryType.income, CategoryType.expense):
         raise HTTPException(status_code=400, detail="Invalid type")
+    await check_unique_name(db, Category.name, request.name, Category.workspace_id == workspace_id,
+        detail='Category name is already taken in this workspace')
     category = Category(
         name=request.name.strip(),
         type=request.type,

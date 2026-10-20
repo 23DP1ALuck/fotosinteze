@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 
 from app.database import AsyncSession
+from app.services.name_uniqueness import check_unique_name
 from app.dto import BudgetResponseDTO, CreateBudgetRequest
 from app.models import Budget, BudgetPeriod, Category, Transaction, Workspace
 from app.models.category import CategoryType
@@ -107,6 +108,8 @@ async def create_budget(request: CreateBudgetRequest, current_user: dict, worksp
                         db: AsyncSession) -> BudgetResponseDTO:
     await assert_budget_access(current_user, workspace, db)
     await validate_budget_fields(request, current_user, workspace, db)
+    await check_unique_name(db, Budget.name, request.name, Budget.workspace_id == workspace.workspace_id,
+        detail='Budget name is already taken in this workspace')
     budget = Budget(**request.model_dump(), workspace_id=workspace.workspace_id)
     db.add(budget)
     await db.commit()
@@ -119,6 +122,9 @@ async def update_budget(budget_id: int, request: CreateBudgetRequest, current_us
     await assert_budget_access(current_user, workspace, db)
     budget = await load_budget(budget_id, workspace, db)
     await validate_budget_fields(request, current_user, workspace, db)
+    await check_unique_name(db, Budget.name, request.name,
+        Budget.workspace_id == workspace.workspace_id, Budget.budget_id != budget_id,
+        detail='Budget name is already taken in this workspace')
     # PUT replaces all editable fields; omitted optional targets are cleared.
     for field, value in request.model_dump().items():
         setattr(budget, field, value)

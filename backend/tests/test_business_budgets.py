@@ -47,9 +47,9 @@ class BusinessBudgetTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_employee_read_only_and_visibility(self):
         await self.create()
-        dept = await self.create(target_type='DEPARTMENT')
-        shared = await self.create(target_type='PROJECT')
-        await self.create(target_type='PROJECT', target_id=2)
+        dept = await self.create(name='Department plan', target_type='DEPARTMENT')
+        shared = await self.create(name='Project plan', target_type='PROJECT')
+        await self.create(name='Other project plan', target_type='PROJECT', target_id=2)
         self.identity = {'sub': '2'}
         data = (await self.client.get('/business-budgets')).json()
         self.assertFalse(data['can_manage'])
@@ -89,7 +89,7 @@ class BusinessBudgetTests(unittest.IsolatedAsyncioTestCase):
     async def test_period_boundaries(self):
         monthly = await self.create(period_start='2028-01-31')
         self.assertEqual(monthly['period_end'], '2028-02-29')
-        weekly = await self.create(period_start='2026-12-28', period_length='WEEKLY')
+        weekly = await self.create(name='Weekly plan', period_start='2026-12-28', period_length='WEEKLY')
         self.assertEqual(weekly['period_end'], '2027-01-04')
 
     async def test_ambiguous_legacy_budget_is_not_exposed(self):
