@@ -1,7 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/features/auth/use-auth'
-import { createBusinessWorkspace, listAccessibleWorkspaces, type AccessibleWorkspace, type BusinessWorkspaceInput } from './api'
+import { createBusinessWorkspace, listAccessibleWorkspaces, updateBusinessWorkspace, type AccessibleWorkspace, type BusinessWorkspaceInput } from './api'
 import { WorkspaceContext } from './use-workspace'
 import { authAccountId, setWorkspace, subscribeWorkspace, workspaceSnapshot } from './workspace-state'
 
@@ -9,6 +9,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const auth = useAuth()
   const accountId = auth.status === 'authenticated' ? auth.user?.id ?? null : null
   const queryClient = useQueryClient()
+  const previousRoles = useRef<{ accountId: number | null; roles: Map<number, AccessibleWorkspace['role']> }>({ accountId: null, roles: new Map() })
   const previousAccount = useRef<number | null>(null)
   const selection = useSyncExternalStore(subscribeWorkspace, workspaceSnapshot)
   const query = useQuery({ queryKey: ['workspaces', accountId], queryFn: ({signal}) => listAccessibleWorkspaces(signal), enabled: accountId !== null, retry: false, staleTime: 30_000, refetchOnWindowFocus: false })
@@ -28,6 +29,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [accountId, queryClient])
   useEffect(() => {
     if (accountId === null || !query.data) return
+    const previous = previousRoles.current
+    const changed = new Set(previous.accountId === accountId ? query.data.filter(item => previous.roles.has(item.id) && previous.roles.get(item.id) !== item.role).map(item => item.id) : [])
+    previousRoles.current = { accountId, roles: new Map(query.data.map(item => [item.id, item.role])) }
+    if (changed.size) {
+      // Reset every workspace-scoped result, including inactive financial views.
+      // Active observers refetch under the refreshed membership permissions.
+      void queryClient.resetQueries({ predicate: cached => cached.queryKey[1] === accountId && typeof cached.queryKey[2] === 'number' && changed.has(cached.queryKey[2]) })
+    }
     const accessible = new Set(query.data.map(item => item.id))
     const inaccessibleQueries = { predicate: (query: { queryKey: readonly unknown[] }) => query.queryKey[1] === accountId && typeof query.queryKey[2] === 'number' && !accessible.has(query.queryKey[2]) }
     void queryClient.cancelQueries(inaccessibleQueries)
@@ -54,6 +63,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setWorkspace(ownerId, created.id)
     try { localStorage.setItem(`fotosinteze.workspace.${ownerId}`, String(created.id)) } catch { /* Selection still works in memory. */ }
   }
+  async function updateBusiness(id: number, input: BusinessWorkspaceInput) {
+    const ownerId = accountId
+    if (ownerId === null || authAccountId() !== ownerId) throw new Error('Please log in before changing workspace settings.')
+    if (!workspaces.some(item => item.id === id && item.type === 'BUSINESS' && item.role === 'OWNER')) throw new Error('Only the workspace owner can manage these settings.')
+    const updated = await updateBusinessWorkspace(id, input)
+    await queryClient.cancelQueries({ queryKey: ['workspaces', ownerId], exact: true })
+    if (authAccountId() !== ownerId) throw new Error('Your account changed. Please log in again.')
+    const current = queryClient.getQueryData<AccessibleWorkspace[]>(['workspaces', ownerId])
+    if (!current?.some(item => item.id === id && item.role === 'OWNER')) throw new Error('Your workspace permissions changed. Please refresh your workspaces.')
+    queryClient.setQueryData<AccessibleWorkspace[]>(['workspaces', ownerId], previous => previous?.map(item => item.id === id ? updated : item))
+    queryClient.setQueryData(['workspace-settings', ownerId, id], updated)
+    await Promise.all(['dashboard', 'statistics'].map(feature => queryClient.invalidateQueries({ queryKey: [feature, ownerId, id] })))
+  }
   const status = accountId === null ? 'unauthenticated' : query.isPending ? 'loading' : query.isError ? 'error' : !workspaces.length ? 'empty' : !activeWorkspace ? 'loading' : 'ready'
-  return <WorkspaceContext.Provider value={{ workspaces, activeWorkspace, status, error: query.error instanceof Error ? query.error.message : '', selectWorkspace, createBusiness, retry: () => { void query.refetch() } }}>{children}</WorkspaceContext.Provider>
+  return <WorkspaceContext.Provider value={{ workspaces, activeWorkspace, status, error: query.error instanceof Error ? query.error.message : '', selectWorkspace, createBusiness, updateBusiness, retry: () => { void query.refetch() } }}>{children}</WorkspaceContext.Provider>
 }

@@ -71,8 +71,8 @@ function HeroPreview() {
         <p className="hidden text-sm text-[#8b928c] sm:block">September 2026</p>
       </div>
 
-      <div className="space-y-5 px-5 py-6 sm:px-6">
-        <h2 className="m-0 text-[1.65rem] font-medium tracking-tight text-[#1a2e2a]">
+      <div className="flex flex-col gap-6 px-5 py-8 sm:px-6">
+        <h2 className="m-0 text-[1.65rem] leading-snug font-medium tracking-tight text-[#1a2e2a]">
           A little clarity goes a long way.
         </h2>
 

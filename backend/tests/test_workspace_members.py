@@ -63,6 +63,65 @@ class WorkspaceMemberTests(unittest.IsolatedAsyncioTestCase):
         await self.db.close()
         await self.engine.dispose()
 
+    async def test_list_returns_only_this_workspaces_members_without_private_fields(self):
+        response = await self.client.get('/workspaces/1/members')
+        self.assertEqual(response.status_code, 200, response.text)
+        members = {item['user_id']: item for item in response.json()}
+        self.assertEqual(set(members), {1, 2})
+        self.assertEqual(members[2], {
+            'user_id': 2, 'workspace_id': 1, 'display_name': 'User 2',
+            'email': 'employee@example.com', 'role': 'EMPLOYEE', 'department_id': 1,
+            'joined_at': members[2]['joined_at'],
+        })
+        self.assertEqual(members[1]['role'], 'OWNER')
+        self.assertIsInstance(datetime.fromisoformat(members[2]['joined_at']), datetime)
+        response = await self.client.get('/workspaces/2/members')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([item['user_id'] for item in response.json()], [1])
+
+    async def test_list_requires_business_ownership_and_valid_ids(self):
+        for user, workspace_id, expected in [
+            ('2', 1, 403), ('4', 1, 403), ('999', 1, 401),
+            ('1', 3, 400), ('1', 99, 404), ('1', 0, 422), ('1', -1, 422),
+        ]:
+            self.identity = {'sub': user}
+            response = await self.client.get(f'/workspaces/{workspace_id}/members')
+            self.assertEqual(response.status_code, expected, response.text)
+        del app.dependency_overrides[get_current_user]
+        self.assertEqual((await self.client.get('/workspaces/1/members')).status_code, 401)
+
+    async def test_add_assigns_department_and_list_tracks_reassignment_and_removal(self):
+        self.db.add(Department(department_id=2, name='Other team', workspace_id=1))
+        await self.db.commit()
+        response = await self.client.post('/workspaces/1/employees', json={
+            'email': 'mixedcase@example.com', 'department_id': 1,
+        })
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()['department_id'], 1)
+        self.assertEqual((await self.db.get(WorkspaceUsers, (3, 1))).department_id, 1)
+        self.identity = {'sub': '3'}
+        response = await self.client.get('/departments', headers={'Workspace-ID': '1'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([item['id'] for item in response.json()], [1])
+        self.identity = {'sub': '1'}
+        self.assertEqual((await self.client.put('/departments/2/employees/3')).status_code, 200)
+        response = await self.client.get('/workspaces/1/members')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(next(item for item in response.json() if item['user_id'] == 3)['department_id'], 2)
+        self.assertEqual((await self.client.delete('/workspaces/1/employees/3')).status_code, 204)
+        response = await self.client.get('/workspaces/1/members')
+        self.assertEqual({item['user_id'] for item in response.json()}, {1, 2})
+
+    async def test_add_rejects_invalid_or_foreign_departments_without_creating_membership(self):
+        self.db.add(Department(department_id=2, name='Other workspace', workspace_id=2))
+        await self.db.commit()
+        for department_id, expected in [(0, 422), (-1, 422), (99, 404), (2, 400)]:
+            response = await self.client.post('/workspaces/1/employees', json={
+                'email': 'mixedcase@example.com', 'department_id': department_id,
+            })
+            self.assertEqual(response.status_code, expected, response.text)
+            self.assertIsNone(await self.db.get(WorkspaceUsers, (3, 1)))
+
     async def test_add_persists_employee_in_multiple_workspaces(self):
         for workspace_id in (1, 2):
             response = await self.client.post(f'/workspaces/{workspace_id}/employees', json={'email': '  mixedcase@example.COM  '})
@@ -152,7 +211,7 @@ class WorkspaceMemberTests(unittest.IsolatedAsyncioTestCase):
         failure = IntegrityError('insert', {}, Exception('unrelated integrity failure'))
         with patch.object(self.db, 'commit', side_effect=failure):
             with self.assertRaises(IntegrityError):
-                await self.client.post('/workspaces/1/employees', json={'email': 'mixedcase@example.com'})
+                await self.client.post('/workspaces/1/employees', json={'email': 'mixedcase@example.com', 'department_id': 1})
         self.assertIsNone(await self.db.get(WorkspaceUsers, (3, 1)))
         self.assertEqual(await self.db.scalar(select(func.count()).select_from(User)), 4)
 

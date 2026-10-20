@@ -31,7 +31,7 @@ export function useWorkspaceFinance(workspaceId: number, enabled: boolean, catal
     for (const feature of ['statistics', 'transactions', 'dashboard', 'accounts', 'categories']) void client.invalidateQueries({ queryKey: workspaceQueryKey(feature, workspaceId) })
   }
   return {
-    rows, transactions, dashboard: dashboardQuery.data, accounts,
+    rows, transactions, dashboard: dashboardQuery.data, accounts, accountsReady: accountQuery.isSuccess && !accountQuery.isFetching,
     dashboardLoading: enabled && dashboardQuery.isPending, dashboardRefreshing: dashboardQuery.isFetching, dashboardError: dashboardQuery.error?.message ?? '',
     transactionsLoading: enabled && transactionQuery.isPending, transactionsRefreshing: transactionQuery.isFetching, transactionsError: transactionQuery.error?.message ?? '',
     metadataError: categoryQuery.error?.message || catalog.error,

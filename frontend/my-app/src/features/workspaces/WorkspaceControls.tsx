@@ -2,16 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { businessWorkspaceInputSchema, type BusinessWorkspaceInput } from './api'
-import { Check, ChevronDown, Plus, X } from 'lucide-react'
+import { Check, ChevronDown, Plus, Settings, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 
 export type Workspace = { id: string; name: string; kind: 'personal' | 'business'; role?: 'OWNER' | 'EMPLOYEE' }
 
-export function WorkspaceSwitcher({ workspace, workspaces, onSwitch, onCreate }: {
+export function WorkspaceSwitcher({ workspace, workspaces, onSwitch, onCreate, onSettings }: {
   workspace: Workspace
   workspaces: Workspace[]
   onSwitch: (id: string) => void
   onCreate: () => void
+  onSettings?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const container = useRef<HTMLDivElement>(null)
@@ -30,10 +31,13 @@ export function WorkspaceSwitcher({ workspace, workspaces, onSwitch, onCreate }:
       <span className="grid min-w-0 gap-1"><strong className="wrap-anywhere text-[17px] font-semibold">{workspace.name}</strong><span className="text-xs text-[#7d877f]">{workspace.kind === 'personal' ? 'Your personal workspace' : `Business workspace · ${workspace.role === 'EMPLOYEE' ? 'Employee' : 'Owner'}`}</span></span>
       <ChevronDown size={15} className="shrink-0 text-[#7d877f] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none" />
     </button>
-    <button type="button" aria-label="Create business workspace from workspace switcher" onClick={onCreate}
-      className="group/plus absolute -bottom-3 right-3 z-10 grid size-7 translate-y-2 scale-90 place-items-center rounded-lg border border-[#98a56c] bg-[#d5f579] text-[#193f33] opacity-0 transition-[opacity,transform,translate,scale]! duration-300! ease-out! group-hover:scale-100 group-focus-within:scale-100 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 focus:scale-100 focus:translate-y-0 focus:opacity-100 motion-reduce:transition-none! [@media(hover:none)]:scale-100 [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100">
-      <Plus size={17} /><span role="tooltip" className="pointer-events-none absolute top-full right-0 mt-2 w-max max-w-[230px] rounded-lg bg-[#193f33] px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover/plus:opacity-100 group-focus-visible/plus:opacity-100">Create business workspace</span>
-    </button>
+    <div className="absolute -bottom-3 right-3 z-10 flex gap-2 translate-y-2 scale-90 opacity-0 transition-[opacity,transform,translate,scale] duration-300 ease-out group-hover:scale-100 group-focus-within:scale-100 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 motion-reduce:transition-none [@media(hover:none)]:scale-100 [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100">
+      {workspace.kind === 'business' && workspace.role === 'OWNER' && onSettings && <button type="button" aria-label="Business workspace settings" title="Business workspace settings" onClick={() => { setOpen(false); onSettings() }} className="grid size-7 place-items-center rounded-lg border border-[#98a56c] bg-[#ecf0e6] text-[#193f33] hover:bg-[#e0e7d7]"><Settings size={16} aria-hidden /></button>}
+      <button type="button" aria-label="Create business workspace from workspace switcher" onClick={onCreate}
+        className="group/plus relative grid size-7 place-items-center rounded-lg border border-[#98a56c] bg-[#d5f579] text-[#193f33] hover:bg-[#c8e568]">
+        <Plus size={17} /><span role="tooltip" className="pointer-events-none absolute top-full right-0 mt-2 w-max max-w-[230px] rounded-lg bg-[#193f33] px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover/plus:opacity-100 group-focus-visible/plus:opacity-100">Create business workspace</span>
+      </button>
+    </div>
     {open && <div className="absolute top-[calc(100%+20px)] left-0 z-30 w-full rounded-xl border border-[#dce4d8] bg-white p-2 shadow-lg" aria-label="Available workspaces">
       {workspaces.map((item) => <button type="button" key={item.id} aria-label={`Switch to ${item.name}`} onClick={() => { onSwitch(item.id); setOpen(false) }} className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-[#f3f6ed]">
         <span className="min-w-0 wrap-anywhere">{item.name}<span className="mt-1 block text-xs text-[#7d877f]">{item.kind === 'personal' ? 'Personal workspace' : `Business · ${item.role === 'EMPLOYEE' ? 'Employee' : 'Owner'}`}</span></span>{item.id === workspace.id && <Check size={16} className="shrink-0" aria-hidden />}

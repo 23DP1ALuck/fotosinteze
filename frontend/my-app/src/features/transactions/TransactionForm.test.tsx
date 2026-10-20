@@ -167,3 +167,34 @@ it('clears a removed department and project before an owner saves an edit', asyn
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
   expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toMatchObject({ department_id: null, project_id: null })
 })
+
+it('prefills the main account for new transactions and allows changing it', async () => {
+  const mainOptions = { ...options, accounts: accounts.map(account => ({ ...account, is_main: account.account_id === 13 })) }
+  render(<TransactionForm workspaceId={7} type="income" options={mainOptions} onClose={() => {}} onSaved={() => {}} />)
+  expect(screen.getByLabelText('Account')).toHaveValue('13')
+  await userEvent.selectOptions(screen.getByLabelText('Account'), '12')
+  expect(screen.getByLabelText('Account')).toHaveValue('12')
+})
+
+it('uses the main account after options load without overwriting a later choice', async () => {
+  const mainOptions = { ...options, accounts: accounts.map(account => ({ ...account, is_main: account.account_id === 13 })) }
+  const props = { workspaceId: 7, type: 'income' as const, onClose() {}, onSaved() {} }
+  const { rerender } = render(<TransactionForm {...props} options={{ ...options, accounts: [], loading: true }} />)
+  rerender(<TransactionForm {...props} options={mainOptions} />)
+  await waitFor(() => expect(screen.getByLabelText('Account')).toHaveValue('13'))
+  await userEvent.selectOptions(screen.getByLabelText('Account'), '12')
+  rerender(<TransactionForm {...props} options={{ ...mainOptions, accounts: [...mainOptions.accounts] }} />)
+  expect(screen.getByLabelText('Account')).toHaveValue('12')
+})
+
+it('preserves the original account when editing instead of using the main account', () => {
+  const mainOptions = { ...options, accounts: accounts.map(account => ({ ...account, is_main: account.account_id === 13 })) }
+  render(<TransactionForm workspaceId={7} type="expense" transaction={transaction} options={mainOptions} onClose={() => {}} onSaved={() => {}} />)
+  expect(screen.getByLabelText('Account')).toHaveValue('12')
+})
+
+it('ignores main accounts from another workspace', () => {
+  const mainOptions = { ...options, accounts: [...accounts, { ...accounts[1], account_id: 99, workspace_id: 42, is_main: true }] }
+  render(<TransactionForm workspaceId={7} type="income" options={mainOptions} onClose={() => {}} onSaved={() => {}} />)
+  expect(screen.getByLabelText('Account')).toHaveValue('')
+})

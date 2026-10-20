@@ -5,6 +5,7 @@ class AddWorkspaceEmployeeRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     email: EmailStr = Field(max_length=100)
+    department_id: int | None = Field(default=None, gt=0)
 
     @field_validator('email', mode='before')
     @classmethod

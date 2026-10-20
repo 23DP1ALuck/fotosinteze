@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Menu, Plus, X } from 'lucide-react'
+import { ChevronRight, LogOut, Menu, Plus, X } from 'lucide-react'
 
 import { BrandMark } from '@/components/brand/BrandMark'
 import { useAuth } from '@/features/auth/use-auth'
@@ -9,12 +9,12 @@ import { AccountManager } from '@/features/accounts/AccountManager'
 import { CategoryManager } from '@/features/categories/CategoryManager'
 import { CreateBusinessDialog, WorkspaceSwitcher, type Workspace } from '@/features/workspaces/WorkspaceControls'
 import { DepartmentManager } from '@/features/departments/DepartmentManager'
-import { TeamManager } from '@/features/workspaces/TeamManager'
+import { EmployeeManager } from '@/features/employees/EmployeeManager'
 import { ProjectManager } from '@/features/projects/ProjectManager'
 import { useProjectCatalog } from '@/features/projects/use-project-catalog'
 import { WorkspaceProvider } from '@/features/workspaces/WorkspaceProvider'
+import { WorkspaceSettingsDialog } from '@/features/workspaces/WorkspaceSettingsDialog'
 import { useWorkspace } from '@/features/workspaces/use-workspace'
-import type { TeamData } from '@/features/workspaces/team-types'
 import { TransactionsView } from '@/features/workspaces/TransactionsView'
 import { Statistics } from '@/features/statistics/Statistics'
 import { BusinessDashboard } from '@/features/dashboard/BusinessDashboard'
@@ -27,7 +27,7 @@ import { TransactionForm } from '@/features/transactions/TransactionForm'
 import { useWorkspaceFinance } from '@/features/transactions/use-workspace-finance'
 import type { ApiTransaction, TransactionFilters } from '@/features/transactions/api'
 
-const navigation = ['Dashboard', 'Accounts', 'Transactions', 'Budgets', 'Categories', 'Statistics', 'Revolut'] as const
+const navigation = ['Dashboard', 'Accounts', 'Transactions', 'Budgets', 'Categories', 'Statistics'] as const
 const formatDate = (date: string) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${date}T12:00:00`))
 
 const cardClasses =
@@ -37,21 +37,24 @@ const primaryButtonClasses =
 const formClasses =
   'mt-[22px] grid gap-[17px] [&_label]:grid [&_label]:gap-[6px] [&_label]:text-[13px] [&_input]:w-full [&_input]:rounded-lg [&_input]:border [&_input]:border-[#dbe2d7] [&_input]:bg-[#fcfdf9] [&_input]:px-3 [&_input]:py-[10px] [&_input]:text-[#193f33] [&_select]:w-full [&_select]:rounded-lg [&_select]:border [&_select]:border-[#dbe2d7] [&_select]:bg-[#fcfdf9] [&_select]:px-3 [&_select]:py-[10px] [&_select]:text-[#193f33] [&_input:focus]:outline-2 [&_input:focus]:outline-offset-1 [&_input:focus]:outline-[#82965b] [&_select:focus]:outline-2 [&_select:focus]:outline-offset-1 [&_select:focus]:outline-[#82965b]'
 
-function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate }: {
-  workspace: Workspace; workspaces: Workspace[]; active: boolean; onSwitch: (id: string) => void; onCreate: () => void
+function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate, onSettings }: {
+  workspace: Workspace; workspaces: Workspace[]; active: boolean; onSwitch: (id: string) => void; onCreate: () => void; onSettings: () => void
 }) {
   const isBusiness = workspace.kind === 'business'
-  const workspaceNavigation = isBusiness ? workspace.role === 'EMPLOYEE' ? ['Dashboard', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Statistics'] : ['Dashboard', 'Accounts', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics', 'Settings'] : navigation
+  const workspaceNavigation = isBusiness ? workspace.role === 'EMPLOYEE' ? ['Dashboard', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Statistics'] : ['Dashboard', 'Accounts', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics'] : navigation
   const { user, logout } = useAuth()
-  const [team, setTeam] = useState<TeamData>({ departments: [], employees: [], projects: [] })
   const backendWorkspaceId = Number(workspace.id)
-  const projectCatalog = useProjectCatalog(backendWorkspaceId, isBusiness && active)
+  const projectCatalog = useProjectCatalog(backendWorkspaceId, isBusiness && active, workspace.role)
   const canManageProjects = workspace.role !== 'EMPLOYEE'
   const [transactionFilters, setTransactionFilters] = useState<TransactionFilters>({})
   const finance = useWorkspaceFinance(backendWorkspaceId, active, projectCatalog, transactionFilters)
   const [deletingTransaction, setDeletingTransaction] = useState<ApiTransaction | null>(null)
   const [transactionAction, setTransactionAction] = useState<{ type: 'income' | 'expense'; transaction?: ApiTransaction } | null>(null)
-  const [view, setView] = useState<string>('Dashboard')
+  const [selectedView, setView] = useState<string | null>(null)
+  const view = selectedView ?? 'Dashboard'
+  if (active && selectedView === null && finance.accountsReady) {
+    setView(finance.accounts.length === 0 && (!isBusiness || workspace.role === 'OWNER') ? 'Accounts' : 'Dashboard')
+  }
   const [mobileMenu, setMobileMenu] = useState(false)
   const transactions = finance.transactions
   const [dialogType, setDialogType] = useState<'profile' | null>(null)
@@ -105,16 +108,23 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   }
 
   return <div className="flex min-h-svh bg-[#f7f8f2] font-sans text-[15px] leading-[1.5] tracking-[-.015em] text-[#193f33] scheme-light [&_h1]:font-sans! [&_h2]:font-sans! [&_h1]:font-semibold! [&_h2]:font-semibold! max-sm:block [&_button]:cursor-pointer [&_button]:transition-colors motion-reduce:[&_button]:transition-none [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-4 [&_button:focus-visible]:outline-[#82965b] [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-4 [&_a:focus-visible]:outline-[#82965b]">
-    <aside className={`min-h-svh w-[252px] shrink-0 flex-col bg-white px-[21px] pt-8 pb-6 max-[1200px]:w-[220px] max-[1200px]:px-4 min-[1600px]:w-[294px] min-[1600px]:px-[25px] min-[1600px]:py-[38px] sm:static sm:flex sm:shadow-none ${mobileMenu ? 'fixed inset-y-0 left-0 z-20 flex max-h-svh !w-[290px] max-w-[calc(100%_-_30px)] overflow-y-auto !px-5 !py-[25px] shadow-[15px_0_60px_#193f3326]' : 'hidden'}`}>
-      {mobileMenu && <button className="mb-[10px] flex self-end border-0 bg-transparent p-1 sm:hidden" aria-label="Close workspace navigation" onClick={() => setMobileMenu(false)}><X size={20} /></button>}
+    <aside className={`h-svh min-h-0 w-[252px] shrink-0 self-start flex-col bg-white px-[21px] pt-8 pb-6 max-[1200px]:w-[220px] max-[1200px]:px-4 min-[1600px]:w-[294px] min-[1600px]:px-[25px] min-[1600px]:py-[38px] sm:sticky sm:top-0 sm:flex sm:shadow-none ${mobileMenu ? 'fixed inset-y-0 left-0 z-20 flex !w-[290px] max-w-[calc(100%_-_30px)] !px-5 !py-[25px] shadow-[15px_0_60px_#193f3326]' : 'hidden'}`}>
+      {mobileMenu && <button className="mb-[10px] flex shrink-0 self-end border-0 bg-transparent p-1 sm:hidden" aria-label="Close workspace navigation" onClick={() => setMobileMenu(false)}><X size={20} /></button>}
+      <div className="shrink-0">
       <Link to="/" className="flex items-center gap-[7px] px-[5px] text-[25px] font-semibold tracking-[-.04em]"><BrandMark className="size-5" />Fotosinteze</Link>
-      <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} onSwitch={(id) => { setTransactionAction(null); setDeletingTransaction(null); setMobileMenu(false); onSwitch(id) }} onCreate={() => { setMobileMenu(false); onCreate() }} />
-      <p className="mx-[9px] mt-[33px] mb-4 text-[10px] text-[#7d877f] uppercase">Workspace</p>
-      <nav aria-label="Workspace" className="grid gap-2">{workspaceNavigation.map((item) => <button key={item} className={`rounded-[10px] border-0 px-[19px] py-[13px] text-left ${view === item ? 'bg-[#193f33] text-white' : 'bg-transparent text-[#7d877f] hover:bg-[#f1f4ec] hover:text-[#193f33]'}`} aria-current={view === item ? 'page' : undefined} onClick={() => navigate(item)}>{item}</button>)}</nav>
-      <div className="mt-auto pt-[100px] max-[900px]:pt-[50px] max-sm:pt-6"><button className="flex w-full items-center gap-1 whitespace-nowrap border-t border-[#e1e5df] bg-transparent px-1 py-[21px] text-xs text-[#193f33] hover:text-[#60815b]" onClick={() => { setMobileMenu(false); onCreate() }}><Plus size={16} />Create business workspace</button>
-        <div className="mx-1 mt-[35px] mb-[23px] flex items-center gap-3 max-sm:mt-3 [&>div]:grid [&>div]:min-w-0 [&_strong]:text-sm [&_strong]:wrap-anywhere [&_div_span]:text-xs [&_div_span]:text-[#7d877f]"><span className="grid size-[39px] shrink-0 place-items-center rounded-full bg-[#ecf0e6] text-xs">{initials}</span><div><strong>{displayName}</strong><span>{isBusiness ? workspace.role === 'EMPLOYEE' ? 'Workspace employee' : 'Workspace owner' : 'Personal account'}</span></div></div>
-        <button className="mx-[7px] block border-0 bg-transparent p-0 text-[13px] text-[#7d877f] hover:text-[#60815b]" onClick={() => openDialog('profile')}>Profile & account</button>
-        <button className="mx-[7px] mt-[14px] border-0 bg-transparent p-0 text-[11px] text-[#7d877f] hover:text-[#60815b]" onClick={handleLogout}>Log out</button>
+      <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} onSwitch={(id) => { setTransactionAction(null); setDeletingTransaction(null); setMobileMenu(false); onSwitch(id) }} onCreate={() => { setMobileMenu(false); onCreate() }} onSettings={() => { setMobileMenu(false); onSettings() }} />
+      </div>
+      <div className="mt-6 flex min-h-0 flex-1 flex-col">
+        <p className="mx-[9px] mb-3 shrink-0 text-[10px] text-[#7d877f] uppercase">Workspace</p>
+        <nav aria-label="Workspace" className="grid min-h-0 content-start gap-1 overflow-y-auto overscroll-contain pb-1 [scrollbar-width:thin]">{workspaceNavigation.map((item) => <button key={item} className={`rounded-[10px] border-0 px-[19px] py-2.5 text-left ${view === item ? 'bg-[#193f33] text-white' : 'bg-transparent text-[#7d877f] hover:bg-[#f1f4ec] hover:text-[#193f33]'}`} aria-current={view === item ? 'page' : undefined} onClick={() => navigate(item)}>{item}</button>)}</nav>
+      </div>
+      <div className="mt-4 shrink-0 border-t border-[#e1e5df] pt-4">
+        <button type="button" aria-label="Profile & account" title="Profile & account" onClick={() => { setMobileMenu(false); openDialog('profile') }} className="flex w-full items-center gap-3 rounded-xl px-2 py-3 text-left hover:bg-[#f1f4ec]">
+          <span aria-hidden className="grid size-[39px] shrink-0 place-items-center rounded-full bg-[#ecf0e6] text-xs">{initials}</span>
+          <span className="grid min-w-0 flex-1 gap-0.5"><strong className="truncate text-sm" title={displayName}>{displayName}</strong><span className="text-xs text-[#7d877f]">{isBusiness ? workspace.role === 'EMPLOYEE' ? 'Workspace employee' : 'Workspace owner' : 'Personal account'}</span></span>
+          <ChevronRight aria-hidden size={16} className="shrink-0 text-[#7d877f]" />
+        </button>
+        <button type="button" className="mt-3 flex w-full items-center justify-center gap-2 rounded-[10px] border border-[#e9c9c2] bg-[#fbece8] px-4 py-3 text-sm font-semibold text-[#a43b32] hover:bg-[#f5ddd6]" onClick={handleLogout}><LogOut aria-hidden size={18} />Log out</button>
         {logoutError && <p role="alert" className="mt-3 text-xs text-[#a43b32]">{logoutError}</p>}
       </div>
     </aside>
@@ -139,12 +149,11 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       {active && view === 'Budgets' && (isBusiness ? <BusinessBudgets key={backendWorkspaceId} workspaceId={backendWorkspaceId} catalog={projectCatalog} onConnect={connectBackendWorkspace} /> : <BusinessBudgets key={backendWorkspaceId} workspaceId={backendWorkspaceId} personal onConnect={connectBackendWorkspace} />)}
       {active && view === 'Accounts' && (!isBusiness || workspace.role === 'OWNER') && <AccountManager workspaceId={backendWorkspaceId} workspaceName={workspace.name} canCreate={!isBusiness || workspace.role === 'OWNER'} />}
       {active && view === 'Categories' && <CategoryManager canManage={!isBusiness || workspace.role === 'OWNER'} workspaceName={workspace.name} workspaceKind={workspace.kind} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} />}
-      {active && !isBusiness && (view === 'Dashboard' || view === 'Revolut') && <RevolutConnect key={backendWorkspaceId} workspaceId={backendWorkspaceId} />}
+      {active && !isBusiness && view === 'Accounts' && <RevolutConnect key={backendWorkspaceId} workspaceId={backendWorkspaceId} />}
 
-      {active && isBusiness && view === 'Projects' && <ProjectManager catalog={projectCatalog} workspaceName={workspace.name} canManage={canManageProjects} />}
-      {active && isBusiness && view === 'Departments' && <DepartmentManager key={backendWorkspaceId} workspaceId={backendWorkspaceId} workspaceName={workspace.name} canManage={workspace.role === 'OWNER'} />}
-      {active && isBusiness && workspace.role === 'OWNER' && view === 'Employees' && <TeamManager section="Employees" data={team} onChange={setTeam} ownerName={displayName} />}
-      {isBusiness && view === 'Settings' && <section className={cardClasses}><h2>{workspace.name}</h2><p className="mt-3 text-sm text-[#68796e]">Business workspace · {workspace.role === 'EMPLOYEE' ? 'Employee' : 'Owner'} · Currency: EUR</p></section>}
+      {active && isBusiness && view === 'Projects' && <ProjectManager catalog={projectCatalog} workspaceName={workspace.name} canManage={canManageProjects} canCreate={canManageProjects || projectCatalog.departments.length > 0} />}
+      {active && isBusiness && view === 'Departments' && <DepartmentManager key={`${backendWorkspaceId}-${workspace.role}`} workspaceId={backendWorkspaceId} workspaceName={workspace.name} canManage={workspace.role === 'OWNER'} />}
+      {active && isBusiness && workspace.role === 'OWNER' && view === 'Employees' && <EmployeeManager key={backendWorkspaceId} workspaceId={backendWorkspaceId} workspaceName={workspace.name} canManage={workspace.role === 'OWNER'} />}
     </main>
     <dialog ref={dialog} className="m-auto max-h-[calc(100svh-40px)] w-[min(460px,calc(100%_-_32px))] overflow-y-auto rounded-[18px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/35 backdrop:backdrop-blur-[3px] [&_h2]:m-0 [&_h2]:text-[23px] [&_h2]:font-semibold" aria-labelledby="dashboard-dialog-title">
       <div className="flex items-center justify-between gap-[15px]"><h2 id="dashboard-dialog-title">Your account</h2><button className="rounded-full border-0 bg-[#eff2e9] p-[6px]" aria-label="Close dialog" onClick={() => dialog.current?.close()}><X size={20} /></button></div>
@@ -159,13 +168,16 @@ function WorkspaceHome() {
   const state = useWorkspace()
   const { user } = useAuth()
   const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<{ userId: number; workspaceId: number } | null>(null)
   const workspaces: Workspace[] = state.workspaces.map(item => ({ id: String(item.id), name: item.name, kind: item.type === 'PERSONAL' ? 'personal' : 'business', role: item.role }))
   const createDialog = creating && <CreateBusinessDialog key={user?.id} workspaces={workspaces} onCreate={state.createBusiness} onClose={() => setCreating(false)} />
+  const settingsWorkspace = editing?.userId === user?.id && state.activeWorkspace?.id === editing?.workspaceId && state.activeWorkspace?.type === 'BUSINESS' && state.activeWorkspace?.role === 'OWNER' ? state.activeWorkspace : null
+  const settingsDialog = settingsWorkspace && <WorkspaceSettingsDialog key={`${user?.id}-${settingsWorkspace.id}`} workspaceId={settingsWorkspace.id} onSave={input => state.updateBusiness(settingsWorkspace.id, input)} onClose={() => setEditing(null)} />
   if (state.status === 'unauthenticated') return null
   if (state.status === 'loading') return <main className="grid min-h-svh place-items-center bg-[#f7f8f2] text-[#193f33]"><p role="status">Loading your workspaces…</p></main>
   if (state.status === 'error') return <main className="grid min-h-svh place-items-center bg-[#f7f8f2] p-6 text-[#193f33]"><div className="rounded-2xl bg-white p-6"><p role="alert">{state.error}</p><button onClick={state.retry} className="mt-4 rounded-xl bg-[#193f33] px-5 py-3 text-white">Retry</button></div></main>
   if (!state.activeWorkspace) return <><main className="grid min-h-svh place-items-center bg-[#f7f8f2] p-6 text-[#193f33]"><div><h1 className="text-xl font-semibold">No accessible workspaces</h1><p className="mt-2">Refresh your memberships or create a business workspace to get started.</p><div className="mt-4 flex flex-wrap gap-4"><button onClick={() => setCreating(true)} className="rounded-xl bg-[#193f33] px-5 py-3 text-white">Create business workspace</button><button onClick={state.retry} className="underline">Refresh workspaces</button></div></div></main>{createDialog}</>
-  return <>{workspaces.map(workspace => <div key={`${user?.id}-${workspace.id}`} hidden={workspace.id !== String(state.activeWorkspace!.id)}><WorkspaceDashboard workspace={workspace} workspaces={workspaces} active={workspace.id === String(state.activeWorkspace!.id)} onSwitch={id => state.selectWorkspace(Number(id))} onCreate={() => setCreating(true)} /></div>)}{createDialog}</>
+  return <>{workspaces.map(workspace => <div key={`${user?.id}-${workspace.id}`} hidden={workspace.id !== String(state.activeWorkspace!.id)}><WorkspaceDashboard workspace={workspace} workspaces={workspaces} active={workspace.id === String(state.activeWorkspace!.id)} onSwitch={id => { setEditing(null); state.selectWorkspace(Number(id)) }} onCreate={() => setCreating(true)} onSettings={() => { if (user) setEditing({ userId: user.id, workspaceId: Number(workspace.id) }) }} /></div>)}{createDialog}{settingsDialog}</>
 }
 
 function HomePage() { return <WorkspaceProvider><WorkspaceHome /></WorkspaceProvider> }
