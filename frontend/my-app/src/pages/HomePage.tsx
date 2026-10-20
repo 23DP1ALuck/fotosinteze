@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Menu, Plus, X } from 'lucide-react'
+import { ChevronRight, LogOut, Menu, Plus, X } from 'lucide-react'
 
 import { BrandMark } from '@/components/brand/BrandMark'
 import { useAuth } from '@/features/auth/use-auth'
@@ -130,16 +130,23 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   }
 
   return <div className="flex min-h-svh bg-[#f7f8f2] font-sans text-[15px] leading-[1.5] tracking-[-.015em] text-[#193f33] scheme-light [&_h1]:font-sans! [&_h2]:font-sans! [&_h1]:font-semibold! [&_h2]:font-semibold! max-sm:block [&_button]:cursor-pointer [&_button]:transition-colors motion-reduce:[&_button]:transition-none [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-4 [&_button:focus-visible]:outline-[#82965b] [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-4 [&_a:focus-visible]:outline-[#82965b]">
-    <aside className={`min-h-svh w-[252px] shrink-0 flex-col bg-white px-[21px] pt-8 pb-6 max-[1200px]:w-[220px] max-[1200px]:px-4 min-[1600px]:w-[294px] min-[1600px]:px-[25px] min-[1600px]:py-[38px] sm:static sm:flex sm:shadow-none ${mobileMenu ? 'fixed inset-y-0 left-0 z-20 flex max-h-svh !w-[290px] max-w-[calc(100%_-_30px)] overflow-y-auto !px-5 !py-[25px] shadow-[15px_0_60px_#193f3326]' : 'hidden'}`}>
-      {mobileMenu && <button className="mb-[10px] flex self-end border-0 bg-transparent p-1 sm:hidden" aria-label="Close workspace navigation" onClick={() => setMobileMenu(false)}><X size={20} /></button>}
+    <aside className={`h-svh min-h-0 w-[252px] shrink-0 self-start flex-col bg-white px-[21px] pt-8 pb-6 max-[1200px]:w-[220px] max-[1200px]:px-4 min-[1600px]:w-[294px] min-[1600px]:px-[25px] min-[1600px]:py-[38px] sm:sticky sm:top-0 sm:flex sm:shadow-none ${mobileMenu ? 'fixed inset-y-0 left-0 z-20 flex !w-[290px] max-w-[calc(100%_-_30px)] !px-5 !py-[25px] shadow-[15px_0_60px_#193f3326]' : 'hidden'}`}>
+      {mobileMenu && <button className="mb-[10px] flex shrink-0 self-end border-0 bg-transparent p-1 sm:hidden" aria-label="Close workspace navigation" onClick={() => setMobileMenu(false)}><X size={20} /></button>}
+      <div className="shrink-0">
       <Link to="/" className="flex items-center gap-[7px] px-[5px] text-[25px] font-semibold tracking-[-.04em]"><BrandMark className="size-5" />Fotosinteze</Link>
       <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} onSwitch={(id) => { setTransactionAction(null); setDeletingTransaction(null); setMobileMenu(false); onSwitch(id) }} onCreate={() => { setMobileMenu(false); onCreate() }} />
-      <p className="mx-[9px] mt-[33px] mb-4 text-[10px] text-[#7d877f] uppercase">Workspace</p>
-      <nav aria-label="Workspace" className="grid gap-2">{workspaceNavigation.map((item) => <button key={item} className={`rounded-[10px] border-0 px-[19px] py-[13px] text-left ${view === item ? 'bg-[#193f33] text-white' : 'bg-transparent text-[#7d877f] hover:bg-[#f1f4ec] hover:text-[#193f33]'}`} aria-current={view === item ? 'page' : undefined} onClick={() => navigate(item)}>{item}</button>)}</nav>
-      <div className="mt-auto pt-[100px] max-[900px]:pt-[50px] max-sm:pt-6"><button className="flex w-full items-center gap-1 whitespace-nowrap border-t border-[#e1e5df] bg-transparent px-1 py-[21px] text-xs text-[#193f33] hover:text-[#60815b]" onClick={() => { setMobileMenu(false); onCreate() }}><Plus size={16} />Create business workspace</button>
-        <div className="mx-1 mt-[35px] mb-[23px] flex items-center gap-3 max-sm:mt-3 [&>div]:grid [&>div]:min-w-0 [&_strong]:text-sm [&_strong]:wrap-anywhere [&_div_span]:text-xs [&_div_span]:text-[#7d877f]"><span className="grid size-[39px] shrink-0 place-items-center rounded-full bg-[#ecf0e6] text-xs">{initials}</span><div><strong>{displayName}</strong><span>{isBusiness ? workspace.role === 'EMPLOYEE' ? 'Workspace employee' : 'Workspace owner' : 'Personal account'}</span></div></div>
-        <button className="mx-[7px] block border-0 bg-transparent p-0 text-[13px] text-[#7d877f] hover:text-[#60815b]" onClick={() => openDialog('profile')}>Profile & account</button>
-        <button className="mx-[7px] mt-[14px] border-0 bg-transparent p-0 text-[11px] text-[#7d877f] hover:text-[#60815b]" onClick={handleLogout}>Log out</button>
+      </div>
+      <div className="mt-6 flex min-h-0 flex-1 flex-col">
+        <p className="mx-[9px] mb-3 shrink-0 text-[10px] text-[#7d877f] uppercase">Workspace</p>
+        <nav aria-label="Workspace" className="grid min-h-0 content-start gap-1 overflow-y-auto overscroll-contain pb-1 [scrollbar-width:thin]">{workspaceNavigation.map((item) => <button key={item} className={`rounded-[10px] border-0 px-[19px] py-2.5 text-left ${view === item ? 'bg-[#193f33] text-white' : 'bg-transparent text-[#7d877f] hover:bg-[#f1f4ec] hover:text-[#193f33]'}`} aria-current={view === item ? 'page' : undefined} onClick={() => navigate(item)}>{item}</button>)}</nav>
+      </div>
+      <div className="mt-4 shrink-0 border-t border-[#e1e5df] pt-4">
+        <button type="button" aria-label="Profile & account" title="Profile & account" onClick={() => { setMobileMenu(false); openDialog('profile') }} className="flex w-full items-center gap-3 rounded-xl px-2 py-3 text-left hover:bg-[#f1f4ec]">
+          <span aria-hidden className="grid size-[39px] shrink-0 place-items-center rounded-full bg-[#ecf0e6] text-xs">{initials}</span>
+          <span className="grid min-w-0 flex-1 gap-0.5"><strong className="truncate text-sm" title={displayName}>{displayName}</strong><span className="text-xs text-[#7d877f]">{isBusiness ? workspace.role === 'EMPLOYEE' ? 'Workspace employee' : 'Workspace owner' : 'Personal account'}</span></span>
+          <ChevronRight aria-hidden size={16} className="shrink-0 text-[#7d877f]" />
+        </button>
+        <button type="button" className="mt-3 flex w-full items-center justify-center gap-2 rounded-[10px] border border-[#e9c9c2] bg-[#fbece8] px-4 py-3 text-sm font-semibold text-[#a43b32] hover:bg-[#f5ddd6]" onClick={handleLogout}><LogOut aria-hidden size={18} />Log out</button>
         {logoutError && <p role="alert" className="mt-3 text-xs text-[#a43b32]">{logoutError}</p>}
       </div>
     </aside>
