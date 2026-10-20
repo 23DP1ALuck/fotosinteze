@@ -34,10 +34,29 @@ class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.put('/accounts/1', headers={'Workspace-ID': '2'}, json={'name': 'Other'})).status_code, 404)
         self.user = {'sub': '2'}
         response = await self.client.put('/accounts/1', json={'balance': 0})
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(Decimal(response.json()['balance']), Decimal('0'))
+        self.assertEqual(response.status_code, 403, response.text)
+        await self.db.refresh(await self.db.get(Account, 1))
+        self.assertEqual((await self.db.get(Account, 1)).balance, Decimal('-12.34'))
         self.assertEqual((await self.client.put('/accounts/1', headers={'Workspace-ID': '2'},
                                                 json={'balance': 0})).status_code, 403)
+
+    async def test_employee_can_select_account_for_transaction_but_cannot_manage_it(self):
+        self.user = {'sub': '2'}
+        response = await self.client.get('/accounts')
+        self.assertEqual(response.status_code, 200, response.text)
+        account_id = response.json()[0]['account_id']
+        response = await self.client.post('/accounts', json={'name': 'New', 'currency': 'EUR', 'balance': 0})
+        self.assertEqual(response.status_code, 403, response.text)
+        for fields in ({'name': 'Renamed'}, {'balance': 0}):
+            response = await self.client.put(f'/accounts/{account_id}', json=fields)
+            self.assertEqual(response.status_code, 403, response.text)
+        account = await self.db.get(Account, account_id)
+        await self.db.refresh(account)
+        self.assertEqual(account.name, 'Cash')
+        self.assertEqual(account.balance, Decimal('80'))
+        response = await self.client.post('/transactions', json={**self.payload, 'account_id': account_id, 'department_id': 2})
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()['account_id'], account_id)
 
     async def test_connected_balance_is_bank_managed(self):
         self.db.add(RevolutConnection(revolut_connection_id=1, external_consent_id='consent', status='active', connected_by_id=1))

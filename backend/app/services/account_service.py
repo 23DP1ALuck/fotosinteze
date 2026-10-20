@@ -53,6 +53,7 @@ async def create_account(request: CreateAccountRequest, current_user: dict,
 
 async def update_account(account_id: int, request: UpdateAccountRequest, current_user: dict,
                          workspace: Workspace, db: AsyncSession) -> CreateAccountResponse:
+    await authorize_accounts(current_user, workspace, db, owner=True)
     account = await get_account(account_id, current_user, workspace, db)
     fields = request.model_dump(exclude_unset=True)
     if 'balance' in fields and account.connection_id is not None:

@@ -40,7 +40,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
   workspace: Workspace; workspaces: Workspace[]; active: boolean; onSwitch: (id: string) => void; onCreate: () => void
 }) {
   const isBusiness = workspace.kind === 'business'
-  const workspaceNavigation = isBusiness ? workspace.role === 'EMPLOYEE' ? ['Dashboard', 'Accounts', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Statistics'] : ['Dashboard', 'Accounts', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics', 'Settings'] : navigation
+  const workspaceNavigation = isBusiness ? workspace.role === 'EMPLOYEE' ? ['Dashboard', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Statistics'] : ['Dashboard', 'Accounts', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics', 'Settings'] : navigation
   const { user, logout } = useAuth()
   const [team, setTeam] = useState<TeamData>({ departments: [], employees: [], projects: [] })
   const backendWorkspaceId = Number(workspace.id)
@@ -160,7 +160,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate 
       {view === 'Transactions' && finance.hasMore && <button type="button" disabled={finance.loadingMore} onClick={finance.loadMore} className="mt-5 rounded-xl bg-[#eaf0e6] px-5 py-3 text-sm disabled:opacity-50">{finance.loadingMore ? 'Loading…' : 'Load more transactions'}</button>}
       {isBusiness && view === 'Expense requests' && <ExpenseRequests key={backendWorkspaceId} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} catalog={projectCatalog} onApproved={() => finance.refresh()} />}
       {active && view === 'Budgets' && (isBusiness ? <BusinessBudgets key={backendWorkspaceId} workspaceId={backendWorkspaceId} catalog={projectCatalog} onConnect={connectBackendWorkspace} /> : renderBudgets())}
-      {active && view === 'Accounts' && <AccountManager workspaceId={backendWorkspaceId} workspaceName={workspace.name} canCreate={!isBusiness || workspace.role === 'OWNER'} />}
+      {active && view === 'Accounts' && (!isBusiness || workspace.role === 'OWNER') && <AccountManager workspaceId={backendWorkspaceId} workspaceName={workspace.name} canCreate={!isBusiness || workspace.role === 'OWNER'} />}
       {active && view === 'Categories' && <CategoryManager canManage={!isBusiness || workspace.role === 'OWNER'} workspaceName={workspace.name} workspaceKind={workspace.kind} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} />}
       {active && !isBusiness && (view === 'Dashboard' || view === 'Revolut') && <RevolutConnect key={backendWorkspaceId} workspaceId={backendWorkspaceId} />}
 

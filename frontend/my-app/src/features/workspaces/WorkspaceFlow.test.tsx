@@ -52,6 +52,7 @@ it('keeps business and personal transaction data separate across switches',async
 })
 it('shows employee role and hides owner-only project management',async()=>{
   await renderWorkspace(); await switchWorkspace('Personal','Beta Studio')
+  expect(within(screen.getByRole('navigation', { name: 'Workspace' })).queryByRole('button', { name: 'Accounts' })).not.toBeInTheDocument()
   await userEvent.click(within(screen.getByRole('navigation',{name:'Workspace'})).getByRole('button',{name:'Projects'}))
   await within(screen.getByRole('list',{name:'Projects'})).findByText('Website');expect(screen.queryByRole('button',{name:'Add project'})).not.toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'Delete Website'})).not.toBeInTheDocument()

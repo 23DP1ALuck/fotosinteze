@@ -263,6 +263,7 @@ it('lets an employee browse categories and save a transaction without showing ca
   vi.stubGlobal('fetch', vi.fn(async (url, init) => String(url).endsWith('/workspaces') ? Response.json([{ id: 42, name: 'Studio', type: 'BUSINESS', role: 'EMPLOYEE' }]) : fallback(url, init)))
   mount()
   await userEvent.click(await screen.findByRole('button', { name: 'Categories' }))
+  expect(screen.queryByRole('button', { name: 'Accounts' })).not.toBeInTheDocument()
   await screen.findByText('Groceries')
   expect(screen.queryByRole('button', { name: 'Create category' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Edit Groceries' })).not.toBeInTheDocument()
