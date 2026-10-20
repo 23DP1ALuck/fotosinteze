@@ -7,7 +7,7 @@ import { clearSession, setAccessToken } from '@/features/auth/storage'
 import { setWorkspace } from '@/features/workspaces/workspace-state'
 import { AccountManager } from './AccountManager'
 
-const manual = { account_id: 10, workspace_id: 42, name: 'Cash', currency: 'EUR', balance: '1234.56', connection_id: null }
+const manual = { account_id: 10, workspace_id: 42, name: 'Cash', currency: 'EUR', balance: '1234.56', connection_id: null, is_main: false }
 const bank = { ...manual, account_id: 11, name: 'Revolut', currency: 'GBP', balance: '-25.50', connection_id: 7 }
 function Harness({ id = 42 }: { id?: number }) {
   useEffect(() => { setWorkspace(1, id) }, [id])
@@ -20,7 +20,7 @@ function transport(rows = [manual, bank]) {
     const accountId = Number(url.split('/').at(-1))
     if (init.method === 'PUT') {
       const input = JSON.parse(String(init.body))
-      rows = rows.map(row => row.account_id === accountId ? { ...row, ...input } : row)
+      rows = rows.map(row => row.account_id === accountId ? { ...row, ...input } : input.is_main ? { ...row, is_main: false } : row)
     }
     return Response.json(url === '/api/accounts' ? rows : rows.find(row => row.account_id === accountId))
   })
@@ -256,4 +256,19 @@ it('hides account creation when the workspace membership cannot create accounts'
   render(<AccountManager workspaceId={42} canCreate={false} />)
   await screen.findByRole('list', { name: 'Accounts' })
   expect(screen.queryByRole('button', { name: 'Add account' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Make .* main account/ })).not.toBeInTheDocument()
+})
+
+it('lets the user set one main account and remembers it on reopening Accounts', async () => {
+  vi.stubGlobal('fetch', transport())
+  const { unmount } = render(<Harness />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Make Cash main account' }))
+  expect(within(screen.getByRole('list', { name: 'Accounts' })).getByText('Main account')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Make Revolut main account' }))
+  expect(screen.getByRole('button', { name: 'Make Cash main account' })).toBeInTheDocument()
+  unmount()
+  render(<Harness />)
+  const list = within(await screen.findByRole('list', { name: 'Accounts' }))
+  const mainCard = list.getByText('Main account').closest('li')!
+  expect(within(mainCard).getByRole('heading', { name: 'Revolut' })).toBeInTheDocument()
 })

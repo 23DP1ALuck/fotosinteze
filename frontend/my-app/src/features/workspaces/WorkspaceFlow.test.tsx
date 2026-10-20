@@ -112,7 +112,7 @@ it('creates a business through the API and selects its persisted workspace ID', 
   const create = vi.fn<(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () => new Promise<Response>(resolve => { finish = resolve }))
   vi.stubGlobal('fetch', vi.fn((url, init) => String(url).endsWith('/workspaces/business') ? create(url, init) : fallback(url, init)))
   await renderWorkspace()
-  await user.click(screen.getByRole('button', { name: 'Create business workspace' }))
+  await user.click(screen.getByRole('button', { name: 'Create business workspace from workspace switcher' }))
   const modal = within(screen.getByRole('dialog', { name: 'Make room for your business.' }))
   await user.type(modal.getByLabelText('Workspace name'), 'New Studio')
   await user.clear(modal.getByLabelText('Base currency'))
@@ -237,7 +237,7 @@ it('refreshes role-scoped catalogs on demotion and excludes a late owner mutatio
   await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save changes' })).toBeDisabled())
   client!.setQueryData(['statistics', 1, 42, 'cached-owner-report'], { secret: true })
   employee = true
-  await act(async () => { await client!.invalidateQueries({ queryKey: ['workspaces', 1], exact: true }) })
+  await act(async () => { await client!.invalidateQueries({ queryKey: ['workspaces', 1] }) })
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   await screen.findByRole('button', { name: 'Edit Assigned project' })
   expect(screen.queryByText('Owner secret')).not.toBeInTheDocument()
@@ -248,4 +248,61 @@ it('refreshes role-scoped catalogs on demotion and excludes a late owner mutatio
   expect(screen.queryByText('Late owner response')).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Edit Assigned project' })).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Delete Assigned project' })).not.toBeInTheDocument()
+})
+
+it('opens Accounts for a workspace without accounts and keeps navigation available', async () => {
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => String(url).endsWith('/accounts') ? Response.json([]) : fallback(url, init)))
+  await renderWorkspace()
+  expect(await screen.findByRole('region', { name: 'Account management' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Add account' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Connect Revolut sandbox' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Revolut' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Dashboard' }))
+  await screen.findByRole('heading', { name: 'A little clarity for your everyday.' })
+  await switchWorkspace('Personal', 'Acme Studio')
+  expect(await screen.findByRole('region', { name: 'Account management' })).toBeInTheDocument()
+  await switchWorkspace('Acme Studio', 'Personal')
+  expect(screen.getByRole('heading', { name: 'A little clarity for your everyday.' })).toBeInTheDocument()
+})
+
+it('keeps Revolut connection in Accounts instead of the dashboard or navigation', async () => {
+  await renderWorkspace()
+  expect(screen.queryByRole('button', { name: 'Connect Revolut sandbox' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Revolut' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Accounts' }))
+  expect(await screen.findByRole('button', { name: 'Connect Revolut sandbox' })).toBeInTheDocument()
+})
+
+it('does not override navigation chosen before accounts finish loading', async () => {
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  let finish: (response: Response) => void = () => {}
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => String(url).endsWith('/accounts') ? new Promise<Response>(resolve => { finish = resolve }) : fallback(url, init)))
+  await renderWorkspace()
+  expect(screen.queryByRole('region', { name: 'Account management' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Transactions' }))
+  await act(async () => finish(Response.json([])))
+  expect(screen.getByRole('heading', { name: 'Every transaction, in its place.' })).toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Account management' })).not.toBeInTheDocument()
+})
+
+it('does not treat failed account loading as an empty workspace', async () => {
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => String(url).endsWith('/accounts') ? Response.json({ detail: 'Unavailable' }, { status: 503 }) : fallback(url, init)))
+  await renderWorkspace()
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/accounts', expect.anything()))
+  expect(screen.getByRole('heading', { name: 'A little clarity for your everyday.' })).toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Account management' })).not.toBeInTheDocument()
+})
+
+it('opens profile from the user identity and keeps workspace creation in the switcher', async () => {
+  await renderWorkspace()
+  const sidebar = within(screen.getByRole('complementary'))
+  const profile = sidebar.getByRole('button', { name: 'Profile & account' })
+  expect(within(profile).getByText('Ada')).toBeInTheDocument()
+  expect(sidebar.queryByRole('button', { name: 'Create business workspace' })).not.toBeInTheDocument()
+  expect(sidebar.getByRole('button', { name: 'Create business workspace from workspace switcher' })).toBeInTheDocument()
+  expect(sidebar.getByRole('button', { name: 'Log out' })).toBeInTheDocument()
+  await userEvent.click(profile)
+  expect(screen.getByRole('dialog', { name: 'Your account' })).toBeInTheDocument()
 })

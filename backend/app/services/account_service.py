@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from app.models import Account, Workspace
 from app.models.workspace import WorkspaceTypeEnum
 from app.dto import CreateAccountRequest, CreateAccountResponse
@@ -43,8 +43,16 @@ async def check_name(name: str, workspace_id: int, db: AsyncSession, account_id:
 async def create_account(request: CreateAccountRequest, current_user: dict,
                          active_workspace: Workspace, db: AsyncSession) -> CreateAccountResponse:
     await authorize_accounts(current_user, active_workspace, db, owner=True)
+    await lock_main_accounts(active_workspace.workspace_id, db)
     await check_name(request.name, active_workspace.workspace_id, db)
-    account = Account(**request.model_dump(), workspace_id=active_workspace.workspace_id)
+    existing_account_id = await db.scalar(select(Account.account_id).where(
+        Account.workspace_id == active_workspace.workspace_id
+    ).limit(1))
+    fields = request.model_dump()
+    fields['is_main'] = request.is_main or existing_account_id is None
+    if fields['is_main']:
+        await clear_main_account(active_workspace.workspace_id, db)
+    account = Account(**fields, workspace_id=active_workspace.workspace_id)
     db.add(account)
     await db.commit()
     await db.refresh(account)
@@ -53,14 +61,31 @@ async def create_account(request: CreateAccountRequest, current_user: dict,
 
 async def update_account(account_id: int, request: UpdateAccountRequest, current_user: dict,
                          workspace: Workspace, db: AsyncSession) -> CreateAccountResponse:
-    account = await get_account(account_id, current_user, workspace, db)
     fields = request.model_dump(exclude_unset=True)
+    if 'is_main' in fields:
+        await authorize_accounts(current_user, workspace, db, owner=True)
+        await lock_main_accounts(workspace.workspace_id, db)
+    account = await get_account(account_id, current_user, workspace, db)
     if 'balance' in fields and account.connection_id is not None:
         raise HTTPException(status_code=409, detail='Connected account balances are managed by bank sync')
     if 'name' in fields:
         await check_name(request.name, workspace.workspace_id, db, account_id)
+    if fields.get('is_main'):
+        await clear_main_account(workspace.workspace_id, db)
     for field, value in fields.items():
         setattr(account, field, value)
     await db.commit()
     await db.refresh(account)
     return CreateAccountResponse.model_validate(account)
+
+
+async def lock_main_accounts(workspace_id: int, db: AsyncSession) -> None:
+    await db.execute(select(Workspace.workspace_id).where(
+        Workspace.workspace_id == workspace_id
+    ).with_for_update())
+
+
+async def clear_main_account(workspace_id: int, db: AsyncSession) -> None:
+    await db.execute(update(Account).where(
+        Account.workspace_id == workspace_id, Account.is_main.is_(True)
+    ).values(is_main=False))
