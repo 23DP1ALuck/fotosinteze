@@ -414,24 +414,36 @@ empty transaction list. Budgets are not included.
 
 Apply migrations with `.venv/bin/alembic upgrade head` before using account
 creation. Revision `9c52e7a1bd30` fixes SQLite account ID generation and preserves
-existing accounts and transaction references.
+existing accounts and transaction references. Revision `b49d02e71a63` adds
+`is_main`, defaulting existing accounts to false, with at most one main account
+per workspace enforced by a unique index.
 
 Account routes require a bearer token and `Workspace-ID`. Personal workspace
-members can manage their accounts; business account routes require the owner,
-matching category management permissions. IDs are always scoped to the selected
+members can manage their accounts. Business members can read accounts and edit
+names or manual balances; creating accounts or changing `is_main` requires the owner. IDs are always scoped to the selected
 workspace; an account from another workspace returns `404`.
 
 - `GET /accounts` lists accounts in ID order.
 - `GET /accounts/{account_id}` reads one account.
 - `POST /accounts` creates a manual account with `name`, `currency` (three uppercase
-  letters), and `balance` (a decimal with at most two decimal places).
-- `PUT /accounts/{account_id}` updates supplied `name` and/or `balance` fields;
+  letters), `balance` (a decimal with at most two decimal places), and optional
+  `is_main` (a strict boolean). The first account in a workspace is automatically
+  main; later accounts default to false and preserve the current main account.
+- `PUT /accounts/{account_id}` updates supplied `name`, `balance`, and/or `is_main` fields;
   omitted fields are preserved. Explicit null and unknown fields are rejected.
 
 Names are trimmed, nonempty, at most 120 characters, and checked for duplicates
 in the workspace. Responses use the existing `balance` field for current balance
 and serialize money as decimal strings. Negative balances are allowed.
 Currency, workspace, connection and bank identifiers cannot be edited.
+
+Account responses include `is_main`. Setting it to true atomically clears the
+previous main account in that workspace, including when creating an account.
+Setting it to false leaves the workspace without a main account. Main-account
+changes are serialized with a workspace row lock on PostgreSQL. Connected
+accounts can also be main accounts. The frontend prefills the main account for
+new income and expense transactions; users can override it, and editing an
+existing transaction preserves its original account.
 
 An account with `connection_id` is bank-managed even if its connection expires.
 Only bank synchronization should replace its balance; ordinary account balance

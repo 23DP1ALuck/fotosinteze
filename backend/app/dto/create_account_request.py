@@ -1,9 +1,10 @@
 from decimal import Decimal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 
 class CreateAccountRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    is_main: StrictBool = False
     name: str = Field(min_length=1, max_length=120)
     currency: str = Field(pattern=r'^[A-Z]{3}$')
     balance: Decimal = Field(max_digits=10, decimal_places=2)

@@ -113,7 +113,7 @@ class ExpenseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json(), [{
             'account_id': 1, 'name': 'Business cash', 'currency': 'EUR',
-            'balance': '100.00', 'workspace_id': 1, 'connection_id': None,
+            'balance': '100.00', 'workspace_id': 1, 'connection_id': None, 'is_main': False,
         }])
 
         self.identity = {'sub': '1'}
