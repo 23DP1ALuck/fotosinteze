@@ -32,10 +32,10 @@ it('saves a project target, edits a budget and deletes only after confirmation',
   await user.type(form.getByLabelText('Budget name'), 'Launch budget')
   await user.type(form.getByLabelText('Limit'), '250')
   fireEvent.input(form.getByLabelText('Period start'), { target: { value: '2026-10-01' } })
-  await user.selectOptions(form.getByLabelText('Target entity'), '9')
+  await user.selectOptions(form.getByLabelText('Category'), '9')
   await user.selectOptions(form.getByLabelText('Target type'), 'PROJECT')
-  expect(form.getByLabelText('Target entity')).toHaveValue('')
-  await user.selectOptions(form.getByLabelText('Target entity'), '10')
+  expect(form.getByLabelText('Project')).toHaveValue('')
+  await user.selectOptions(form.getByLabelText('Project'), '10')
   await user.selectOptions(form.getByLabelText('Period'), 'CUSTOM')
   await user.clear(form.getByLabelText('Duration (days)'))
   await user.type(form.getByLabelText('Duration (days)'), '14')
@@ -46,7 +46,7 @@ it('saves a project target, edits a budget and deletes only after confirmation',
   await user.click(screen.getByRole('button', { name: 'Edit Travel plan' }))
   form = within(screen.getByRole('form', { name: 'Edit business budget' }))
   await user.selectOptions(form.getByLabelText('Target type'), 'DEPARTMENT')
-  await user.selectOptions(form.getByLabelText('Target entity'), '7')
+  await user.selectOptions(form.getByLabelText('Department'), '7')
   await user.click(form.getByRole('button', { name: 'Save budget' }))
   expect(await screen.findByText('Budget updated.')).toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: 'Delete Travel plan' }))
@@ -82,4 +82,30 @@ it('offers accessible business workspaces when no workspace is connected', async
   await screen.findByRole('option', { name: 'Acme' })
   await userEvent.selectOptions(screen.getByLabelText('Business workspace'), '42')
   expect(onConnect).toHaveBeenCalledWith(42)
+})
+
+
+it('filters budget projects by department while keeping workspace-wide projects available', async () => {
+  setup()
+  const catalog = { workspaceId: 42, projects: [
+    { id: 10, workspace_id: 42, name: 'Launch', department_ids: [7], status: null, start_date: null, end_date: null },
+    { id: 11, workspace_id: 42, name: 'Sales plan', department_ids: [8], status: null, start_date: null, end_date: null },
+    { id: 12, workspace_id: 42, name: 'Workspace plan', department_ids: [], status: null, start_date: null, end_date: null },
+  ], departments: [{ id: 7, workspace_id: 42, name: 'Design' }, { id: 8, workspace_id: 42, name: 'Sales' }], loading: false, error: '', refresh() {}, upsert() {}, remove() {} }
+  const { rerender } = render(<BusinessBudgets workspaceId={42} catalog={catalog} onConnect={() => {}} />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Create budget' }))
+  const form = within(screen.getByRole('form', { name: 'Create business budget' }))
+  await userEvent.selectOptions(form.getByLabelText('Target type'), 'PROJECT')
+  await userEvent.selectOptions(form.getByLabelText('Project'), '11')
+  await userEvent.selectOptions(form.getByLabelText('Filter projects by department'), '7')
+  expect(form.getByLabelText('Project')).toHaveValue('')
+  expect(form.queryByRole('option', { name: 'Sales plan' })).not.toBeInTheDocument()
+  expect(form.getByRole('option', { name: 'Workspace plan' })).toBeInTheDocument()
+  await userEvent.selectOptions(form.getByLabelText('Project'), '12')
+  await userEvent.selectOptions(form.getByLabelText('Filter projects by department'), '8')
+  expect(form.getByLabelText('Project')).toHaveValue('12')
+  await userEvent.selectOptions(form.getByLabelText('Filter projects by department'), '7')
+  rerender(<BusinessBudgets workspaceId={42} catalog={{ ...catalog, departments: catalog.departments.filter(item => item.id !== 7) }} onConnect={() => {}} />)
+  expect(form.getByLabelText('Filter projects by department')).toHaveValue('')
+  expect(form.getByRole('option', { name: 'Sales plan' })).toBeInTheDocument()
 })

@@ -40,6 +40,13 @@ export async function createExpenseRequest(workspaceId: number, input: ExpenseIn
   const row: unknown = await (await request(workspaceId, '/expenses', { method: 'POST', body: JSON.stringify(input) })).json()
   return parseExpense(row, workspaceId)
 }
+export async function updateExpenseRequest(workspaceId: number, id: number, input: ExpenseInput): Promise<ExpenseRequest> {
+  const row: unknown = await (await request(workspaceId, `/expenses/${id}`, { method: 'PUT', body: JSON.stringify(input) })).json()
+  return parseExpense(row, workspaceId)
+}
+export async function deleteExpenseRequest(workspaceId: number, id: number): Promise<void> {
+  await request(workspaceId, `/expenses/${id}`, { method: 'DELETE' })
+}
 export async function listExpenseAccounts(workspaceId: number, signal?: AbortSignal): Promise<ExpenseAccount[]> {
   const rows: unknown = await (await request(workspaceId, '/accounts', { method: 'GET', signal })).json()
   const result = z.array(accountSchema).safeParse(rows)

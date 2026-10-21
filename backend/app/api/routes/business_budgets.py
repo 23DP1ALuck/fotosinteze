@@ -1,4 +1,5 @@
 """Business budgets are scoped through their required, single target relation."""
+from app.services.name_uniqueness import check_unique_name
 import calendar
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
@@ -134,6 +135,10 @@ async def save_budget(payload, ctx, budget_id=None):
     target = await db.get(model, payload.target_id)
     if target is None or target.workspace_id != workspace.workspace_id or (payload.target_type == 'CATEGORY' and target.type != CategoryType.expense):
         raise HTTPException(400, 'Choose an expense category, department or project from this workspace')
+    await check_unique_name(db, Budget.name, payload.name,
+        Budget.workspace_id == workspace.workspace_id,
+        Budget.budget_id != budget_id if budget_id is not None else True,
+        detail='Budget name is already taken in this workspace')
     data = payload.model_dump(exclude={'target_type', 'target_id'})
     data.update({field: payload.target_id if field == key else None for _, field in TARGETS.values()})
     if row is None:

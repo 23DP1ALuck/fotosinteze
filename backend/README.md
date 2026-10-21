@@ -230,6 +230,54 @@ alembic downgrade -1
 
 ## Department assignments and shared projects
 
+### Add and remove employees (ROLE-02)
+
+Business Workspace owners can add an existing registered user by email:
+
+```http
+POST /workspaces/12/employees
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{"email": "employee@example.com"}
+```
+
+The response is `201` with `user_id`, `workspace_id`, `display_name`, `email`,
+`role` (`EMPLOYEE`), nullable `department_id`, and `joined_at`. Surrounding email
+whitespace is trimmed and lookup is case-insensitive; legacy accounts that
+match the same email ambiguously return `409`. The user must already exist.
+The request accepts `email` (at most 100 characters) and an optional positive
+`department_id`, never a role. The department must belong to the same workspace;
+adding the membership and assigning the department commit together.
+
+Without `department_id`, new employees are unassigned. They can discover the
+workspace through `GET /workspaces`, but department-scoped operations are denied until an owner
+assigns them with `PUT /departments/{department_id}/employees/{user_id}`.
+
+Owners can list current members with `GET /workspaces/12/members`. The response
+is an array with the same member fields as the add response, including owners
+and each employee's current department. Other workspaces and private user fields
+are excluded.
+
+Remove an employee with `DELETE /workspaces/12/employees/42`, using the same
+Bearer authentication. Success returns an empty `204`. This deletes only the
+employee's membership in that workspace: the user account, other memberships,
+expenses and transaction history remain intact. The same token loses access
+to the workspace on its next request, without logging the user out globally.
+Every OWNER membership is protected from removal, including the last owner.
+
+All three routes use the workspace ID in the path and require no `Workspace-ID`
+header. Only owners of that Business Workspace can call them. Personal
+Workspaces return `400`; missing authentication returns `401`; unauthorized
+callers or OWNER removal return `403`; missing workspace/user/membership
+returns `404`; adding an existing member or an ambiguous email returns `409`;
+invalid email, extra body fields or nonpositive IDs return `422`. A missing
+department returns `404`; a department from another workspace returns `400`.
+Repeated removal returns `404`. These routes do not send invitations or create
+user accounts.
+
+### Assignments and project access
+
 Run migrations from `backend` before starting the updated API:
 
 ```bash
@@ -366,24 +414,36 @@ empty transaction list. Budgets are not included.
 
 Apply migrations with `.venv/bin/alembic upgrade head` before using account
 creation. Revision `9c52e7a1bd30` fixes SQLite account ID generation and preserves
-existing accounts and transaction references.
+existing accounts and transaction references. Revision `b49d02e71a63` adds
+`is_main`, defaulting existing accounts to false, with at most one main account
+per workspace enforced by a unique index.
 
 Account routes require a bearer token and `Workspace-ID`. Personal workspace
-members can manage their accounts; business account routes require the owner,
-matching category management permissions. IDs are always scoped to the selected
+members can manage their accounts. Business members can read accounts and edit
+names or manual balances; creating accounts or changing `is_main` requires the owner. IDs are always scoped to the selected
 workspace; an account from another workspace returns `404`.
 
 - `GET /accounts` lists accounts in ID order.
 - `GET /accounts/{account_id}` reads one account.
 - `POST /accounts` creates a manual account with `name`, `currency` (three uppercase
-  letters), and `balance` (a decimal with at most two decimal places).
-- `PUT /accounts/{account_id}` updates supplied `name` and/or `balance` fields;
+  letters), `balance` (a decimal with at most two decimal places), and optional
+  `is_main` (a strict boolean). The first account in a workspace is automatically
+  main; later accounts default to false and preserve the current main account.
+- `PUT /accounts/{account_id}` updates supplied `name`, `balance`, and/or `is_main` fields;
   omitted fields are preserved. Explicit null and unknown fields are rejected.
 
 Names are trimmed, nonempty, at most 120 characters, and checked for duplicates
 in the workspace. Responses use the existing `balance` field for current balance
 and serialize money as decimal strings. Negative balances are allowed.
 Currency, workspace, connection and bank identifiers cannot be edited.
+
+Account responses include `is_main`. Setting it to true atomically clears the
+previous main account in that workspace, including when creating an account.
+Setting it to false leaves the workspace without a main account. Main-account
+changes are serialized with a workspace row lock on PostgreSQL. Connected
+accounts can also be main accounts. The frontend prefills the main account for
+new income and expense transactions; users can override it, and editing an
+existing transaction preserves its original account.
 
 An account with `connection_id` is bank-managed even if its connection expires.
 Only bank synchronization should replace its balance; ordinary account balance
@@ -428,6 +488,40 @@ to their assigned department, including only that department's spending on share
 projects. Employees without a valid department assignment receive `403`.
 Budgets and frontend dashboard rendering are outside this endpoint's scope.
 
+## Analytics aggregation (MET-01)
+
+The following read-only endpoints require a bearer access token, `Workspace-ID`,
+and ISO `date_from` and `date_to` query parameters, for example
+`GET /statistics/summary?date_from=2026-10-01&date_to=2026-10-31`.
+Both dates are inclusive and use transaction `created_at` in the same naive
+server-local time convention as transactions and the dashboard.
+
+Every response contains `workspace_id`, `currency`, `date_from`, and `date_to`,
+plus these fields:
+
+| Endpoint | Response fields |
+| --- | --- |
+| `GET /statistics/summary` | `income`, `expenses`: decimal strings, e.g. `"1000.25"`, `"250.10"` |
+| `GET /statistics/categories` | `items: [{"id": 11, "name": "Food", "amount": "250.10"}]`; expense categories ordered by amount descending, then ID |
+| `GET /statistics/timeseries` | `items: [{"date": "2026-10-01", "amount": "250.10"}]`; daily expense totals in ascending date order, including `"0.00"` for days without spending |
+
+Aggregates use all matching transactions, regardless of transaction-list
+pagination. Income/expense classification follows the current category type.
+Only the workspace's base currency counts, with no currency conversion;
+uncategorized transactions and categories from other workspaces are excluded.
+Approved expenses count through their linked transaction exactly once; pending
+expense requests do not count. Changes and deletions are reflected on the next
+request. Empty periods return zero summary totals, no category groups, and zero
+daily points for each selected date.
+
+Personal workspace members and business owners see workspace totals. Business
+employees see only their assigned department; shared projects do not widen
+access. Missing/invalid employee department assignments and inaccessible
+workspaces return `403`; unauthenticated requests return `401`. Missing or
+malformed dates/headers return `422`; reversed date ranges return `400`.
+Daily series are limited to **3660 inclusive days** to bound response size;
+larger daily ranges return `400`. Summary and category ranges have no such limit.
+
 ## Business budget management (BBUD-03)
 
 `GET /business-budgets` returns saved budgets with target labels, spent/remaining
@@ -464,7 +558,8 @@ the workspace switcher uses your accessible backend memberships.
 
 `GET /transactions` accepts optional, combinable query parameters:
 `search` (trimmed, case-insensitive literal substring of description, max 255 characters),
-`type` (`INCOME` or `EXPENSE`, determined by category), `category_id`,
+`type` (`INCOME` or `EXPENSE`, determined by category),
+`source` (`MANUAL`, `BANK`, or `EXPENSE`), `category_id`,
 `date_from` and `date_to` (inclusive `YYYY-MM-DD` creation dates),
 `department_id`, and `project_id`. Transactions currently have no separate name field.
 Blank search behaves like omitted search. Uncategorized transactions do not match a type filter.
@@ -683,7 +778,28 @@ hostname to the frontend hostname.
 This remains the Open Banking sandbox. Deployment does not enable live accounts:
 production credentials, certificates and provider endpoints need a separate
 production rollout. Authorization stores tokens but does not yet import accounts
-or transactions, refresh Revolut tokens, or show persisted connection status.
+or transactions, or refresh Revolut tokens.
+
+### Personal Workspace connection UI (REV-05)
+
+The Revolut panel reads `GET /revolut/connection` for the active Personal
+Workspace. The authenticated, workspace-scoped endpoint returns only `status`,
+`expires_at` and `last_sync_at`, with UTC timestamps and `Cache-Control: no-store`.
+It never returns provider tokens, consent IDs or pending authorization secrets,
+and does not contact Revolut or change stored state. Business Workspaces are
+rejected; inaccessible workspaces return `403`.
+
+The panel shows Not connected, Connected, Pending, Expired or Failed, with a
+Connect/Reconnect action and an access-expiry timestamp when available. A failed
+reconnect does not hide a still-valid established connection. Expired access
+tokens require reconnecting until token refresh is implemented. Status loads on
+mount and when the tab regains focus; failed or malformed status responses show
+an error. The callback page provides a Return to Fotosinteze link to `/app`, where
+status is fetched again. Business Workspaces do not render these controls.
+
+REV-03 account/balance retrieval, REV-04 transaction imports, and the RSYNC
+service, UI and tests remain separate work. A connection does not yet populate
+the sample dashboard with Revolut data.
 
 ### Endpoints and browser flow
 

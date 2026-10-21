@@ -6,14 +6,15 @@ from sqlalchemy.exc import IntegrityError
 
 from app.dto.update_business_workspace_request import UpdateBusinessWorkspaceRequest
 from app.dto.workspace_response import WorkspaceResponse
-from app.models import User, Account, Budget, RevolutConnection
+from app.models import User, Account, Budget, Department, RevolutConnection
 
 from app.database import AsyncSession
+from app.services.name_uniqueness import check_unique_name
 from app.models import WorkspaceUsers
 from sqlalchemy import select, Select
 from sqlalchemy.orm import selectinload
 
-from app.dto import WorkspaceListResponse
+from app.dto import AddWorkspaceEmployeeRequest, WorkspaceListResponse, WorkspaceMemberResponse
 from app.models import Workspace
 from app.dto.create_business_workspace_request import CreateBusinessWorkspaceRequest
 from app.models import WorkspaceRole
@@ -46,6 +47,7 @@ async def create_business_workspace(
         raise HTTPException(status_code=400, detail="Business currency is required")
     if len(request.base_currency.strip()) != 3:
         raise HTTPException(status_code=400, detail="Currency code must be 3 symbols")
+    await check_unique_name(db, Workspace.name, request.name, detail='Workspace name is already taken')
     workspace = Workspace(
         name=request.name.strip(),
         type=WorkspaceTypeEnum.BUSINESS,
@@ -96,9 +98,89 @@ def workspace_response(workspace: Workspace, membership: WorkspaceUsers) -> Work
 # business workspace owner check
 def assert_business_owner(workspace: Workspace, membership: WorkspaceUsers) -> None:
     if workspace.type != WorkspaceTypeEnum.BUSINESS:
-        raise HTTPException(status_code=400, detail='Only business workspaces can be updated or deleted')
+        raise HTTPException(status_code=400, detail='This operation requires a business workspace')
     if membership.role != WorkspaceRole.OWNER:
         raise HTTPException(status_code=403, detail='Workspace owner required')
+
+
+async def get_workspace_members(workspace_id: int, current_user: dict,
+                                db: AsyncSession) -> list[WorkspaceMemberResponse]:
+    caller = await load_workspace_member(workspace_id, current_user, db)
+    assert_business_owner(caller.workspace, caller)
+    rows = await db.execute(select(WorkspaceUsers, User.display_name, User.email)
+                            .join(User, User.user_id == WorkspaceUsers.user_id)
+                            .where(WorkspaceUsers.workspace_id == workspace_id)
+                            .order_by(WorkspaceUsers.user_id)
+                            .execution_options(populate_existing=True))
+    return [WorkspaceMemberResponse(user_id=member.user_id, workspace_id=member.workspace_id,
+                                    display_name=name, email=email, role=member.role,
+                                    department_id=member.department_id, joined_at=member.joined_at)
+            for member, name, email in rows]
+
+
+async def add_workspace_employee(workspace_id: int, request: AddWorkspaceEmployeeRequest,
+                                 current_user: dict, db: AsyncSession) -> WorkspaceMemberResponse:
+    caller = await load_workspace_member(workspace_id, current_user, db)
+    assert_business_owner(caller.workspace, caller)
+    if request.department_id is not None:
+        department = await db.get(Department, request.department_id)
+        if department is None:
+            raise HTTPException(status_code=404, detail='Department not found')
+        if department.workspace_id != workspace_id:
+            raise HTTPException(status_code=400, detail='Department does not belong to this workspace')
+    # shortcut: Unicode matching scans users; add an indexed normalized email if this becomes slow.
+    users = [user for user in await db.execute(select(User.user_id, User.display_name, User.email))
+             if user.email.casefold() == request.email.casefold()]
+    if not users:
+        raise HTTPException(status_code=404, detail='User not found')
+    if len(users) > 1:
+        raise HTTPException(status_code=409, detail='Multiple users match this email')
+    user = users[0]
+    user_id = user.user_id
+    if await db.get(WorkspaceUsers, (user_id, workspace_id)) is not None:
+        raise HTTPException(status_code=409, detail='User is already a workspace member')
+    membership = WorkspaceUsers(user_id=user_id, workspace_id=workspace_id,
+                                role=WorkspaceRole.EMPLOYEE, department_id=request.department_id)
+    db.add(membership)
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if await db.scalar(select(WorkspaceUsers.user_id).where(
+            WorkspaceUsers.user_id == user_id, WorkspaceUsers.workspace_id == workspace_id,
+        )) is not None:
+            raise HTTPException(status_code=409, detail='User is already a workspace member') from exc
+        raise
+    except Exception:
+        await db.rollback()
+        raise
+    return WorkspaceMemberResponse(user_id=user_id, workspace_id=workspace_id,
+                                    display_name=user.display_name, email=user.email,
+                                    role=membership.role, department_id=membership.department_id,
+                                    joined_at=membership.joined_at)
+
+
+async def remove_workspace_employee(workspace_id: int, user_id: int, current_user: dict,
+                                    db: AsyncSession) -> None:
+    caller = await load_workspace_member(workspace_id, current_user, db)
+    assert_business_owner(caller.workspace, caller)
+    membership = await db.get(WorkspaceUsers, (user_id, workspace_id), populate_existing=True)
+    if membership is None:
+        raise HTTPException(status_code=404, detail='Employee membership not found')
+    if membership.role != WorkspaceRole.EMPLOYEE:
+        raise HTTPException(status_code=403, detail='Only employee memberships can be removed')
+    try:
+        result = await db.execute(delete(WorkspaceUsers).where(
+            WorkspaceUsers.workspace_id == workspace_id,
+            WorkspaceUsers.user_id == user_id,
+            WorkspaceUsers.role == WorkspaceRole.EMPLOYEE,
+        ))
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail='Employee membership not found')
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
 
 
 async def get_workspace_by_id(workspace_id: int, current_user: dict, db: AsyncSession) -> WorkspaceResponse:
@@ -118,6 +200,8 @@ async def update_business_workspace(workspace_id: int, request: UpdateBusinessWo
         raise HTTPException(status_code=400, detail='Business currency is required')
     if len(currency) != 3:
         raise HTTPException(status_code=400, detail='Currency code must be 3 symbols')
+    await check_unique_name(db, Workspace.name, name, Workspace.workspace_id != workspace_id,
+        detail='Workspace name is already taken')
     workspace.name = name
     workspace.base_currency = currency
     workspace.updated_at = datetime.now()

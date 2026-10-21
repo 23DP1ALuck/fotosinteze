@@ -141,6 +141,45 @@ class TransactionRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([row['transaction_id'] for row in response.json()['items']], [3])
         self.assertFalse(response.json()['has_more'])
 
+    async def test_source_filter_applies_before_pagination_and_preserves_access(self):
+        self.db.add(Transaction(transaction_id=2, workspace_id=1, account_id=1, category_id=1,
+                                department_id=2, amount=5, currency='EUR', description='Bank ticket',
+                                source=TransactionSourceEnum.BANK))
+        await self.db.commit()
+        response = await self.client.get('/transactions', params={'source': 'BANK', 'search': 'ticket', 'limit': 1})
+        self.assertEqual([row['transaction_id'] for row in response.json()['items']], [2])
+        self.user = {'sub': '2'}
+        response = await self.client.get('/transactions', params={'source': 'MANUAL'})
+        self.assertEqual(response.json()['items'], [])
+        self.assertEqual((await self.client.get('/transactions', params={'source': 'INVALID'})).status_code, 422)
+
+    async def test_personal_spending_has_manual_source_and_supports_combined_filters(self):
+        self.db.add_all([
+            Account(account_id=2, name='Personal', currency='EUR', workspace_id=2, balance=100),
+            Category(category_id=2, name='Food', workspace_id=2, type=CategoryType.expense),
+        ])
+        await self.db.commit()
+        response = await self.client.post('/transactions', headers={'Workspace-ID': '2'}, json={
+            'amount': '12.50', 'currency': 'EUR', 'description': 'Personal groceries',
+            'account_id': 2, 'category_id': 2,
+        })
+        self.assertEqual(response.status_code, 201, response.text)
+        created = response.json()
+        # Legacy deployments serialize MANUAL/BANK enum tuples as one-item arrays.
+        source = created['source']
+        self.assertEqual(source[0] if isinstance(source, list) else source, 'MANUAL')
+        self.assertIsNone(created['expense_id'])
+        creation_date = created['created_at'][:10]
+        filters = dict(search='GROCERIES', type='EXPENSE', category_id=2, source='MANUAL',
+                       date_from=creation_date, date_to=creation_date, limit=1, offset=0)
+        response = await self.client.get('/transactions', headers={'Workspace-ID': '2'}, params=filters)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([row['transaction_id'] for row in response.json()['items']], [created['transaction_id']])
+        response = await self.client.get('/transactions', headers={'Workspace-ID': '2'},
+                                         params={**filters, 'source': 'EXPENSE'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['items'], [])
+
     async def test_search_filters(self):
         transaction = await self.db.get(Transaction, 1)
         transaction.description = 'Office 50%_ supplies'

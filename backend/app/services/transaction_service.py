@@ -213,7 +213,8 @@ async def get_transactions(workspace: Workspace, current_user: dict, db: AsyncSe
                            *, limit: int = 50, offset: int = 0, search: str | None = None,
                            transaction_type: CategoryType | None = None, category_id: int | None = None,
                            date_from: date | None = None, date_to: date | None = None,
-                           department_id: int | None = None, project_id: int | None = None) -> TransactionListResponseDTO:
+                           department_id: int | None = None, project_id: int | None = None,
+                           source: TransactionSourceEnum | None = None) -> TransactionListResponseDTO:
     if date_from is not None and date_to is not None and date_from > date_to:
         raise HTTPException(status_code=400, detail="date_from must be on or before date_to")
     if workspace.type != WorkspaceTypeEnum.BUSINESS and (department_id is not None or project_id is not None):
@@ -233,6 +234,8 @@ async def get_transactions(workspace: Workspace, current_user: dict, db: AsyncSe
         stmt = stmt.where(Transaction.description.icontains(search.strip(), autoescape=True))
     if transaction_type is not None:
         stmt = stmt.where(Transaction.category.has(Category.type == transaction_type))
+    if source is not None:
+        stmt = stmt.where(Transaction.source == source)
     if category_id is not None:
         stmt = stmt.where(Transaction.category_id == category_id)
     if date_from is not None:

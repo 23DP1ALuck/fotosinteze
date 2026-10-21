@@ -131,7 +131,7 @@ function LandingPage() {
           </p>
         </section>
 
-        <section id="product" className="mx-auto max-w-[1080px] px-4 pb-6 sm:px-8">
+        <section id="product" className="mx-auto max-w-[1080px] scroll-mt-24 px-4 pb-6 sm:px-8">
           <HeroPreview />
           <p className="mt-6 text-center text-sm text-[#8b928c]">
             An illustrative business workspace. Your personal finances stay separate.

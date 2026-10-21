@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, Response
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Path, Response
 from app.dto.update_business_workspace_request import UpdateBusinessWorkspaceRequest
 from app.dto.workspace_response import WorkspaceResponse
-from app.dto import WorkspaceListResponse
+from app.dto import AddWorkspaceEmployeeRequest, WorkspaceListResponse, WorkspaceMemberResponse
 from app.dependencies.auth import get_current_user
 from app.database import get_db_session, AsyncSession
 from app.services import workspace_service
@@ -55,4 +57,43 @@ async def update_business_workspace(workspace_id: int, request: UpdateBusinessWo
 async def delete_business_workspace(workspace_id: int, current_user: dict = Depends(get_current_user),
                                     db: AsyncSession = Depends(get_db_session)) -> Response:
     await workspace_service.delete_business_workspace(workspace_id, current_user, db)
+    return Response(status_code=204)
+
+
+@router.get('/workspaces/{workspace_id}/members', response_model=list[WorkspaceMemberResponse],
+            tags=['workspaces'], summary='List business workspace members (owner only)',
+            responses={400: {'description': 'Business workspace required'},
+                       401: {'description': 'Authentication required'},
+                       403: {'description': 'Workspace owner required'},
+                       404: {'description': 'Workspace not found'}})
+async def get_workspace_members(workspace_id: Annotated[int, Path(gt=0)],
+                                current_user: dict = Depends(get_current_user),
+                                db: AsyncSession = Depends(get_db_session)) -> list[WorkspaceMemberResponse]:
+    return await workspace_service.get_workspace_members(workspace_id, current_user, db)
+
+
+@router.post('/workspaces/{workspace_id}/employees', status_code=201,
+             response_model=WorkspaceMemberResponse, tags=['workspaces'],
+             summary='Add a registered employee with an optional department (business owner only)',
+             responses={400: {'description': 'Business workspace required or department belongs to another workspace'},
+                        401: {'description': 'Authentication required'},
+                        403: {'description': 'Workspace owner required'},
+                        404: {'description': 'Workspace, user or department not found'},
+                        409: {'description': 'Existing membership or ambiguous email'}})
+async def add_workspace_employee(workspace_id: Annotated[int, Path(gt=0)], request: AddWorkspaceEmployeeRequest,
+                                 current_user: dict = Depends(get_current_user),
+                                 db: AsyncSession = Depends(get_db_session)) -> WorkspaceMemberResponse:
+    return await workspace_service.add_workspace_employee(workspace_id, request, current_user, db)
+
+
+@router.delete('/workspaces/{workspace_id}/employees/{user_id}', status_code=204, tags=['workspaces'],
+               summary='Remove an employee membership (business owner only)',
+               responses={400: {'description': 'Business workspace required'},
+                          401: {'description': 'Authentication required'},
+                          403: {'description': 'Workspace owner required or target is an owner'},
+                          404: {'description': 'Workspace or employee membership not found'}})
+async def remove_workspace_employee(workspace_id: Annotated[int, Path(gt=0)], user_id: Annotated[int, Path(gt=0)],
+                                    current_user: dict = Depends(get_current_user),
+                                    db: AsyncSession = Depends(get_db_session)) -> Response:
+    await workspace_service.remove_workspace_employee(workspace_id, user_id, current_user, db)
     return Response(status_code=204)
