@@ -57,7 +57,8 @@ async def create_category(
     )
 
 
-@router.delete("/categories/{category_id}", status_code=204, tags=["categories"])
+@router.delete("/categories/{category_id}", status_code=204, tags=["categories"],
+               responses={409: {"description": "Category is used by expense requests, transactions or budgets"}})
 async def delete_category(
     category_id: int,
     current_user: dict = Depends(get_current_user),

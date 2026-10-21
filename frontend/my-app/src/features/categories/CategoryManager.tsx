@@ -16,7 +16,7 @@ const iconButton = 'rounded-lg p-2 text-[#7d877f] transition-colors hover:bg-[#e
 const schema = z.object({ name: z.string().trim().min(1, 'Name is required').max(100, 'Use 100 characters or fewer'), type: z.enum(['income', 'expense']) })
 type Action = { kind: 'create' } | { kind: 'edit' | 'delete'; category: Category }
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong. Please try again.'
-type ConnectionProps = { workspaceKind: WorkspaceKind; workspaceName?: string; workspaceId?: number; onConnect: (id: number | undefined) => void }
+type ConnectionProps = { canManage?: boolean; workspaceKind: WorkspaceKind; workspaceName?: string; workspaceId?: number; onConnect: (id: number | undefined) => void }
 
 function CategoryDialog({ action, categories, workspaceId, onClose, onSaved }: {
   action: Action; categories: Category[]; workspaceId: number; onClose: () => void; onSaved: (category: Category, deleted: boolean) => void
@@ -65,7 +65,7 @@ function CategoryDialog({ action, categories, workspaceId, onClose, onSaved }: {
   </dialog>
 }
 
-function ConnectedCategories({ workspaceId, workspaceKind, onConnect }: ConnectionProps & { workspaceId: number }) {
+function ConnectedCategories({ workspaceId, workspaceKind, onConnect, canManage = true }: ConnectionProps & { workspaceId: number }) {
   const client = useQueryClient()
   const key = workspaceQueryKey('categories',workspaceId)
   const query = useQuery({ queryKey: key, queryFn: ({signal}) => listCategories(workspaceId,signal) })
@@ -83,17 +83,18 @@ function ConnectedCategories({ workspaceId, workspaceKind, onConnect }: Connecti
     })
     setNotice(deleted ? 'Category deleted.' : action?.kind === 'create' ? 'Category created.' : 'Category updated.')
     reload()
+    for (const feature of ['statistics', 'dashboard', 'transactions', 'budgets', 'business-budgets']) void client.invalidateQueries({ queryKey: workspaceQueryKey(feature, workspaceId) })
   }
   const label = workspaceKind === 'personal' ? 'Personal' : 'Business'
   return <>
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="m-0 text-[22px] font-semibold!">Your categories</h2><p className="mt-2 text-xs text-[#7d877f]">Organise your income and expenses.</p></div><button disabled={loading || Boolean(error)} onClick={() => setAction({ kind: 'create' })} className={primaryButton}><Plus size={17} />Create category</button></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="m-0 text-[22px] font-semibold!">Your categories</h2><p className="mt-2 text-xs text-[#7d877f]">Organise your income and expenses.</p></div>{canManage && <button disabled={loading || Boolean(error)} onClick={() => setAction({ kind: 'create' })} className={primaryButton}><Plus size={17} />Create category</button>}</div>
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[#7d877f]"><span>{label} workspace · ID {workspaceId}</span><div className="flex gap-4"><button disabled={loading} onClick={reload} className="inline-flex items-center gap-1 hover:text-[#193f33] disabled:opacity-50"><RefreshCw size={13} />Refresh</button><button onClick={() => onConnect(undefined)} className="hover:text-[#193f33]">Change workspace</button></div></div>
     {notice && <p role="status" className="mt-4 rounded-lg bg-[#eaf0e5] px-4 py-3 text-sm">{notice}</p>}
     {loading && <p role="status" className="mt-5 flex items-center gap-2 text-sm text-[#7d877f]"><LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" />Loading categories…</p>}
     {error && <div className="mt-5 rounded-xl bg-[#fcf0ed] p-4"><p role="alert" className="text-sm text-[#a43b32]">{error}</p><button onClick={reload} className={`${secondaryButton} mt-3`}>Retry</button></div>}
     {!loading && !error && categories.length === 0 && <div className="mt-5 rounded-xl border border-dashed border-[#dce4d8] px-5 py-10 text-center"><p className="font-medium">No categories yet</p><p className="mt-2 text-sm text-[#7d877f]">Create the first category for your {label.toLowerCase()} workspace.</p></div>}
-    {categories.length > 0 && <ul aria-label={`${label} categories`} className="mt-5 space-y-3">{categories.map(category => <li key={category.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#e1e5df] bg-[#f7f8f2] px-4 py-3"><div className="min-w-0"><strong className="block wrap-anywhere text-sm font-semibold">{category.name}</strong><span className="text-xs text-[#7d877f]">{category.type === 'income' ? 'Income' : 'Expense'}</span></div><div className="flex shrink-0 gap-1"><button disabled={loading} aria-label={`Edit ${category.name}`} onClick={() => setAction({ kind: 'edit', category })} className={iconButton}><Pencil size={16} /></button><button disabled={loading} aria-label={`Delete ${category.name}`} onClick={() => setAction({ kind: 'delete', category })} className={`${iconButton} hover:text-[#a43b32]`}><Trash2 size={16} /></button></div></li>)}</ul>}
-    {action && <CategoryDialog action={action} workspaceId={workspaceId} categories={categories} onClose={() => setAction(null)} onSaved={saved} />}
+    {categories.length > 0 && <ul aria-label={`${label} categories`} className="mt-5 space-y-3">{categories.map(category => <li key={category.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#e1e5df] bg-[#f7f8f2] px-4 py-3"><div className="min-w-0"><strong className="block wrap-anywhere text-sm font-semibold">{category.name}</strong><span className="text-xs text-[#7d877f]">{category.type === 'income' ? 'Income' : 'Expense'}</span></div>{canManage && <div className="flex shrink-0 gap-1"><button disabled={loading} aria-label={`Edit ${category.name}`} onClick={() => setAction({ kind: 'edit', category })} className={iconButton}><Pencil size={16} /></button><button disabled={loading} aria-label={`Delete ${category.name}`} onClick={() => setAction({ kind: 'delete', category })} className={`${iconButton} hover:text-[#a43b32]`}><Trash2 size={16} /></button></div>}</li>)}</ul>}
+    {canManage && action && <CategoryDialog action={action} workspaceId={workspaceId} categories={categories} onClose={() => setAction(null)} onSaved={saved} />}
   </>
 }
 

@@ -9,3 +9,5 @@ class CreateAccountResponse(BaseModel):
     balance: decimal.Decimal
     workspace_id: int
     connection_id: int | None = None
+
+    is_main: bool = False

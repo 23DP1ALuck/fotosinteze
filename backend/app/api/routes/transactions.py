@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from app.dependencies.workspace import get_current_workspace
 
 from app.models import Workspace
 from app.models.category import CategoryType
+from app.models.transaction import TransactionSourceEnum
 from app.services import transaction_service
 
 router = APIRouter(tags=['transactions'])
@@ -46,6 +48,7 @@ async def get_transactions(
     date_to: date | None = Query(default=None, description='Inclusive creation date'),
     department_id: int | None = Query(default=None, gt=0),
     project_id: int | None = Query(default=None, gt=0),
+    source: Literal['MANUAL', 'BANK', 'EXPENSE'] | None = Query(default=None),
     db: AsyncSession = Depends(get_db_session),
     current_user: dict = Depends(get_current_user),
     workspace: Workspace = Depends(get_current_workspace),
@@ -54,6 +57,7 @@ async def get_transactions(
         workspace, current_user, db, limit=limit, offset=offset, search=search,
         transaction_type=transaction_type, category_id=category_id, date_from=date_from,
         date_to=date_to, department_id=department_id, project_id=project_id,
+        source=TransactionSourceEnum[source] if source is not None else None,
     )
 
 

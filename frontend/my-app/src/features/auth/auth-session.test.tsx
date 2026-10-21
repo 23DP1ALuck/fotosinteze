@@ -128,7 +128,7 @@ describe('browser auth session', () => {
     expect(localStorage.getItem('fm_user')).toBeNull()
   })
 
-  it('updates dashboard totals and grocery budget after adding a sample expense', async () => {
+  it('refreshes saved dashboard totals after adding an expense and opens persisted budgets', async () => {
     stubAuthFetch(vi.fn().mockResolvedValue({
       ok: true, status: 200,
       json: async () => ({ access_token: tokenFor('user@example.com') }),
@@ -136,22 +136,21 @@ describe('browser auth session', () => {
     const user = userEvent.setup()
     renderAt('/app')
     await user.click(await screen.findByRole('button', { name: 'Add expense' }))
+    await waitFor(() => expect(screen.getByLabelText('Account')).toBeEnabled())
+    await user.selectOptions(screen.getByLabelText('Account'), '12')
+    await user.selectOptions(screen.getByLabelText('Category'), '4')
     await user.type(screen.getByLabelText('Description'), 'Weekly groceries')
-    await user.type(screen.getByLabelText('Amount (€)'), '50')
+    await user.type(screen.getByLabelText('Amount (EUR)'), '50')
     await user.click(screen.getByRole('button', { name: 'Save expense' }))
 
-    expect(screen.getByText('€4,770.50')).toBeInTheDocument()
+    expect(await screen.findByText('€4,770.50')).toBeInTheDocument()
     expect(screen.getByText('€1,892.35')).toBeInTheDocument()
     expect(screen.getByText('€1,307.65')).toBeInTheDocument()
-    expect(screen.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('value', '267')
     expect(screen.getByText('Weekly groceries')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Manage budgets' }))
-    await user.clear(screen.getByLabelText('Groceries (€)'))
-    await user.type(screen.getByLabelText('Groceries (€)'), '400')
-    await user.click(screen.getByRole('button', { name: 'Save budgets' }))
-    expect(screen.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('max', '400')
+    expect(await screen.findByText('No budgets available for this workspace.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Transactions' }))
     expect(screen.getByRole('heading', { name: 'Your transactions' })).toBeInTheDocument()
     expect(screen.getAllByRole('row')).toHaveLength(5)

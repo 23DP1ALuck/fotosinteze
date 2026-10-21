@@ -113,7 +113,7 @@ class ExpenseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json(), [{
             'account_id': 1, 'name': 'Business cash', 'currency': 'EUR',
-            'balance': '100.00', 'workspace_id': 1, 'connection_id': None,
+            'balance': '100.00', 'workspace_id': 1, 'connection_id': None, 'is_main': False,
         }])
 
         self.identity = {'sub': '1'}
@@ -128,11 +128,13 @@ class ExpenseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(employee.status_code, 200, employee.text)
         self.assertEqual([row['workspace_id'] for row in employee.json()], [1])
 
-    async def test_employee_cannot_read_or_review_another_submission(self):
+    async def test_employee_cannot_read_change_delete_or_review_another_submission(self):
         expense_id = await self.submit()
         self.identity = {'sub': '3'}
         self.assertEqual((await self.client.get('/expenses')).json(), [])
         self.assertEqual((await self.client.get(f'/expenses/{expense_id}')).status_code, 403)
+        self.assertEqual((await self.client.put(f'/expenses/{expense_id}', json=self.payload())).status_code, 403)
+        self.assertEqual((await self.client.delete(f'/expenses/{expense_id}')).status_code, 403)
         self.assertEqual((await self.client.post(f'/expenses/{expense_id}/review', json={'approve': True, 'account_id': 1})).status_code, 403)
 
     async def test_submission_validates_workspace_and_department_links(self):
@@ -162,7 +164,13 @@ class ExpenseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()['description'], 'Updated')
         self.assertIsNone(response.json()['project_id'])
+        await self.db.refresh(await self.db.get(Account, 1))
+        self.assertEqual((await self.db.get(Account, 1)).balance, Decimal('100'))
+        self.assertEqual(await self.db.scalar(select(func.count()).select_from(Transaction)), 0)
         self.assertEqual((await self.client.delete(f'/expenses/{expense_id}')).status_code, 204)
+        await self.db.refresh(await self.db.get(Account, 1))
+        self.assertEqual((await self.db.get(Account, 1)).balance, Decimal('100'))
+        self.assertEqual(await self.db.scalar(select(func.count()).select_from(Transaction)), 0)
         self.assertIsNone(await self.db.get(Expense, expense_id))
 
     async def test_approval_creates_one_transaction_and_locks_request(self):
@@ -191,6 +199,7 @@ class ExpenseTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post(f'/expenses/{expense_id}/review', json={'approve': False})
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()['status'], 'REJECTED')
+        self.assertEqual((await self.client.put(f'/expenses/{expense_id}', json=self.payload())).status_code, 409)
         self.assertEqual(await self.db.scalar(select(func.count()).select_from(Transaction)), 0)
         self.assertEqual((await self.db.get(Account, 1)).balance, Decimal('100'))
         self.assertEqual((await self.client.delete(f'/expenses/{expense_id}')).status_code, 409)

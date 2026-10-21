@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from app.database import AsyncSession
+from app.services.name_uniqueness import check_unique_name
 from app.models import Project, Department, WorkspaceUsers, WorkspaceRole
 from app.dto import CreateProjectRequest, UpdateProjectRequest, ProjectResponseDTO
 from app.services.workspace_access import get_workspace_membership
@@ -59,12 +60,10 @@ async def validate_project_departments(department_ids: list[int], workspace_id: 
 
 
 async def check_project_name(workspace_id: int, name: str, db: AsyncSession, project_id: int | None = None) -> None:
-    # Ignore the current project when checking whether a name is already taken.
-    stmt = select(Project.project_id).where(Project.workspace_id == workspace_id, Project.name == name)
-    if project_id is not None:
-        stmt = stmt.where(Project.project_id != project_id)
-    if await db.scalar(stmt) is not None:
-        raise HTTPException(status_code=409, detail="Project name is already taken in this workspace")
+    await check_unique_name(db, Project.name, name,
+        Project.workspace_id == workspace_id,
+        Project.project_id != project_id if project_id is not None else True,
+        detail='Project name is already taken in this workspace')
 
 
 async def create_project(workspace_id: int, project_data: CreateProjectRequest, current_user: dict, db: AsyncSession) -> ProjectResponseDTO:
@@ -140,15 +139,10 @@ async def delete_project(project_id: int, current_user: dict, db: AsyncSession) 
 async def commit_project(db: AsyncSession, workspace_id: int, name: str, project_id: int | None = None) -> None:
     try:
         await db.commit()
-    except IntegrityError as exc:
+    except IntegrityError:
         await db.rollback()
-        # A concurrent request may have claimed the name after the precheck.
-        stmt = select(Project.project_id).where(
+        await check_unique_name(db, Project.name, name,
             Project.workspace_id == workspace_id,
-            Project.name == name,
-        )
-        if project_id is not None:
-            stmt = stmt.where(Project.project_id != project_id)
-        if await db.scalar(stmt) is not None:
-            raise HTTPException(status_code=409, detail="Project name is already taken in this workspace") from exc
+            Project.project_id != project_id if project_id is not None else True,
+            detail='Project name is already taken in this workspace')
         raise

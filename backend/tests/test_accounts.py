@@ -34,10 +34,29 @@ class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.put('/accounts/1', headers={'Workspace-ID': '2'}, json={'name': 'Other'})).status_code, 404)
         self.user = {'sub': '2'}
         response = await self.client.put('/accounts/1', json={'balance': 0})
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(Decimal(response.json()['balance']), Decimal('0'))
+        self.assertEqual(response.status_code, 403, response.text)
+        await self.db.refresh(await self.db.get(Account, 1))
+        self.assertEqual((await self.db.get(Account, 1)).balance, Decimal('-12.34'))
         self.assertEqual((await self.client.put('/accounts/1', headers={'Workspace-ID': '2'},
                                                 json={'balance': 0})).status_code, 403)
+
+    async def test_employee_can_select_account_for_transaction_but_cannot_manage_it(self):
+        self.user = {'sub': '2'}
+        response = await self.client.get('/accounts')
+        self.assertEqual(response.status_code, 200, response.text)
+        account_id = response.json()[0]['account_id']
+        response = await self.client.post('/accounts', json={'name': 'New', 'currency': 'EUR', 'balance': 0})
+        self.assertEqual(response.status_code, 403, response.text)
+        for fields in ({'name': 'Renamed'}, {'balance': 0}):
+            response = await self.client.put(f'/accounts/{account_id}', json=fields)
+            self.assertEqual(response.status_code, 403, response.text)
+        account = await self.db.get(Account, account_id)
+        await self.db.refresh(account)
+        self.assertEqual(account.name, 'Cash')
+        self.assertEqual(account.balance, Decimal('80'))
+        response = await self.client.post('/transactions', json={**self.payload, 'account_id': account_id, 'department_id': 2})
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()['account_id'], account_id)
 
     async def test_connected_balance_is_bank_managed(self):
         self.db.add(RevolutConnection(revolut_connection_id=1, external_consent_id='consent', status='active', connected_by_id=1))
@@ -101,3 +120,51 @@ class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
         await self.db.refresh(bank)
         self.assertEqual(manual.balance, Decimal('70'))
         self.assertEqual(bank.balance, Decimal('100'))
+
+    async def test_main_account_is_persisted_unique_and_scoped_to_workspace(self):
+        created = await self.client.post('/accounts', json={'name': 'Savings', 'currency': 'EUR', 'balance': 0})
+        second_id = created.json()['account_id']
+        self.assertFalse(created.json()['is_main'])
+        personal = await self.client.post('/accounts', headers={'Workspace-ID': '2'}, json={'name': 'Personal', 'currency': 'EUR', 'balance': 0, 'is_main': True})
+        self.assertEqual(personal.status_code, 201, personal.text)
+        self.assertTrue(personal.json()['is_main'])
+        first = await self.client.put('/accounts/1', json={'is_main': True})
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertTrue(first.json()['is_main'])
+        second = await self.client.put(f'/accounts/{second_id}', json={'is_main': True})
+        self.assertEqual(second.status_code, 200, second.text)
+        rows = (await self.client.get('/accounts')).json()
+        self.assertEqual([row['account_id'] for row in rows if row['is_main']], [second_id])
+        self.assertTrue((await self.client.get(f"/accounts/{personal.json()['account_id']}", headers={'Workspace-ID': '2'})).json()['is_main'])
+        await self.client.put(f'/accounts/{second_id}', json={'name': 'Renamed'})
+        self.assertTrue((await self.client.get(f'/accounts/{second_id}')).json()['is_main'])
+
+    async def test_main_account_requires_owner_and_valid_boolean(self):
+        for value in (None, 'yes', 1):
+            response = await self.client.put('/accounts/1', json={'is_main': value})
+            self.assertEqual(response.status_code, 422, response.text)
+        self.user = {'sub': '2'}
+        response = await self.client.put('/accounts/1', json={'is_main': True})
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertFalse((await self.client.get('/accounts/1')).json()['is_main'])
+
+    async def test_first_created_account_is_main_and_later_accounts_preserve_selection(self):
+        headers = {'Workspace-ID': '2'}
+        payload = {'name': 'First', 'currency': 'EUR', 'balance': 0}
+        first = await self.client.post('/accounts', headers=headers, json=payload)
+        self.assertEqual(first.status_code, 201, first.text)
+        self.assertTrue(first.json()['is_main'])
+        first_id = first.json()['account_id']
+        second = await self.client.post('/accounts', headers=headers, json={**payload, 'name': 'Second'})
+        self.assertEqual(second.status_code, 201, second.text)
+        self.assertFalse(second.json()['is_main'])
+        second_id = second.json()['account_id']
+        rows = (await self.client.get('/accounts', headers=headers)).json()
+        self.assertEqual([row['account_id'] for row in rows if row['is_main']], [first_id])
+        changed = await self.client.put(f'/accounts/{second_id}', headers=headers, json={'is_main': True})
+        self.assertEqual(changed.status_code, 200, changed.text)
+        third = await self.client.post('/accounts', headers=headers, json={**payload, 'name': 'Third'})
+        self.assertEqual(third.status_code, 201, third.text)
+        self.assertFalse(third.json()['is_main'])
+        rows = (await self.client.get('/accounts', headers=headers)).json()
+        self.assertEqual([row['account_id'] for row in rows if row['is_main']], [second_id])
