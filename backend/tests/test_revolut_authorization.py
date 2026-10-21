@@ -195,6 +195,8 @@ class RevolutConnectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('secret', response.text)
         self.assertIn('location.hash', response.text)
         self.assertIn('no-store', response.headers['cache-control'])
+        self.assertIn('href="http://localhost:5173/app"', response.text)
+        self.assertIn('Return to Fotosinteze', response.text)
 
     async def test_malformed_callback_does_not_echo_codes(self):
         response = await self.client.post('/revolut/callback', json={'state': 'test', 'code': 'sensitive-code' * 500})
@@ -280,3 +282,62 @@ class RevolutConnectionTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post('/revolut/authorize', headers={'Workspace-ID': '1'})
         self.assertEqual(response.status_code, 409, response.text)
         self.assertEqual(self.outbound.await_count, before)
+
+    async def test_status_is_personal_scoped_read_only_and_hides_credentials(self):
+        response = await self.client.get('/revolut/connection', headers={'Workspace-ID': '1'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), {'status': 'not_connected', 'expires_at': None, 'last_sync_at': None})
+        self.assertEqual(response.headers['cache-control'], 'no-store')
+        self.db.add(RevolutConnection(workspace_id=1, connected_by_id=1, external_consent_id='secret-consent',
+            status='active', expires_at=datetime(2030, 1, 1), last_sync_at=datetime(2026, 1, 1),
+            access_token_encrypted='secret-token', refresh_token_encrypted='secret-refresh',
+            authorization_status='failed'))
+        await self.db.commit()
+        response = await self.client.get('/revolut/connection', headers={'Workspace-ID': '1'})
+        self.assertEqual(response.json(), {'status': 'connected', 'expires_at': '2030-01-01T00:00:00Z',
+                                           'last_sync_at': '2026-01-01T00:00:00Z'})
+        self.assertNotIn('secret', response.text)
+        self.db.add(Workspace(workspace_id=3, name='Other personal', type=WorkspaceTypeEnum.PERSONAL))
+        await self.db.flush()
+        self.db.add(WorkspaceUsers(user_id=1, workspace_id=3, role=WorkspaceRole.OWNER))
+        await self.db.commit()
+        other = await self.client.get('/revolut/connection', headers={'Workspace-ID': '3'})
+        self.assertEqual(other.json(), {'status': 'not_connected', 'expires_at': None, 'last_sync_at': None})
+        for workspace_id, code in [('2', 400), ('999', 403)]:
+            response = await self.client.get('/revolut/connection', headers={'Workspace-ID': workspace_id})
+            self.assertEqual(response.status_code, code, response.text)
+        self.outbound.assert_not_awaited()
+
+    async def test_status_reports_pending_expired_and_failed_without_modifying_connection(self):
+        await self.start()
+        connection = await self.db.scalar(select(RevolutConnection))
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        for authorization, expiry, expected in [
+            ('pending', now + timedelta(minutes=5), 'pending'),
+            ('exchanging', now + timedelta(minutes=5), 'pending'),
+            ('pending', now - timedelta(minutes=1), 'expired'),
+            ('failed', now + timedelta(minutes=5), 'failed'),
+        ]:
+            connection.authorization_status = authorization
+            connection.authorization_expires_at = expiry
+            await self.db.commit()
+            response = await self.client.get('/revolut/connection', headers={'Workspace-ID': '1'})
+            self.assertEqual(response.json()['status'], expected)
+            await self.db.refresh(connection)
+            self.assertEqual(connection.authorization_status, authorization)
+        connection.status = 'active'
+        connection.access_token_encrypted = 'old-token'
+        connection.expires_at = now - timedelta(seconds=1)
+        await self.db.commit()
+        response = await self.client.get('/revolut/connection', headers={'Workspace-ID': '1'})
+        self.assertEqual(response.json()['status'], 'expired')
+        connection.authorization_status = 'pending'
+        connection.authorization_expires_at = now + timedelta(minutes=5)
+        await self.db.commit()
+        response = await self.client.get('/revolut/connection', headers={'Workspace-ID': '1'})
+        self.assertEqual(response.json()['status'], 'pending')
+
+    async def test_status_requires_authentication(self):
+        del app.dependency_overrides[get_current_user]
+        response = await self.client.get('/revolut/connection', headers={'Workspace-ID': '1'})
+        self.assertEqual(response.status_code, 401, response.text)
