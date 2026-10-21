@@ -683,7 +683,28 @@ hostname to the frontend hostname.
 This remains the Open Banking sandbox. Deployment does not enable live accounts:
 production credentials, certificates and provider endpoints need a separate
 production rollout. Authorization stores tokens but does not yet import accounts
-or transactions, refresh Revolut tokens, or show persisted connection status.
+or transactions, or refresh Revolut tokens.
+
+### Personal Workspace connection UI (REV-05)
+
+The Revolut panel reads `GET /revolut/connection` for the active Personal
+Workspace. The authenticated, workspace-scoped endpoint returns only `status`,
+`expires_at` and `last_sync_at`, with UTC timestamps and `Cache-Control: no-store`.
+It never returns provider tokens, consent IDs or pending authorization secrets,
+and does not contact Revolut or change stored state. Business Workspaces are
+rejected; inaccessible workspaces return `403`.
+
+The panel shows Not connected, Connected, Pending, Expired or Failed, with a
+Connect/Reconnect action and an access-expiry timestamp when available. A failed
+reconnect does not hide a still-valid established connection. Expired access
+tokens require reconnecting until token refresh is implemented. Status loads on
+mount and when the tab regains focus; failed or malformed status responses show
+an error. The callback page provides a Return to Fotosinteze link to `/app`, where
+status is fetched again. Business Workspaces do not render these controls.
+
+REV-03 account/balance retrieval, REV-04 transaction imports, and the RSYNC
+service, UI and tests remain separate work. A connection does not yet populate
+the sample dashboard with Revolut data.
 
 ### Endpoints and browser flow
 

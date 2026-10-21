@@ -15,6 +15,7 @@ beforeEach(()=>{
   Object.defineProperty(HTMLDialogElement.prototype,'close',{configurable:true,value(){this.removeAttribute('open')}})
   vi.stubGlobal('fetch',vi.fn(async(url,init)=>{
     if(String(url).endsWith('/workspaces')) return Response.json(workspaces)
+    if(String(url).endsWith('/revolut/connection'))return Response.json({status:'not_connected',expires_at:null,last_sync_at:null})
     const id=Number(new Headers(init.headers).get('X-Workspace-ID'))
     if(String(url).endsWith('/projects'))return Response.json([{id:10,workspace_id:id,name:'Website',status:'Active',department_ids:[7],start_date:null,end_date:null}])
     if(String(url).endsWith('/departments'))return Response.json([{id:7,workspace_id:id,name:'Development'}])
@@ -28,12 +29,14 @@ async function renderWorkspace(){
 }
 async function switchWorkspace(from:string,to:string){await userEvent.click(screen.getByRole('button',{name:`Switch workspace, ${from}`}));await userEvent.click(screen.getByRole('button',{name:`Switch to ${to}`}))}
 it('loads actual memberships and displays Personal, Business and membership roles',async()=>{
-  await renderWorkspace(); await userEvent.click(screen.getByRole('button',{name:'Switch workspace, Personal'}))
+  await renderWorkspace(); expect(screen.getByRole('button',{name:'Connect Revolut sandbox'})).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button',{name:'Switch workspace, Personal'}))
   expect(screen.getByRole('button',{name:'Switch to Acme Studio'})).toHaveTextContent('Owner')
   expect(screen.getByRole('button',{name:'Switch to Beta Studio'})).toHaveTextContent('Employee')
   await userEvent.click(screen.getByRole('button',{name:'Switch to Acme Studio'}))
   expect(screen.getByRole('heading',{name:'Your business, at a glance.'})).toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'Revolut'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:/Connect Revolut sandbox/})).not.toBeInTheDocument()
 })
 it('keeps business and personal transaction data separate across switches',async()=>{
   const user=userEvent.setup();await renderWorkspace()

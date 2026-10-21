@@ -4,6 +4,7 @@ import hmac
 import json
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 from urllib.parse import urlencode
 
 import jwt
@@ -59,6 +60,36 @@ def encryption_cipher() -> Fernet:
         return Fernet(settings.revolut_token_encryption_key.get_secret_value().encode())
     except (ValueError, TypeError, AttributeError):
         raise HTTPException(503, 'Configure REVOLUT_TOKEN_ENCRYPTION_KEY with a Fernet key') from None
+
+
+class ConnectionStatus(BaseModel):
+    status: Literal['not_connected', 'connected', 'pending', 'expired', 'failed']
+    expires_at: datetime | None = None
+    last_sync_at: datetime | None = None
+
+
+async def connection_status(workspace: Workspace, db: AsyncSession) -> ConnectionStatus:
+    if workspace.type != WorkspaceTypeEnum.PERSONAL:
+        raise HTTPException(400, 'Revolut connection requires a Personal Workspace')
+    connection = await db.scalar(select(RevolutConnection).where(RevolutConnection.workspace_id == workspace.workspace_id))
+    if connection is None:
+        return ConnectionStatus(status='not_connected')
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if (connection.status == 'active' and connection.access_token_encrypted
+            and connection.expires_at and connection.expires_at > now):
+        state = 'connected'
+    elif connection.authorization_status in ('pending', 'exchanging'):
+        state = ('pending' if connection.authorization_expires_at
+                 and connection.authorization_expires_at > now else 'expired')
+    elif connection.status == 'active':
+        state = 'expired'
+    elif connection.authorization_status == 'failed':
+        state = 'failed'
+    else:
+        state = 'expired'
+    return ConnectionStatus(status=state,
+        expires_at=connection.expires_at.replace(tzinfo=timezone.utc) if connection.expires_at else None,
+        last_sync_at=connection.last_sync_at.replace(tzinfo=timezone.utc) if connection.last_sync_at else None)
 
 
 async def start_authorization(current_user: dict, workspace: Workspace, db: AsyncSession) -> tuple[str, str]:
