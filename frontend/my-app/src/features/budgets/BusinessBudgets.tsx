@@ -1,3 +1,4 @@
+import { DateInput } from '@/components/calendar/DateInput'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useState, type FormEvent } from 'react'
 import { matchesProjectDepartment } from '@/features/projects/project-filter'
@@ -106,7 +107,7 @@ export function BusinessBudgets({ workspaceId, onConnect, catalog, personal = fa
       {draft.target_type !== 'CATEGORY' && catalog?.loading && <p role="status" className="text-sm text-[#526259] sm:col-span-2">Loading {labels[draft.target_type].toLowerCase()} options…</p>}
       {draft.target_type !== 'CATEGORY' && catalog?.error && <div className="text-sm text-[#a43b32] sm:col-span-2"><p role="alert">{catalog.error}</p><button type="button" onClick={catalog.refresh} className="mt-2 underline">Retry {labels[draft.target_type].toLowerCase()} options</button></div>}
       <label className="text-sm">Currency<input className={field} value={draft.currency} pattern="[A-Z]{3}" minLength={3} maxLength={3} onChange={e => setDraft({ ...draft, currency: e.target.value.toUpperCase() })} required /></label>
-      <label className="text-sm">Period start<input className={field} type="date" value={draft.period_start} onInput={e => setDraft({ ...draft, period_start: e.currentTarget.value })} required /></label>
+      <label className="text-sm">Period start<DateInput calendarLabel="Period start" className={field} value={draft.period_start} onInput={e => setDraft({ ...draft, period_start: e.currentTarget.value })} required /></label>
       <label className="text-sm">Period<select className={field} value={draft.period_length} onChange={e => setDraft({ ...draft, period_length: e.target.value as BudgetInput['period_length'], duration_days: e.target.value === 'CUSTOM' ? 30 : null })}><option value="MONTHLY">Monthly</option><option value="WEEKLY">Weekly</option><option value="CUSTOM">Custom</option></select></label>
       {draft.period_length === 'CUSTOM' && <label className="text-sm">Duration (days)<input className={field} type="number" min="1" max="3660" step="1" value={draft.duration_days ?? ''} onChange={e => setDraft({ ...draft, duration_days: Number(e.target.value) })} required /></label>}
       <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" className={secondary} onClick={() => setDraft(null)} disabled={busy}>Cancel</button><button className={button} disabled={busy || (draft.target_type !== 'CATEGORY' && projectOptionsBusy)}>{busy ? 'Saving…' : 'Save budget'}</button></div>

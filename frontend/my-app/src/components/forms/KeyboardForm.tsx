@@ -6,7 +6,7 @@ type Field = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
 const selector = 'input:not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]), select, textarea'
 function fieldsIn(form: HTMLFormElement): Field[] {
   const fields = Array.from(form.querySelectorAll<Field>(selector)).filter(field => {
-    if (field.matches(':disabled, [readonly]') || field.closest('[hidden], [inert], [aria-hidden="true"]')) return false
+    if (field.matches(':disabled, [readonly]:not([data-date-input])') || field.closest('[hidden], [inert], [aria-hidden="true"]')) return false
     for (let node: HTMLElement | null = field; node && node !== form; node = node.parentElement) {
       const style = getComputedStyle(node)
       if (style.display === 'none' || style.visibility === 'hidden') return false
@@ -30,6 +30,7 @@ export function KeyboardForm<T extends FieldValues = FieldValues>({ validateFiel
 
   function hintFor(form: HTMLFormElement, field: Field) {
     const shortcuts = 'Ctrl/⌘+↑/↓ to switch fields · Ctrl/⌘+Enter to save'
+    if (field instanceof HTMLInputElement && field.dataset.dateInput) return `Enter to open calendar · ${shortcuts}`
     if (field instanceof HTMLTextAreaElement) return `Enter for a new line · ${shortcuts}`
     if (field instanceof HTMLInputElement && field.type === 'file') return `Enter to choose a file · ${shortcuts}`
     if (field instanceof HTMLSelectElement) return `Type or use ↑/↓ to choose · Enter to continue · ${shortcuts}`
@@ -78,7 +79,7 @@ export function KeyboardForm<T extends FieldValues = FieldValues>({ validateFiel
     if (event.defaultPrevented || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
     const form = event.currentTarget
     const target = event.target
-    if (target instanceof HTMLElement && target.getAttribute('aria-expanded') === 'true') return
+    if (target instanceof HTMLElement && target.getAttribute('aria-expanded') === 'true' && !target.hasAttribute('data-date-input')) return
     const modified = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey
     if (event.key === 'Enter' && modified) {
       event.preventDefault()

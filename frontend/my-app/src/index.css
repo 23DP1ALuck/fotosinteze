@@ -324,3 +324,24 @@ code {
 @media (prefers-reduced-motion: reduce) {
   .category-type-indicator { transition: none !important; }
 }
+
+/* Shared date/month picker: branded controls with no system calendar popup. */
+.date-input-trigger, .calendar-popup button {
+  cursor: pointer;
+  transition: background-color 180ms ease, color 180ms ease, box-shadow 220ms ease, transform 240ms cubic-bezier(.22, 1, .36, 1);
+}
+.calendar-popup { transform-origin: var(--transform-origin); transition: opacity 180ms ease, transform 260ms cubic-bezier(.22, 1, .36, 1); }
+.calendar-popup[data-starting-style], .calendar-popup[data-ending-style] { opacity: 0; transform: translateY(5px) scale(.98); }
+.calendar-popup button:disabled { cursor: default; opacity: .3; }
+.calendar-popup button:focus-visible { outline: 2px solid #82965b; outline-offset: 1px; }
+.calendar-popup button:active:not(:disabled) { transform: scale(.94); }
+.calendar-nav { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 10px; background: #f3f5ee; }
+.calendar-nav:hover:not(:disabled) { background: #e6ebe3; }
+.calendar-hover { transition: transform 260ms cubic-bezier(.22, 1, .36, 1), width 200ms ease, height 200ms ease, opacity 140ms ease; }
+.calendar-grid { animation: calendar-forward 250ms cubic-bezier(.22, 1, .36, 1) both; }
+.calendar-grid[data-direction="back"] { animation-name: calendar-back; }
+@keyframes calendar-forward { from { opacity: 0; transform: translateX(7px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes calendar-back { from { opacity: 0; transform: translateX(-7px); } to { opacity: 1; transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .calendar-popup, .calendar-popup *, .date-input-trigger { transition: none !important; animation: none !important; }
+}

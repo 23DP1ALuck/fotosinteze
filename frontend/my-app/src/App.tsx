@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
+import { NavigationShortcuts } from '@/components/navigation/NavigationShortcuts'
 import { GuestRoute, ProtectedRoute } from '@/components/auth/AuthGate'
 import { AuthProvider } from '@/features/auth/auth-context'
 import HomePage from '@/pages/HomePage'
@@ -12,6 +13,7 @@ function App() {
   return (
     <QueryProvider><AuthProvider>
       <BrowserRouter>
+        <NavigationShortcuts />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route element={<ProtectedRoute />}>

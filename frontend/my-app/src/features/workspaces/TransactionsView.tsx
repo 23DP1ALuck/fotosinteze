@@ -1,3 +1,4 @@
+import { DateInput } from '@/components/calendar/DateInput'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useId, useRef, useState } from 'react'
 import { MoreHorizontal, Search, X } from 'lucide-react'
@@ -82,8 +83,8 @@ export function TransactionsView({ transactions, income, expenses, workspaceName
         setDates({ from: dateFrom, to: dateTo }); setPage(0)
         onFilterChange?.({ date_from: dateFrom || undefined, date_to: dateTo || undefined })
       }}>
-        <label className="grid min-w-0 gap-1 text-xs text-[#526259]">From date<input type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} className={selectClass} /></label>
-        <label className="grid min-w-0 gap-1 text-xs text-[#526259]">To date<input type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} aria-invalid={invalidDates} aria-describedby={invalidDates ? `${detailId}-date-error` : undefined} className={selectClass} /></label>
+        <label className="grid min-w-0 gap-1 text-xs text-[#526259]">From date<DateInput calendarLabel="From date" nextCalendarId={`${detailId}-to`} value={dateFrom} onChange={event => setDateFrom(event.target.value)} className={selectClass} /></label>
+        <label className="grid min-w-0 gap-1 text-xs text-[#526259]">To date<DateInput calendarLabel="To date" id={`${detailId}-to`} value={dateTo} onChange={event => setDateTo(event.target.value)} aria-invalid={invalidDates} aria-describedby={invalidDates ? `${detailId}-date-error` : undefined} className={selectClass} /></label>
         <button type="submit" disabled={invalidDates} className={`${selectClass} disabled:opacity-40`}>Apply dates</button>
         {(hasFilters || dateFrom || dateTo) && <button type="button" onClick={resetFilters} className="rounded-lg px-4 py-3 text-sm underline">Clear filters</button>}
       </KeyboardForm>

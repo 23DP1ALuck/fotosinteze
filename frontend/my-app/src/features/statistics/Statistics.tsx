@@ -1,5 +1,6 @@
+import { DateInput } from '@/components/calendar/DateInput'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { RefreshCw } from 'lucide-react'
@@ -22,6 +23,7 @@ function ChartCard({ title, loading, error, retry, empty, children, wide }: { ti
   </section>
 }
 export function Statistics({ workspaceId, role }: { workspaceId: number; role?: 'OWNER' | 'EMPLOYEE' }) {
+  const calendarId = useId()
   const [range, setRange] = useState(currentMonth)
   const [draft, setDraft] = useState(range)
   const [validation, setValidation] = useState('')
@@ -39,7 +41,7 @@ export function Statistics({ workspaceId, role }: { workspaceId: number; role?: 
   return <div aria-label="Workspace statistics" className="space-y-6 text-[#193f33]">
     <KeyboardForm aria-label="Statistics period" onSubmit={event => { event.preventDefault(); const error = rangeError(draft); setValidation(error); if (!error) setRange({ ...draft }) }} noValidate className="flex flex-wrap items-end gap-4 rounded-2xl bg-white p-5">
       <div className="mr-auto"><p className="text-sm font-medium">Explore your finances</p><p className="mt-2 text-xs text-[#526259]">{dateLabel(range.from)} – {dateLabel(range.to)} · Inclusive dates</p></div>
-      {(['from', 'to'] as const).map(key => <label key={key} className="text-xs text-[#526259]">{key === 'from' ? 'From' : 'To'}<input type="date" value={draft[key]} onChange={event => setDraft({ ...draft, [key]: event.target.value })} className="mt-2 block rounded-xl border border-[#dce4d8] bg-[#f7f8f2] px-3 py-3 text-sm text-[#193f33]" /></label>)}
+      {(['from', 'to'] as const).map(key => <label key={key} className="text-xs text-[#526259]">{key === 'from' ? 'From' : 'To'}<DateInput id={`${calendarId}-${key}`} nextCalendarId={key === 'from' ? `${calendarId}-to` : undefined} calendarLabel={key === 'from' ? 'From' : 'To'} value={draft[key]} onChange={event => setDraft({ ...draft, [key]: event.target.value })} className="mt-2 block rounded-xl border border-[#dce4d8] bg-[#f7f8f2] px-3 py-3 text-sm text-[#193f33]" /></label>)}
       <button className={button}>Apply dates</button><button type="button" aria-label="Refresh statistics" disabled={queries.some(query => query.isFetching)} onClick={() => queries.forEach(query => { void query.refetch() })} className="rounded-xl bg-[#eaf0e6] p-3.5 disabled:opacity-50"><RefreshCw size={18} /></button>
       {validation && <p role="alert" className="w-full text-sm text-[#a43b32]">{validation}</p>}
     </KeyboardForm>
