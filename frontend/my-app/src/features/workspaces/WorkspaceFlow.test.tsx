@@ -34,7 +34,9 @@ async function renderWorkspace(){
 }
 async function switchWorkspace(from:string,to:string){await userEvent.click(screen.getByRole('button',{name:`Switch workspace, ${from}`}));await userEvent.click(screen.getByRole('button',{name:`Switch to ${to}`}))}
 it('loads actual memberships and displays Personal, Business and membership roles',async()=>{
-  await renderWorkspace(); expect(screen.getByRole('button',{name:'Connect Revolut sandbox'})).toBeInTheDocument()
+  await renderWorkspace()
+  await userEvent.click(screen.getByRole('button',{name:'Accounts'}))
+  expect(await screen.findByRole('button',{name:'Connect Revolut sandbox'})).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button',{name:'Switch workspace, Personal'}))
   expect(screen.getByRole('button',{name:'Switch to Acme Studio'})).toHaveTextContent('Owner')
   expect(screen.getByRole('button',{name:'Switch to Beta Studio'})).toHaveTextContent('Employee')
