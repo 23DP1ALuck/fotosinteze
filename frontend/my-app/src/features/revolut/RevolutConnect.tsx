@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { authAccountId } from '@/features/workspaces/workspace-state'
+import { useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 import { authenticatedFetch } from '@/features/auth/authenticated-fetch'
 import { readApiErrorMessage } from '@/features/auth/api-error'
@@ -17,6 +19,11 @@ const statusLabels = {
 }
 
 export function RevolutConnect({ workspaceId }: { workspaceId: number }) {
+  const queryClient = useQueryClient()
+  const importRequest = useRef<AbortController | null>(null)
+  const [loadingAccounts, setLoadingAccounts] = useState(false)
+  const [notice, setNotice] = useState('')
+  useEffect(() => () => importRequest.current?.abort(), [workspaceId])
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   const [connection, setConnection] = useState<z.infer<typeof connectionSchema> | null>(null)
@@ -46,6 +53,36 @@ export function RevolutConnect({ workspaceId }: { workspaceId: number }) {
     return () => { controller?.abort(); window.removeEventListener('focus', load) }
   }, [workspaceId])
 
+  async function loadAccounts() {
+    const ownerId = authAccountId()
+    const request = new AbortController()
+    importRequest.current = request
+    setLoadingAccounts(true)
+    setError('')
+    setNotice('')
+    try {
+      const response = await authenticatedFetch('/revolut/accounts/import', {
+        method: 'POST', signal: request.signal,
+      }, { workspaceId })
+      if (!response.ok) throw new Error(await readApiErrorMessage(response))
+      const result = z.object({ imported_count: z.number().int().nonnegative(),
+        last_sync_at: z.string().datetime({ offset: true }),
+      }).parse(await response.json())
+      if (request.signal.aborted || authAccountId() !== ownerId) return
+      setConnection(current => current && { ...current, last_sync_at: result.last_sync_at })
+      setNotice(`Loaded ${result.imported_count} Revolut accounts.`)
+      for (const feature of ['accounts', 'account-details']) {
+        await queryClient.invalidateQueries({ queryKey: [feature, ownerId, workspaceId] })
+      }
+    } catch (cause) {
+      if (!request.signal.aborted && authAccountId() === ownerId) {
+        setError(cause instanceof Error ? cause.message : 'Could not load Revolut accounts. Please retry.')
+      }
+    } finally {
+      if (!request.signal.aborted) setLoadingAccounts(false)
+    }
+  }
+
   async function connect() {
     setPending(true)
     setError('')
@@ -74,11 +111,18 @@ export function RevolutConnect({ workspaceId }: { workspaceId: number }) {
       <div><h2 className="text-base font-semibold">Revolut sandbox</h2>
         <p role="status" className="mt-1 text-sm">{connection ? statusLabels[connection.status] : statusError ? 'Connection status unavailable' : 'Checking connection…'}</p>
         {connection?.expires_at && <p className="mt-1 text-xs text-[#68796e]">Access expires: {new Date(connection.expires_at).toLocaleString()}</p>}
+        {connection?.last_sync_at && <p className="mt-1 text-xs text-[#68796e]">Last account sync: {new Date(connection.last_sync_at).toLocaleString()}</p>}
         <p className="mt-1 text-xs text-[#68796e]">Authorize a test account. Transaction imports are not available yet.</p></div>
-      <button type="button" disabled={pending} onClick={connect} className="rounded-xl bg-[#193f33] px-4 py-3 text-sm text-white disabled:opacity-50">
+      <div className="flex flex-wrap gap-3">
+      {connection?.status === 'connected' && <button type="button" disabled={loadingAccounts || pending} onClick={loadAccounts} className="rounded-xl bg-white px-4 py-3 text-sm disabled:opacity-50">
+        {loadingAccounts ? 'Loading accounts…' : 'Load accounts'}
+      </button>}
+      <button type="button" disabled={pending || loadingAccounts} onClick={connect} className="rounded-xl bg-[#193f33] px-4 py-3 text-sm text-white disabled:opacity-50">
         {pending ? 'Opening Revolut…' : connection && connection.status !== 'not_connected' ? 'Reconnect Revolut sandbox' : 'Connect Revolut sandbox'}
       </button>
+      </div>
     </div>
+    {notice && <p role="status" className="mt-3 text-sm">{notice}</p>}
     {error && <p role="alert" className="mt-3 text-sm text-red-800">{error}</p>}
     {statusError && <p role="alert" className="mt-3 text-sm text-red-800">{statusError}</p>}
   </section>
