@@ -4,7 +4,7 @@ import { useAuth } from '@/features/auth/use-auth'
 
 function AuthLoadingScreen() {
   return (
-    <div className="flex min-h-svh items-center justify-center bg-[#f9f9f6] text-[#6b7280]">
+    <div className="flex min-h-svh items-center justify-center bg-[#f9f9f6] text-[#526259]">
       Loading…
     </div>
   )

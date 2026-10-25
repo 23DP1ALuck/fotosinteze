@@ -33,7 +33,7 @@ const faqs = [
   },
 ]
 
-function Eyebrow({ children, className = 'text-[#8b928c]' }: { children: React.ReactNode; className?: string }) {
+function Eyebrow({ children, className = 'text-[#627168]' }: { children: React.ReactNode; className?: string }) {
   return <p className={`text-[10px] font-medium tracking-[0.16em] uppercase ${className}`}>{children}</p>
 }
 
@@ -60,10 +60,11 @@ function LandingPage() {
     <div className="landing-page min-h-svh bg-[#f6f5ee] text-[#213d33]">
       <header className="sticky top-0 z-20 border-b border-[#e6e3d8]/70 bg-[#f6f5ee]/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-        <Link to="/" className="flex items-center gap-2 text-[15px] tracking-tight">
+        <Link to="/" className="flex items-center gap-2.5 text-xl font-semibold tracking-tight sm:text-[22px]">
+          <BrandMark className="size-5" />
           Fotosinteze
         </Link>
-        <nav className="hidden items-center gap-8 text-sm text-[#6d756f] md:flex">
+        <nav className="hidden items-center gap-8 text-sm font-medium text-[#213d33] md:flex">
           {navLinks.map((link) => (
             <a key={link.href} href={link.href} className="transition-colors hover:text-[#213d33]">
               {link.label}
@@ -82,7 +83,7 @@ function LandingPage() {
             <>
               <Link
                 to="/login"
-                className="px-3 py-2 text-sm text-[#6d756f] transition-colors hover:text-[#213d33]"
+                className="px-3 py-2 text-sm font-medium text-[#213d33] transition-colors hover:text-[#213d33]"
               >
                 Log in
               </Link>
@@ -100,14 +101,14 @@ function LandingPage() {
 
       <main>
         <section className="mx-auto max-w-3xl px-5 pb-8 pt-10 text-center sm:px-8 sm:pt-16">
-          <p className="mb-7 inline-flex rounded-full bg-[#ecebe3] px-4 py-1.5 text-[11px] tracking-[0.16em] text-[#6d756f] uppercase">
+          <p className="mb-7 inline-flex rounded-full bg-[#ecebe3] px-4 py-1.5 text-[11px] tracking-[0.16em] text-[#526259] uppercase">
             One login. Room for every ambition.
           </p>
           <h1 className="m-0 text-[2.6rem] leading-[1.08] font-medium tracking-[-0.04em] text-[#213d33] sm:text-6xl lg:text-[4.25rem]">
             <span className="block sm:whitespace-nowrap">Your money. Your business.</span>
             <span className="mt-1 block">A clearer picture.</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-lg text-[15px] leading-relaxed text-[#6d756f] sm:text-base">
+          <p className="mx-auto mt-6 max-w-lg text-[15px] leading-relaxed text-[#526259] sm:text-base">
             Find your balance at home. Keep your business moving.
             <br className="hidden sm:block" />
             Manage both with workspaces that keep everything in its place.
@@ -126,15 +127,15 @@ function LandingPage() {
               Explore the product
             </a>
           </div>
-          <p className="mt-5 text-sm text-[#8b928c]">
+          <p className="mt-5 text-sm text-[#627168]">
             Personal clarity. Business control. One place to start.
           </p>
         </section>
 
         <section id="product" className="mx-auto max-w-[1080px] scroll-mt-24 px-4 pb-6 sm:px-8">
           <HeroPreview />
-          <p className="mt-6 text-center text-sm text-[#8b928c]">
-            An illustrative business workspace. Your personal finances stay separate.
+          <p className="mt-6 text-center text-sm text-[#627168]">
+            Explore sample data. Your personal and business finances stay separate.
           </p>
         </section>
 
@@ -145,7 +146,7 @@ function LandingPage() {
               <h2 className="mt-4 text-3xl font-medium tracking-tight !text-[#213d33] sm:text-[2.6rem]">
                 Two worlds. One clear view.
               </h2>
-              <p className="mt-4 text-[15px] text-[#6d756f]">
+              <p className="mt-4 text-[15px] text-[#526259]">
                 Give your personal goals and business ambitions their own space.
               </p>
             </div>
@@ -156,18 +157,18 @@ function LandingPage() {
                 <h3 className="mt-4 text-2xl font-medium tracking-tight text-[#213d33]">
                   More life. Less money admin.
                 </h3>
-                <p className="mt-3 text-sm leading-relaxed text-[#6d756f]">
+                <p className="mt-3 text-sm leading-relaxed text-[#526259]">
                   Know where your money goes, build better habits, and make room for what matters.
                 </p>
                 <div className="mt-7 rounded-xl bg-white px-5 py-5">
-                  <p className="text-sm text-[#6d756f]">Your next adventure</p>
+                  <p className="text-sm text-[#526259]">Your next adventure</p>
                   <p className="mt-2 text-3xl font-medium tracking-tight text-[#213d33]">
-                    €1,800 <span className="text-[#9aa19c]">/ €3,000</span>
+                    €1,800 <span className="text-[#627168]">/ €3,000</span>
                   </p>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#e6ebe3]">
                     <div className="h-full w-[60%] rounded-full bg-[#213d33]" />
                   </div>
-                  <p className="mt-2 text-xs text-[#8b928c]">Savings goal · 60% of the way there</p>
+                  <p className="mt-2 text-xs text-[#627168]">Savings goal · 60% of the way there</p>
                 </div>
                 <FeatureList items={personalFeatures} />
                 <div className="mt-auto pt-8">
@@ -186,14 +187,14 @@ function LandingPage() {
                   Big-picture control.
                   <span className="block">Down to the last expense.</span>
                 </h3>
-                <p className="mt-3 text-sm leading-relaxed text-white/70">
+                <p className="mt-3 text-sm leading-relaxed text-white/85">
                   Give your team the tools to spend responsibly, while you keep the whole business in view.
                 </p>
                 <div className="mt-7 rounded-xl bg-[#e6ebe3] px-5 py-5">
                   <p className="text-sm font-medium text-[#213d33]">The right access for every teammate</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {roles.map((role) => (
-                      <span key={role} className="rounded-md bg-white/70 px-2.5 py-1 text-xs text-[#6d756f]">
+                      <span key={role} className="rounded-md bg-white/70 px-2.5 py-1 text-xs text-[#526259]">
                         {role}
                       </span>
                     ))}
@@ -221,14 +222,14 @@ function LandingPage() {
                 Less chasing.
                 <span className="block">More moving forward.</span>
               </h2>
-              <p className="mt-5 max-w-md text-[15px] leading-relaxed text-[#6d756f]">
+              <p className="mt-5 max-w-md text-[15px] leading-relaxed text-[#526259]">
                 An expense shouldn&apos;t mean a trail of messages. Give your team one clear path from
                 submission to approval.
               </p>
               <ol className="mt-8 space-y-4">
                 {approvalSteps.map((step, index) => (
                   <li key={step} className="flex items-baseline gap-4 text-[15px] text-[#213d33]">
-                    <span className="text-sm text-[#8b928c]">0{index + 1}</span>
+                    <span className="text-sm text-[#627168]">0{index + 1}</span>
                     {step}
                   </li>
                 ))}
@@ -245,14 +246,14 @@ function LandingPage() {
                   <p className="text-sm text-[#213d33]">Mark submitted an expense</p>
                 </div>
                 <p className="mt-5 text-3xl font-medium tracking-tight text-[#213d33]">€120.00</p>
-                <p className="mt-1 text-xs text-[#8b928c]">Client visit · Travel · Receipt attached</p>
+                <p className="mt-1 text-xs text-[#627168]">Client visit · Travel · Receipt attached</p>
                 <div className="my-5 h-px bg-[#e6ebe3]" />
                 <div className="flex items-center justify-between rounded-lg bg-[#f3f5ee] px-4 py-3 text-sm">
                   <span className="text-[#213d33]">✓ Approved by Anna</span>
-                  <span className="text-xs text-[#8b928c]">Just now</span>
+                  <span className="text-xs text-[#627168]">Just now</span>
                 </div>
               </div>
-              <ul className="mt-5 space-y-2 text-sm text-[#6d756f]">
+              <ul className="mt-5 space-y-2 text-sm text-[#526259]">
                 <li>↓ Travel budget updated</li>
                 <li>↓ Expense added to company overview</li>
               </ul>
@@ -269,7 +270,7 @@ function LandingPage() {
               {faqs.map((faq) => (
                 <div key={faq.question} className="py-6">
                   <dt className="text-lg font-medium tracking-tight text-[#213d33]">{faq.question}</dt>
-                  <dd className="mt-2 text-[15px] leading-relaxed text-[#6d756f]">{faq.answer}</dd>
+                  <dd className="mt-2 text-[15px] leading-relaxed text-[#526259]">{faq.answer}</dd>
                 </div>
               ))}
             </dl>
@@ -283,7 +284,7 @@ function LandingPage() {
             Make room for a clearer
             <span className="block">financial future.</span>
           </h2>
-          <p className="mt-5 text-[15px] text-white/70">
+          <p className="mt-5 text-[15px] text-white/85">
             Start with your life. Add your business. Keep moving forward.
           </p>
           <Link
@@ -294,11 +295,11 @@ function LandingPage() {
           </Link>
 
           <div className="mt-24 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-8 text-sm sm:flex-row">
-            <Link to="/" className="flex items-center gap-2 text-white">
-              <BrandMark onDark />
+            <Link to="/" className="flex items-center gap-2.5 text-xl font-semibold tracking-tight text-white">
+              <BrandMark onDark className="size-5" />
               <span>fotosinteze</span>
             </Link>
-            <nav className="flex items-center gap-6 text-white/70">
+            <nav className="flex items-center gap-6 font-medium text-white/85">
               {navLinks.map((link) => (
                 <a key={link.href} href={link.href} className="transition-colors hover:text-white">
                   {link.label}

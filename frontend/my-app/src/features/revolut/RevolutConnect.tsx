@@ -73,8 +73,8 @@ export function RevolutConnect({ workspaceId }: { workspaceId: number }) {
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div><h2 className="text-base font-semibold">Revolut sandbox</h2>
         <p role="status" className="mt-1 text-sm">{connection ? statusLabels[connection.status] : statusError ? 'Connection status unavailable' : 'Checking connection…'}</p>
-        {connection?.expires_at && <p className="mt-1 text-xs text-[#68796e]">Access expires: {new Date(connection.expires_at).toLocaleString()}</p>}
-        <p className="mt-1 text-xs text-[#68796e]">Authorize a test account. Transaction imports are not available yet.</p></div>
+        {connection?.expires_at && <p className="mt-1 text-xs text-[#526259]">Access expires: {new Date(connection.expires_at).toLocaleString()}</p>}
+        <p className="mt-1 text-xs text-[#526259]">Authorize a test account. Transaction imports are not available yet.</p></div>
       <button type="button" disabled={pending} onClick={connect} className="rounded-xl bg-[#193f33] px-4 py-3 text-sm text-white disabled:opacity-50">
         {pending ? 'Opening Revolut…' : connection && connection.status !== 'not_connected' ? 'Reconnect Revolut sandbox' : 'Connect Revolut sandbox'}
       </button>
