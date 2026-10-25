@@ -10,6 +10,7 @@ from app.database import AsyncSession, get_db_session
 from app.dependencies.auth import get_current_user
 from app.dependencies.workspace import get_current_workspace
 from app.models import Workspace
+from app.services import revolut_account_service
 from app.services import revolut_authorization_service as service
 
 router = APIRouter(tags=['revolut'])
@@ -21,6 +22,13 @@ async def connection_status(response: Response, workspace: Workspace = Depends(g
                             db: AsyncSession = Depends(get_db_session)):
     response.headers['Cache-Control'] = 'no-store'
     return await service.connection_status(workspace, db)
+
+
+@router.post('/revolut/accounts/import')
+async def import_accounts(response: Response, workspace: Workspace = Depends(get_current_workspace),
+                          db: AsyncSession = Depends(get_db_session)):
+    response.headers['Cache-Control'] = 'no-store'
+    return await revolut_account_service.import_accounts(workspace, db)
 
 
 @router.post('/revolut/authorize')

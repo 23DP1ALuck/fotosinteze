@@ -64,6 +64,7 @@ class RevolutConnectionTests(unittest.IsolatedAsyncioTestCase):
         self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='https://backend.test')
         self.bad_nonce = False
         self.claim_changes = {}
+        self.omit_intent_claim = False
 
     async def asyncTearDown(self):
         self.config_patch.stop()
@@ -87,6 +88,8 @@ class RevolutConnectionTests(unittest.IsolatedAsyncioTestCase):
                   'exp': datetime.now(timezone.utc) + timedelta(minutes=5),
                   'nonce': 'wrong' if self.bad_nonce else flow.authorization_nonce, 'openbanking_intent_id': 'consent-id'}
         claims.update(self.claim_changes)
+        if self.omit_intent_claim:
+            claims.pop('openbanking_intent_id')
         return {'access_token': 'customer-secret', 'refresh_token': 'refresh-secret',
                 'token_type': 'Bearer', 'expires_in': 3599,
                 'id_token': jwt.encode(claims, 'provider-test-secret-at-least-32-bytes', algorithm='HS256')}
@@ -120,6 +123,21 @@ class RevolutConnectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cipher.decrypt(flow.refresh_token_encrypted.encode()).decode(), 'refresh-secret')
         replay = await self.client.post('/revolut/callback', json={'state': claims['state'], 'code': 'one-time-code'})
         self.assertEqual(replay.status_code, 400)
+
+    async def test_token_endpoint_can_omit_intent_claim_when_nonce_binds_the_flow(self):
+        _, claims = await self.start()
+        self.omit_intent_claim = True
+        response = await self.client.post('/revolut/callback', json={
+            'state': claims['state'], 'code': 'one-time-code'})
+        self.assertEqual(response.status_code, 200, response.text)
+        flow = await self.db.scalar(select(RevolutConnection))
+        self.assertEqual(flow.external_consent_id, 'consent-id')
+        self.assertEqual(flow.authorization_status, 'authorized')
+        _, claims = await self.start()
+        self.bad_nonce = True
+        response = await self.client.post('/revolut/callback', json={
+            'state': claims['state'], 'code': 'one-time-code'})
+        self.assertEqual(response.status_code, 502)
 
     async def test_only_accessible_personal_workspace_can_start(self):
         for wid, status in [('2', 400), ('999', 403)]:
@@ -212,6 +230,29 @@ class RevolutConnectionTests(unittest.IsolatedAsyncioTestCase):
         flow = await self.db.scalar(select(RevolutConnection))
         self.assertEqual(flow.authorization_status, 'failed')
         self.assertIsNone(flow.access_token_encrypted)
+
+    async def test_callback_diagnostics_never_log_provider_secrets(self):
+        _, claims = await self.start()
+        self.outbound.side_effect = RuntimeError('upstream-sensitive-token')
+        # Migration tests run Alembic's fileConfig, which disables existing app loggers.
+        with patch.object(service.logger, 'disabled', False), self.assertLogs(service.__name__, level='WARNING') as captured:
+            response = await self.client.post('/revolut/callback', json={
+                'state': claims['state'], 'code': 'one-time-code'})
+        self.assertEqual(response.status_code, 502)
+        self.assertIn('token_exchange', captured.output[0])
+        self.assertIn('RuntimeError', captured.output[0])
+        for secret in ['upstream-sensitive-token', 'one-time-code', claims['state']]:
+            self.assertNotIn(secret, '\n'.join(captured.output))
+
+    async def test_missing_claim_diagnostic_names_only_the_required_claim(self):
+        _, claims = await self.start()
+        with patch.object(service.jwt, 'decode', side_effect=jwt.MissingRequiredClaimError('nonce')), \
+                patch.object(service.logger, 'disabled', False), \
+                self.assertLogs(service.__name__, level='WARNING') as captured:
+            response = await self.client.post('/revolut/callback', json={
+                'state': claims['state'], 'code': 'one-time-code'})
+        self.assertEqual(response.status_code, 502)
+        self.assertIn('missing_claim=nonce', captured.output[0])
 
     async def test_missing_configuration_fails_before_creating_consent(self):
         self.config.revolut_token_encryption_key = None

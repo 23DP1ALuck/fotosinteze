@@ -42,6 +42,6 @@ class RevolutConnection(Base):
     )
 
     connected_by: Mapped["User"] = relationship("User", back_populates="revolut_connections", foreign_keys=[connected_by_id])
-    account: Mapped["Account"] = relationship("Account",
+    accounts: Mapped[list["Account"]] = relationship("Account",
                                               back_populates="connection",
                                               cascade="all, delete-orphan")

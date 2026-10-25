@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -25,6 +26,7 @@ from app.services import revolut_service
 
 AUTH_BASE = 'https://sandbox-oba-auth.revolut.com'
 AUTHORIZE_URL = 'https://sandbox-oba.revolut.com/ui/index.html'
+logger = logging.getLogger(__name__)
 
 
 def digest(value: str) -> str:
@@ -188,23 +190,29 @@ async def finish_authorization(data: CallbackInput, browser: str | None, db: Asy
     await db.commit()
     if claimed.rowcount != 1:
         raise HTTPException(400, 'Invalid, expired or already used Revolut authorization')
+    stage = 'token_exchange'
     try:
         if data.error or data.code is None:
             raise HTTPException(400, 'Revolut authorization was denied or incomplete')
         payload = await revolut_service.sandbox_request('POST', '/token', settings, data={
             'grant_type': 'authorization_code', 'client_id': settings.revolut_api_client_id,
             'code': data.code.get_secret_value(), 'redirect_uri': str(settings.revolut_redirect_uri)})
+        stage = 'token_response'
         token = AuthorizedToken.model_validate(payload)
         # OIDC Core 3.1.3.7 permits TLS validation for ID tokens received directly from the token endpoint.
+        stage = 'id_token_validation'
         claims = jwt.decode(token.id_token.get_secret_value(), options={
             'verify_signature': False, 'verify_exp': True, 'verify_aud': True, 'verify_iss': True,
             'verify_iat': True, 'verify_nbf': True,
-            'require': ['iss', 'aud', 'exp', 'nonce', 'openbanking_intent_id']},
+            'require': ['iss', 'aud', 'exp', 'nonce']},
             audience=settings.revolut_api_client_id, issuer=AUTH_BASE)
-        if (claims['nonce'] != flow.authorization_nonce or claims['openbanking_intent_id'] != flow.pending_consent_id
+        # Revolut may omit the consent claim here; the required nonce binds this TLS token response to our flow.
+        if (claims['nonce'] != flow.authorization_nonce
+                or claims.get('openbanking_intent_id', flow.pending_consent_id) != flow.pending_consent_id
                 or claims.get('azp', settings.revolut_api_client_id) != settings.revolut_api_client_id
                 or claims['aud'] not in (settings.revolut_api_client_id, [settings.revolut_api_client_id])):
             raise ValueError()
+        stage = 'token_storage'
         result = await db.execute(update(RevolutConnection).where(
             RevolutConnection.authorization_state_hash == state_hash,
             RevolutConnection.authorization_status == 'exchanging',
@@ -219,6 +227,12 @@ async def finish_authorization(data: CallbackInput, browser: str | None, db: Asy
             raise HTTPException(400, 'Revolut authorization was replaced; start again')
         await db.commit()
     except (RuntimeError, ValueError, jwt.PyJWTError, HTTPException) as exc:
+        # Provider exceptions and validation errors can contain credentials; log only stage and type.
+        missing_claim = getattr(exc, 'claim', None)
+        if missing_claim not in ('iss', 'aud', 'exp', 'nonce', 'openbanking_intent_id'):
+            missing_claim = None
+        logger.warning('Revolut callback failed at %s (%s); missing_claim=%s',
+                       stage, type(exc).__name__, missing_claim)
         await db.execute(update(RevolutConnection).where(
             RevolutConnection.authorization_state_hash == state_hash,
             RevolutConnection.authorization_status == 'exchanging',
