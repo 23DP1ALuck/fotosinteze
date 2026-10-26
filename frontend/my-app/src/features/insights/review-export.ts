@@ -1,5 +1,5 @@
 import type { DateRange } from '@/features/statistics/api'
-export type ReviewExport = { month: string; workspaceName: string; currency: string; income: number; expenses: number; kind: 'personal'|'business'; showAmounts: boolean; showName: boolean }
+export type ReviewExport = { month: string; workspaceName: string; currency: string; income: number; expenses: number; kind: 'personal'|'business'; details?: string[] }
 export function monthRange(month: string): DateRange|null {
   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)||Number(month.slice(0,4))<1000)return null
   const [year,index]=month.split('-').map(Number)
@@ -9,10 +9,13 @@ export const reviewMoney=(amount:number,currency:string)=>new Intl.NumberFormat(
 export function reviewLines(data: ReviewExport) {
   const net=(Math.round(data.income*100)-Math.round(data.expenses*100))/100
   const rate=data.income>0?`${(net/data.income*100).toFixed(1)}%`:null
-  return ['Fotosinteze',data.month,...(data.showName?[data.workspaceName]:[]),
+  return ['Fotosinteze',data.month,data.workspaceName,
     data.kind==='personal'?'Your month, in perspective.':'Your business, in perspective.',
-    ...(data.showAmounts?[`Income: ${reviewMoney(data.income,data.currency)}`,`Expenses: ${reviewMoney(data.expenses,data.currency)}`,`${data.kind==='personal'?'Saved / net change':'Net result'}: ${reviewMoney(net,data.currency)}`]:[]),
-    rate?`${data.kind==='personal'?'Savings rate':'Net margin'}: ${rate}`:'No income recorded for this month.',
+    ...[`Income: ${reviewMoney(data.income,data.currency)}`,`Expenses: ${reviewMoney(data.expenses,data.currency)}`,`${data.kind==='personal'?'Saved / net change':'Net result'}: ${reviewMoney(net,data.currency)}`],
+    ...(!data.income&&!data.expenses?['No financial activity recorded this month.']:[]),
+    rate?`${data.kind==='personal'?'Savings rate':'Net margin'}: ${rate}`:`${data.kind==='personal'?'Savings rate':'Net margin'}: —`,
+    rate?'Of income recorded this month.':'No income recorded this month.',
+    ...(data.details??[]),
   ]
 }
 export function downloadBlob(blob:Blob,filename:string) {

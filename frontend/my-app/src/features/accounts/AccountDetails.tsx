@@ -3,14 +3,14 @@ import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { LoaderCircle, X } from 'lucide-react'
+import { LoaderCircle, Trash2, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { activeWorkspaceId, authAccountId, workspaceQueryKey } from '@/features/workspaces/workspace-state'
 import { formatAccountBalance, getAccount, updateAccount, type ApiAccount, type AccountUpdate } from './api'
 
 const secondary = 'rounded-xl bg-[#eaf0e6] px-4 py-3 text-sm hover:bg-[#dce6d4] disabled:opacity-40'
 
-export function AccountDetails({ workspaceId, accountId, onClose, onSaved }: { workspaceId: number; accountId: number; onClose: () => void; onSaved: () => void }) {
+export function AccountDetails({ workspaceId, accountId, canDelete = true, onDelete, onClose, onSaved }: { canDelete?: boolean; onDelete: (account: ApiAccount) => void; workspaceId: number; accountId: number; onClose: () => void; onSaved: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const [busy, setBusy] = useState(false)
@@ -25,12 +25,12 @@ export function AccountDetails({ workspaceId, accountId, onClose, onSaved }: { w
     <h2 id={titleId} className="text-2xl font-semibold!">Account details</h2>
     {detail.isPending && <p role="status" className="mt-5">Loading account details…</p>}
     {detail.isError && <div className="mt-5 rounded-xl bg-[#fcf0ed] p-4"><p role="alert" className="text-sm text-[#a43b32]">{detail.error.message}</p><button onClick={() => void detail.refetch()} className={`${secondary} mt-3`}>Retry</button></div>}
-    {detail.data && <AccountEditForm account={detail.data} busy={busy} onBusyChange={setBusy} onClose={onClose} onSaved={onSaved} />}
+    {detail.data && <AccountEditForm canDelete={canDelete} onDelete={onDelete} account={detail.data} busy={busy} onBusyChange={setBusy} onClose={onClose} onSaved={onSaved} />}
     {!detail.data && (detail.isPending || detail.isError) && <button autoFocus onClick={onClose} className={`${secondary} mt-5`}>Close</button>}
   </dialog>
 }
 
-function AccountEditForm({ account, busy, onBusyChange, onClose, onSaved }: { account: ApiAccount; busy: boolean; onBusyChange: (busy: boolean) => void; onClose: () => void; onSaved: () => void }) {
+function AccountEditForm({ account, canDelete, onDelete, busy, onBusyChange, onClose, onSaved }: { account: ApiAccount; canDelete: boolean; onDelete: (account: ApiAccount) => void; busy: boolean; onBusyChange: (busy: boolean) => void; onClose: () => void; onSaved: () => void }) {
   const client = useQueryClient()
   const ownerId = authAccountId()
   const prefix = useId()
@@ -79,6 +79,7 @@ function AccountEditForm({ account, busy, onBusyChange, onClose, onSaved }: { ac
       </div>
     </fieldset>
     <div className="flex flex-wrap justify-end gap-3 border-t border-[#e1e5df] pt-5"><button type="button" disabled={busy} onClick={onClose} className={secondary}>Close</button><button disabled={busy} type="submit" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#193f33] px-5 py-3 text-sm text-white hover:bg-[#285947] disabled:opacity-40">{busy && <LoaderCircle size={16} className="animate-spin" />}{busy ? 'Saving…' : 'Save changes'}</button></div>
+    {canDelete && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e1e5df] pt-5"><div><p className="text-sm font-medium">Remove this account</p><p className="mt-1 text-xs text-[#526259]">Only accounts without transaction history can be deleted.</p></div><button type="button" disabled={busy} onClick={() => onDelete(account)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e8c6bf] px-4 py-3 text-sm text-[#a43b32] hover:bg-[#fcf0ed] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a43b32] disabled:opacity-40"><Trash2 size={16} aria-hidden="true" />Delete account</button></div>}
     <button type="button" disabled={busy} onClick={onClose} aria-label="Close account details" className="absolute top-6 right-6 rounded-lg p-2 hover:bg-[#eaf0e6] disabled:opacity-40"><X size={20} /></button>
   </KeyboardForm>
 }

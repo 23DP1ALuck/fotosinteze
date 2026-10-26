@@ -89,6 +89,7 @@ class BusinessBudgetTests(unittest.IsolatedAsyncioTestCase):
     async def test_period_boundaries(self):
         monthly = await self.create(period_start='2028-01-31')
         self.assertEqual(monthly['period_end'], '2028-02-29')
+        await self.client.delete(f"/business-budgets/{monthly['id']}")
         weekly = await self.create(name='Weekly plan', period_start='2026-12-28', period_length='WEEKLY')
         self.assertEqual(weekly['period_end'], '2027-01-04')
 
