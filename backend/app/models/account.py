@@ -15,6 +15,7 @@ class Account(Base):
     account_id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"),primary_key=True, autoincrement=True)
     is_main: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     __table_args__ = (
+        UniqueConstraint("banking_connection_id", "external_account_id", name="uq_accounts_enable_external"),
         UniqueConstraint("connection_id", "external_account_id", name="uq_accounts_revolut_external"),
         Index("uq_accounts_main_per_workspace", "workspace_id", unique=True,
               postgresql_where=text("is_main = true"), sqlite_where=text("is_main = 1")),
@@ -32,9 +33,16 @@ class Account(Base):
         nullable=True,
     )
 
+    banking_connection_id: Mapped[int | None] = mapped_column(
+        ForeignKey("enable_banking_connections.connection_id", ondelete="SET NULL"), nullable=True)
+
     external_account_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     connection: Mapped["RevolutConnection"] = relationship(back_populates="accounts")
+
+    @property
+    def bank_managed(self) -> bool:
+        return self.connection_id is not None or self.banking_connection_id is not None
 
     transactions: Mapped[list["Transaction"]] = relationship(
         back_populates="account",

@@ -68,10 +68,12 @@ it('refreshes saved transactions, dashboard totals, account balances and budget 
 
 it('opens a prefilled edit from the list and refreshes the displayed transaction', async () => {
   mount()
+  await fillAndSave('expense', 'Local purchase', '28.54')
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add expense' })).not.toBeInTheDocument())
   await userEvent.click(await screen.findByRole('button', { name: 'Transactions' }))
-  await userEvent.click(await screen.findByRole('button', { name: 'Edit Rimi' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit Local purchase' }))
   const modal = within(screen.getByRole('dialog', { name: 'Edit transaction' }))
-  expect(modal.getByLabelText('Description')).toHaveValue('Rimi')
+  expect(modal.getByLabelText('Description')).toHaveValue('Local purchase')
   await userEvent.clear(modal.getByLabelText('Amount (EUR)'))
   await userEvent.type(modal.getByLabelText('Amount (EUR)'), '40.00')
   await userEvent.clear(modal.getByLabelText('Description'))
@@ -79,8 +81,8 @@ it('opens a prefilled edit from the list and refreshes the displayed transaction
   await userEvent.click(modal.getByRole('button', { name: 'Save changes' }))
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit transaction' })).not.toBeInTheDocument())
   expect(await screen.findByRole('row', { name: /Food shopping.*40.00/ })).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Edit Rimi' })).not.toBeInTheDocument()
-  expect(vi.mocked(fetch).mock.calls.some(([url, init]) => String(url).endsWith('/transactions/2') && init?.method === 'PUT')).toBe(true)
+  expect(screen.queryByRole('button', { name: 'Edit Local purchase' })).not.toBeInTheDocument()
+  expect(vi.mocked(fetch).mock.calls.some(([url, init]) => String(url).endsWith('/transactions/100') && init?.method === 'PUT')).toBe(true)
 })
 
 it('saves business income with the chosen workspace, department and project IDs', async () => {
@@ -118,14 +120,14 @@ it('allows an uncategorised transaction to be classified and edited', async () =
     const response = await fallback(url, init)
     if (String(url).includes('/transactions?')) {
       const page = await response.json()
-      page.items[1].category_id = null
+      page.items[0].category_id = null
       return Response.json(page)
     }
     return response
   }))
   mount()
   await userEvent.click(await screen.findByRole('button', { name: 'Transactions' }))
-  await userEvent.click(await screen.findByRole('button', { name: 'Edit Rimi' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit Monthly salary' }))
   const modal = within(screen.getByRole('dialog', { name: 'Edit transaction' }))
   await userEvent.selectOptions(modal.getByLabelText('Transaction type'), 'income')
   await userEvent.selectOptions(modal.getByLabelText('Category'), '3')
@@ -279,38 +281,42 @@ it('lets an employee browse categories and save a transaction without showing ca
 
 it('confirms deletion, refreshes history and balances, and allows cancelling first', async () => {
   mount()
+  await fillAndSave('expense', 'Local purchase', '28.54')
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add expense' })).not.toBeInTheDocument())
   const user = userEvent.setup()
   await user.click(await screen.findByRole('button', { name: 'Transactions' }))
-  await user.click(await screen.findByRole('button', { name: 'Delete Rimi' }))
+  await user.click(await screen.findByRole('button', { name: 'Delete Local purchase' }))
   let modal = within(screen.getByRole('dialog', { name: 'Delete transaction?' }))
   await user.click(modal.getByRole('button', { name: 'Cancel' }))
   expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)
-  await user.click(screen.getByRole('button', { name: 'Delete Rimi' }))
+  await user.click(screen.getByRole('button', { name: 'Delete Local purchase' }))
   modal = within(screen.getByRole('dialog', { name: 'Delete transaction?' }))
   await user.click(modal.getByRole('button', { name: 'Delete transaction' }))
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete transaction?' })).not.toBeInTheDocument())
-  expect(screen.queryByRole('button', { name: 'Edit Rimi' })).not.toBeInTheDocument()
-  const call = vi.mocked(fetch).mock.calls.find(([url, init]) => String(url).endsWith('/transactions/2') && init?.method === 'DELETE')!
+  expect(screen.queryByRole('button', { name: 'Edit Local purchase' })).not.toBeInTheDocument()
+  const call = vi.mocked(fetch).mock.calls.find(([url, init]) => String(url).endsWith('/transactions/100') && init?.method === 'DELETE')!
   expect(new Headers(call[1]?.headers).get('X-Workspace-ID')).toBe('7')
   await user.click(screen.getByRole('button', { name: 'Dashboard' }))
   const overview = within(screen.getByRole('region', { name: 'Monthly overview' }))
-  expect(await overview.findByText('€4,849.04')).toBeInTheDocument()
-  expect(overview.getByText('€1,813.81')).toBeInTheDocument()
+  expect(await overview.findByText('€4,820.50')).toBeInTheDocument()
+  expect(overview.getByText('€1,842.35')).toBeInTheDocument()
 })
 
 it('keeps a transaction when deletion is denied and lets the user retry', async () => {
-  finance.state.failSave = true
   mount()
+  await fillAndSave('expense', 'Local purchase', '28.54')
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add expense' })).not.toBeInTheDocument())
+  finance.state.failSave = true
   await userEvent.click(await screen.findByRole('button', { name: 'Transactions' }))
-  await userEvent.click(await screen.findByRole('button', { name: 'Delete Rimi' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Delete Local purchase' }))
   const modal = within(screen.getByRole('dialog', { name: 'Delete transaction?' }))
   await userEvent.click(modal.getByRole('button', { name: 'Delete transaction' }))
   expect(await modal.findByRole('alert')).toHaveTextContent('No access to this transaction')
-  expect(screen.getByRole('button', { name: 'Edit Rimi' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Edit Local purchase' })).toBeInTheDocument()
   finance.state.failSave = false
   await userEvent.click(modal.getByRole('button', { name: 'Delete transaction' }))
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete transaction?' })).not.toBeInTheDocument())
-  expect(screen.queryByRole('button', { name: 'Edit Rimi' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Edit Local purchase' })).not.toBeInTheDocument()
 })
 
 it('shows approved business expense transactions as read only while preserving their details', async () => {

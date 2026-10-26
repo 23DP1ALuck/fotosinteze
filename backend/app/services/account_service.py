@@ -65,7 +65,7 @@ async def update_account(account_id: int, request: UpdateAccountRequest, current
     if 'is_main' in fields:
         await lock_main_accounts(workspace.workspace_id, db)
     account = await get_account(account_id, current_user, workspace, db)
-    if 'balance' in fields and account.connection_id is not None:
+    if 'balance' in fields and account.bank_managed:
         raise HTTPException(status_code=409, detail='Connected account balances are managed by bank sync')
     if 'name' in fields:
         await check_name(request.name, workspace.workspace_id, db, account_id)

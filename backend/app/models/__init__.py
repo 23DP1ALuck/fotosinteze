@@ -1,3 +1,4 @@
+from app.models.enable_banking_connection import EnableBankingConnection
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceUsers, WorkspaceRole
 from app.models.auth_sessions import AuthSession
@@ -12,6 +13,7 @@ from app.models.budget import Budget, BudgetPeriod
 
 __all__ = [
     "User",
+    "EnableBankingConnection",
     "Workspace",
     "AuthSession",
     "Category",

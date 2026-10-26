@@ -1,4 +1,4 @@
-import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { render } from '@/test/render'
@@ -7,7 +7,7 @@ import { setWorkspace } from '@/features/workspaces/workspace-state'
 import { TransactionForm } from './TransactionForm'
 
 const token = `h.${btoa(JSON.stringify({ sub: '1', exp: Math.floor(Date.now() / 1000) + 3600 }))}.s`
-const accounts = [{ account_id: 12, name: 'Main account', currency: 'EUR', balance: '100.00', workspace_id: 7, connection_id: null }, { account_id: 13, name: 'Dollar account', currency: 'USD', balance: '30.00', workspace_id: 7, connection_id: null }]
+const accounts = [{ account_id: 12, name: 'Main account', currency: 'EUR', balance: '100.00', workspace_id: 7, connection_id: null, banking_connection_id: null }, { account_id: 13, name: 'Dollar account', currency: 'USD', balance: '30.00', workspace_id: 7, connection_id: null, banking_connection_id: null }]
 const categories = [{ id: 3, name: 'Salary', type: 'income' as const, workspaceId: 7 }, { id: 4, name: 'Food', type: 'expense' as const, workspaceId: 7 }]
 const transaction = { transaction_id: 21, amount: '25.50', currency: 'EUR', description: 'Lunch', account_id: 12, category_id: 4, department_id: null, project_id: null, expense_id: null, workspace_id: 7, source: 'MANUAL' as const, created_at: '2026-10-17T12:00:00', updated_at: '2026-10-17T12:00:00' }
 const options = { accounts, categories, loading: false, error: '', retry: vi.fn() }
@@ -197,4 +197,33 @@ it('ignores main accounts from another workspace', () => {
   const mainOptions = { ...options, accounts: [...accounts, { ...accounts[1], account_id: 99, workspace_id: 42, is_main: true }] }
   render(<TransactionForm workspaceId={7} type="income" options={mainOptions} onClose={() => {}} onSaved={() => {}} />)
   expect(screen.getByLabelText('Account')).toHaveValue('')
+})
+
+
+it('limits bank edits to description and categories with the original direction', async () => {
+  const bank = { ...transaction, source: 'BANK' as const }
+  const bankOptions = { ...options, categories: [...categories, { id: 5, name: 'Travel', type: 'expense' as const, workspaceId: 7 }] }
+  const saved = vi.fn()
+  render(<TransactionForm workspaceId={7} type="income" transaction={bank} options={bankOptions} onClose={() => {}} onSaved={saved} />)
+  expect(screen.getByLabelText('Account')).toBeDisabled()
+  expect(screen.getByLabelText('Amount (EUR)')).toHaveAttribute('readonly')
+  expect(screen.queryByLabelText('Transaction type')).not.toBeInTheDocument()
+  const category = screen.getByLabelText('Category')
+  expect(within(category).queryByRole('option', { name: 'Salary' })).not.toBeInTheDocument()
+  await userEvent.selectOptions(category, '5')
+  await userEvent.clear(screen.getByLabelText('Description'))
+  await userEvent.type(screen.getByLabelText('Description'), 'Business trip')
+  fireEvent.change(screen.getByLabelText('Amount (EUR)'), { target: { value: '999' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+  await waitFor(() => expect(saved).toHaveBeenCalledOnce())
+  expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toMatchObject({
+    amount: '25.50', currency: 'EUR', account_id: 12, category_id: 5, description: 'Business trip',
+  })
+})
+
+it('does not guess a bank transaction direction when its original category is unavailable', () => {
+  render(<TransactionForm workspaceId={7} type="expense" transaction={{ ...transaction, source: 'BANK', category_id: null }} options={options} onClose={() => {}} onSaved={() => {}} />)
+  expect(screen.queryByLabelText('Transaction type')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  expect(screen.getByRole('alert')).toHaveTextContent('Bank transaction direction is unavailable')
 })
