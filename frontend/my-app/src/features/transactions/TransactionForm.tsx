@@ -29,7 +29,9 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
   const ownerId = authAccountId()
   const dialog = useRef<HTMLDialogElement>(null)
   const titleId = useId()
-  const needsType = Boolean(transaction && !options.categories.some(item => item.id === transaction.category_id))
+  const bank = transaction?.source === 'BANK'
+  const originalCategory = options.categories.find(item => item.id === transaction?.category_id && item.workspaceId === workspaceId)
+  const needsType = Boolean(transaction && !bank && !originalCategory)
   const accounts = options.accounts.filter(item => item.workspace_id === workspaceId)
   const mainAccountId = accounts.find(item => item.is_main)?.account_id
   const mainAccountApplied = useRef(false)
@@ -37,7 +39,7 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
   const departments = useMemo(() => catalog?.workspaceId === workspaceId ? catalog.departments.filter(item => item.workspace_id === workspaceId) : [], [catalog, workspaceId])
   const validator = schema.superRefine((value, ctx) => {
     if (!accounts.some(item => String(item.account_id) === value.account_id)) ctx.addIssue({ code: 'custom', path: ['account_id'], message: 'Choose an available account' })
-    const categoryType = needsType ? value.transaction_type : type
+    const categoryType = bank ? originalCategory?.type : needsType ? value.transaction_type : type
     if (!categoryType) ctx.addIssue({ code: 'custom', path: ['transaction_type'], message: 'Choose income or expense' })
     if (!options.categories.some(item => String(item.id) === value.category_id && item.workspaceId === workspaceId && item.type === categoryType)) ctx.addIssue({ code: 'custom', path: ['category_id'], message: 'Choose a category for this transaction type' })
     if (requiresDepartment && !value.department_id) ctx.addIssue({ code: 'custom', path: ['department_id'], message: 'An assigned department is required' })
@@ -63,19 +65,19 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
     const project = catalog.projects.find(item => String(item.id) === getValues('project_id'))
     if (getValues('project_id') && (!project || (next && !project.department_ids.includes(Number(next))))) setValue('project_id', '')
   }, [catalog, departments, departmentId, requiresDepartment, getValues, setValue])
-  const effectiveType = needsType ? selectedType || type : type
+  const effectiveType = bank ? originalCategory?.type ?? type : needsType ? selectedType || type : type
   const matchingCategories = options.categories.filter(item => item.type === effectiveType && item.workspaceId === workspaceId)
   const account = accounts.find(item => String(item.account_id) === accountId)
   const availableProjects = catalog?.projects.filter(item => !departmentId || item.department_ids.includes(Number(departmentId))) ?? []
   const mutation = useMutation({ mutationFn: (value: Values) => saveTransaction(workspaceId, {
-    amount: value.amount, description: value.description || (effectiveType === 'income' ? 'Income' : 'Expense'), currency: account!.currency,
-    account_id: Number(value.account_id), category_id: Number(value.category_id), department_id: value.department_id ? Number(value.department_id) : null, project_id: value.project_id ? Number(value.project_id) : null, expense_id: null,
+    amount: bank ? transaction.amount : value.amount, description: value.description || (effectiveType === 'income' ? 'Income' : 'Expense'), currency: bank ? transaction.currency : account!.currency,
+    account_id: bank ? transaction.account_id : Number(value.account_id), category_id: Number(value.category_id), department_id: value.department_id ? Number(value.department_id) : null, project_id: value.project_id ? Number(value.project_id) : null, expense_id: null,
   }, transaction?.transaction_id) })
   useEffect(() => { dialog.current?.showModal() }, [])
   const busy = isSubmitting || mutation.isPending
   const loading = options.loading || Boolean(catalog?.loading)
   const loadError = options.error || catalog?.error
-  const locked = transaction?.expense_id != null
+  const locked = transaction?.expense_id != null || (bank && !originalCategory)
   const submit = handleSubmit(async value => {
     clearErrors('root')
     if (busy || locked || loading || loadError) return
@@ -99,12 +101,14 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
     {loadError && <div className="mt-5 rounded-xl bg-[#fcf0ed] p-4 text-sm"><p role="alert">{loadError}</p><button type="button" onClick={() => { options.retry(); catalog?.refresh() }} className="mt-3 underline">Retry options</button></div>}
     {!loading && !loadError && (!accounts.length || !matchingCategories.length) && <p role="status" className="mt-5 rounded-xl bg-[#eaf0e6] p-4 text-sm">{!accounts.length ? 'No accounts are available in this workspace. Create an account before adding a transaction.' : `Create an ${effectiveType} category in Categories before adding this transaction.`}</p>}
     {requiresDepartment && !loading && !loadError && !departments.length && <p role="status" className="mt-5 text-sm">Ask your workspace owner to assign you a department before adding transactions.</p>}
-    {locked && <p role="alert" className="mt-5 text-sm">Approved expense transactions cannot be edited.</p>}
+    {transaction?.expense_id != null && <p role="alert" className="mt-5 text-sm">Approved expense transactions cannot be edited.</p>}
+    {bank && <p className="mt-5 text-sm text-[#526259]">Bank sync manages this amount, currency, account and direction. You can edit the description and choose a category with the same direction.</p>}
+    {bank && !originalCategory && !loading && !loadError && <p role="alert" className="mt-5 text-sm">Bank transaction direction is unavailable. This transaction cannot be edited.</p>}
     <KeyboardForm validateField={trigger} onSubmit={submit} noValidate className="mt-6" aria-busy={busy}>
       <fieldset disabled={busy || loading || Boolean(loadError) || locked} className="grid min-w-0 gap-5 border-0 p-0 disabled:opacity-60">
         {needsType && <label className="text-sm font-medium">Transaction type<select {...register('transaction_type', { onChange: () => setValue('category_id', '') })} className={field}><option value="">Choose income or expense</option><option value="income">Income</option><option value="expense">Expense</option></select>{errors.transaction_type && <span role="alert" className="mt-2 block text-xs text-[#a43b32]">{errors.transaction_type.message}</span>}</label>}
-        <label className="text-sm font-medium">Account<select {...register('account_id')} aria-invalid={Boolean(errors.account_id)} aria-describedby={errors.account_id ? `${titleId}-account` : undefined} className={field}><option value="">Choose an account</option>{accounts.map(item => <option key={item.account_id} value={item.account_id}>{item.name} · {item.currency}</option>)}</select>{errors.account_id && <span id={`${titleId}-account`} role="alert" className="mt-2 block text-xs text-[#a43b32]">{errors.account_id.message}</span>}</label>
-        <label className="text-sm font-medium">Amount ({account?.currency ?? transaction?.currency ?? 'EUR'})<input inputMode="decimal" autoComplete="off" placeholder="0.00" {...register('amount')} aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? `${titleId}-amount` : undefined} className={`${field} text-xl tabular-nums`} />{errors.amount && <span id={`${titleId}-amount`} role="alert" className="mt-2 block text-xs text-[#a43b32]">{errors.amount.message}</span>}</label>
+        <label className="text-sm font-medium">Account<select disabled={bank} {...register('account_id')} aria-invalid={Boolean(errors.account_id)} aria-describedby={errors.account_id ? `${titleId}-account` : undefined} className={field}><option value="">Choose an account</option>{accounts.map(item => <option key={item.account_id} value={item.account_id}>{item.name} · {item.currency}</option>)}</select>{errors.account_id && <span id={`${titleId}-account`} role="alert" className="mt-2 block text-xs text-[#a43b32]">{errors.account_id.message}</span>}</label>
+        <label className="text-sm font-medium">Amount ({account?.currency ?? transaction?.currency ?? 'EUR'})<input readOnly={bank} inputMode="decimal" autoComplete="off" placeholder="0.00" {...register('amount')} aria-invalid={Boolean(errors.amount)} aria-describedby={errors.amount ? `${titleId}-amount` : undefined} className={`${field} text-xl tabular-nums`} />{errors.amount && <span id={`${titleId}-amount`} role="alert" className="mt-2 block text-xs text-[#a43b32]">{errors.amount.message}</span>}</label>
         <label className="text-sm font-medium">Category<select {...register('category_id')} aria-invalid={Boolean(errors.category_id)} aria-describedby={errors.category_id ? `${titleId}-category` : undefined} className={field}><option value="">Choose a category</option>{matchingCategories.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{errors.category_id && <span id={`${titleId}-category`} role="alert" className="mt-2 block text-xs text-[#a43b32]">{errors.category_id.message}</span>}</label>
         {catalog && <div className="grid grid-cols-2 gap-4 max-sm:grid-cols-1"><label className="text-sm font-medium">Department<select aria-label="Department" {...register('department_id', { onChange: event => { const selected = catalog.projects.find(item => String(item.id) === getValues('project_id')); if (selected && event.target.value && !selected.department_ids.includes(Number(event.target.value))) setValue('project_id', '', { shouldValidate: true }) } })} className={field}><option value="">{requiresDepartment ? 'Choose a department' : 'No department'}</option>{departments.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{errors.department_id && <span role="alert" className="mt-2 block text-xs text-[#a43b32]">{errors.department_id.message}</span>}</label><label className="text-sm font-medium">Project<select {...register('project_id')} className={field}><option value="">No project</option>{availableProjects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{errors.project_id && <span role="alert" className="mt-2 block text-xs text-[#a43b32]">{errors.project_id.message}</span>}</label></div>}
         <div><label className="text-sm font-medium">Description<textarea {...register('description')} maxLength={255} rows={3} placeholder="Add a note (optional)" aria-invalid={Boolean(errors.description)} aria-describedby={`${titleId}-description`} className={`${field} resize-y`} /></label><p id={`${titleId}-description`} className="mt-2 text-xs text-[#526259]">Optional. Uses “{effectiveType === 'income' ? 'Income' : 'Expense'}” when left blank.</p>{errors.description && <p role="alert" className="mt-2 text-xs text-[#a43b32]">{errors.description.message}</p>}</div>

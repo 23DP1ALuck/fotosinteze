@@ -18,7 +18,7 @@ class Base(DeclarativeBase):
 # Heavily inspired by https://praciano.com.br/fastapi-and-async-sqlalchemy-20-with-pytest-done-right.html
 class DatabaseSessionManager:
     def __init__(self, host: str, engine_kwargs: dict[str, Any] = {}):
-        self._engine = create_async_engine(host, **engine_kwargs)
+        self._engine = create_async_engine(host, **{**engine_kwargs, "hide_parameters": True})
         if self._engine.dialect.name == "sqlite":
             @event.listens_for(self._engine.sync_engine, "connect")
             def enable_foreign_keys(connection, _):

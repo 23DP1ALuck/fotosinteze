@@ -1,0 +1,91 @@
+import json
+import secrets
+from html import escape
+
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
+from pydantic import HttpUrl
+
+from app.database import AsyncSession, get_db_session
+from app.dependencies.auth import get_current_user
+from app.dependencies.workspace import get_current_workspace
+from app.models import Workspace
+from app.services import enable_banking_sync
+from app.services import enable_banking_service as service
+
+router = APIRouter(tags=['enable-banking'])
+COOKIE = 'enable_banking_browser'
+
+
+@router.get('/enable-banking/connection', response_model=service.ConnectionStatus)
+async def connection_status(response: Response, workspace: Workspace = Depends(get_current_workspace),
+                            db: AsyncSession = Depends(get_db_session)):
+    response.headers['Cache-Control'] = 'no-store'
+    return await service.connection_status(workspace, db)
+
+
+@router.post('/enable-banking/sync')
+async def import_accounts(response: Response, workspace: Workspace = Depends(get_current_workspace),
+                          db: AsyncSession = Depends(get_db_session)):
+    response.headers['Cache-Control'] = 'no-store'
+    return await enable_banking_sync.sync(workspace, db)
+
+
+@router.post('/enable-banking/authorize')
+async def authorize(response: Response, current_user: dict = Depends(get_current_user),
+                    workspace: Workspace = Depends(get_current_workspace), db: AsyncSession = Depends(get_db_session)):
+    url, browser = await service.start_authorization(current_user, workspace, db)
+    response.set_cookie(COOKIE, browser, max_age=600, path='/enable-banking/callback',
+                        secure=True, httponly=True, samesite='none')
+    response.headers['Cache-Control'] = 'no-store'
+    return {'authorization_url': url}
+
+
+@router.get('/enable-banking/callback', response_class=HTMLResponse)
+async def callback_page(request: Request):
+    # The provider uses query parameters; suppress them in the application access log.
+    request.scope['query_string'] = b''
+    nonce = secrets.token_urlsafe(16)
+    # Strip provider query parameters before posting the one-use code.
+    html = '''<!doctype html><html lang="en"><meta charset="utf-8"><title>Bank authorization</title>
+<p role="status" id="result">Completing Bank authorization…</p>
+<p><a href="APP_URL" rel="noreferrer">Return to Fotosinteze</a></p><script nonce="NONCE">
+(async () => {
+  const params = new URLSearchParams(location.search.slice(1));
+  history.replaceState(null, '', location.pathname);
+  const result = document.getElementById('result');
+  try {
+    const response = await fetch('/enable-banking/callback', {
+      method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({state: params.get('state'), code: params.get('code'), error: params.get('error')})
+    });
+    result.textContent = response.ok ? 'Bank authorization completed. Return to Fotosinteze to view your connection.'
+      : 'Bank authorization failed or expired. Return to the app and try again.';
+  } catch { result.textContent = 'Could not complete authorization. Return to the app and try again.'; }
+})();
+</script></html>'''.replace('NONCE', nonce).replace('APP_URL', escape(str(HttpUrl(service.settings.client_url)).rstrip('/') + '/app', quote=True))
+    return HTMLResponse(html, headers={'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer',
+        'Content-Security-Policy': f"default-src 'none'; script-src 'nonce-{nonce}'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"})
+
+
+@router.post('/enable-banking/callback')
+async def callback(request: Request, response: Response,
+                   enable_banking_browser: str | None = Cookie(None), db: AsyncSession = Depends(get_db_session)):
+    # Parse explicitly so FastAPI validation responses cannot echo a malformed authorization code.
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > 16384:
+            raise HTTPException(400, 'Invalid Bank callback', headers={'Cache-Control': 'no-store'})
+    try:
+        data = service.CallbackInput.model_validate(json.loads(body))
+    except ValueError:
+        raise HTTPException(400, 'Invalid Bank callback', headers={'Cache-Control': 'no-store'}) from None
+    try:
+        result = await service.finish_authorization(data, enable_banking_browser, db)
+    except HTTPException as exc:
+        exc.headers = {'Cache-Control': 'no-store'}
+        raise
+    response.delete_cookie(COOKIE, path='/enable-banking/callback', secure=True, httponly=True, samesite='none')
+    response.headers['Cache-Control'] = 'no-store'
+    return result

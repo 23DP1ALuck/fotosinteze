@@ -14,9 +14,10 @@ export function DeleteTransactionDialog({ workspaceId, transaction, onClose, onD
   const titleId = useId()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const locked = transaction.source === 'BANK' || transaction.expense_id !== null
   useEffect(() => { dialog.current?.showModal() }, [])
   async function confirm() {
-    if (pending.current || transaction.expense_id !== null) return
+    if (pending.current || locked) return
     if (authAccountId() !== ownerId || activeWorkspaceId() !== workspaceId) {
       setError('Your workspace changed. Close this dialog and try again.')
       return
@@ -40,6 +41,6 @@ export function DeleteTransactionDialog({ workspaceId, transaction, onClose, onD
     <h2 id={titleId} className="text-xl font-semibold!">Delete transaction?</h2>
     <p id={`${titleId}-description`} className="mt-4 text-sm wrap-anywhere">Delete “{transaction.description}”? This cannot be undone. Its effect on a manual account’s balance will be reversed.</p>
     {error && <p role="alert" className="mt-4 rounded-xl bg-[#fcf0ed] p-3 text-sm text-[#a43b32]">{error}</p>}
-    <div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={onClose} className="rounded-xl bg-[#eaf0e6] px-4 py-3 text-sm disabled:opacity-50">Cancel</button><button type="button" disabled={busy || transaction.expense_id !== null} onClick={() => { void confirm() }} className="rounded-xl bg-[#a43b32] px-4 py-3 text-sm text-white disabled:opacity-50">{busy ? 'Deleting…' : 'Delete transaction'}</button></div>
+    <div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={onClose} className="rounded-xl bg-[#eaf0e6] px-4 py-3 text-sm disabled:opacity-50">Cancel</button><button type="button" disabled={busy || locked} onClick={() => { void confirm() }} className="rounded-xl bg-[#a43b32] px-4 py-3 text-sm text-white disabled:opacity-50">{busy ? 'Deleting…' : 'Delete transaction'}</button></div>
   </dialog>
 }

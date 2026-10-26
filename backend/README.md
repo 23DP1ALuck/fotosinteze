@@ -868,3 +868,94 @@ mocked provider responses, not real customer credentials:
 ```bash
 .venv/bin/python -m unittest discover -s tests -p 'test_revolut*.py'
 ```
+
+### Local demo transactions
+
+To populate an existing local Personal workspace with sample transaction history:
+
+```bash
+cd backend
+.venv/bin/alembic upgrade head
+.venv/bin/python -m app.services.revolut_demo --workspace-id YOUR_PERSONAL_WORKSPACE_ID
+```
+
+The command is restricted to this checkout's `backend/database.sqlite` and a
+localhost frontend origin. It creates three `[DEMO] Revolut` accounts (GBP, EUR,
+USD), with sample salary, grocery and coffee records: nine transactions total.
+All descriptions/categories are labelled `[DEMO]`, and records use the `MANUAL`
+source. They are local fixtures, not transactions returned by Revolut. Existing
+accounts and the selected main account are preserved. Rerunning skips existing
+demo transaction IDs. It never sends requests to Revolut or changes its balances.
+Use a backup before populating an existing development database.
+
+## Real personal Revolut accounts through Enable Banking
+
+This integration uses Enable Banking's production Account Information API, separately
+from the existing Revolut sandbox. An Active/Restricted application can read only
+accounts linked in its control panel. Supporting other customers requires the
+provider's general availability approval; account linking alone does not grant it.
+See the [linked accounts guide](https://enablebanking.com/docs/api/linked-accounts/)
+and [API reference](https://enablebanking.com/docs/api/reference/).
+
+Configure the backend environment, keeping the downloaded private key outside Git:
+
+```dotenv
+ENABLE_BANKING_APP_ID=your-production-app-uuid
+ENABLE_BANKING_PRIVATE_KEY_PATH=/data/enable-banking/private.pem
+ENABLE_BANKING_REDIRECT_URI=https://api.fotosinteze.lat/enable-banking/callback
+```
+
+The example key path is inside the production container's existing `/data` mount.
+Keep its file readable only by the server user (`chmod 600`). Keep the existing
+`REVOLUT_TOKEN_ENCRYPTION_KEY`: it encrypts both providers' stored credentials.
+Changing it makes existing connections unreadable. All new settings are optional
+until the real-account integration is used. SQL parameters are hidden even when SQL
+query logging is enabled, so bank descriptions and balances stay out of SQL logs.
+
+Deploy migration `e14a86c72d39` with `alembic upgrade head` before this backend starts.
+It preserves existing accounts/history, adds a separate encrypted session table,
+links imported accounts, and enforces stable provider transaction IDs per account.
+The downgrade refuses while accounts remain linked to prevent silent conversion to
+manual balances. Back up the database first; the CD workflow already does this.
+
+After deployment, open a Personal workspace → Accounts → **Connect real Revolut**.
+Approve in the same browser, return to Fotosinteze, then click **Sync accounts and
+transactions**. Linking accounts in Enable Banking's portal activates access; this
+separate consent creates the Fotosinteze session. The callback must use the same
+backend hostname as the authorize request so its Secure/HttpOnly cookie arrives.
+The local Vite `/api` proxy is suitable for mocked tests, not this deployed HTTPS
+consent journey. Never point a local app at the production API just to bypass this.
+
+Routes (all except callback require authentication and `Workspace-ID`):
+
+- `GET /enable-banking/connection`: safe connection/expiry/last-sync status.
+- `POST /enable-banking/authorize`: consent URL and ten-minute browser binding.
+- `GET /enable-banking/callback`: removes provider query parameters from browser
+  history and posts the code with no third-party resources; application access logs
+  omit the query. Configure any external proxy logs to omit callback query strings too.
+- `POST /enable-banking/callback`: atomically consumes state, rechecks workspace
+  access, exchanges the one-use code, and encrypts only the session/account metadata
+  needed to sync. A failed reconnect keeps the established session.
+- `POST /enable-banking/sync`: imports all approved active accounts, balances and
+  booked transactions; returns account/import counts and the UTC last-sync time.
+
+Sync validates all pages before writing anything, follows continuation keys even on
+empty pages, and fails without partial writes on malformed data or repeated keys.
+Only positive BOOK transactions are imported; pending entries wait until booked,
+and zero-value entries are skipped. Stable
+`identification_hash` plus currency identifies accounts across reconnects;
+`entry_reference` identifies transactions per account. Missing stable references
+or booking dates fail safely instead of inventing IDs or dates. Repeating sync does
+not duplicate entries and preserves user categories, account names and main account.
+Imported records use BANK source and workspace-specific income/expense categories.
+Bank transaction financial fields and deletion are protected; descriptions and
+categories of the same income/expense direction remain editable.
+Provider balances are authoritative; importing or editing local entries does not
+apply their amounts again to bank balances. Overdrafts are supported.
+
+This first version targets Revolut Latvia personal accounts and manual sync. It
+imports the history the bank exposes, without claiming instant updates. Transactions
+must fit the application's existing Decimal(10,2) currency model; unsupported
+precision/ranges and more than 1000 pages per account fail without partial writes.
+Mocked integration checks run with `.venv/bin/python -m pytest tests/test_enable_banking* -q`.
+A real end-to-end test requires deployment and the account holder's bank approval.

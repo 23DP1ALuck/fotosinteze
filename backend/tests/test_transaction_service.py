@@ -25,6 +25,12 @@ class Account(TestBase):
     account_id: Mapped[int] = mapped_column(primary_key=True)
     workspace_id: Mapped[int]
     balance: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    banking_connection_id: Mapped[int | None]
+
+    @property
+    def bank_managed(self):
+        return self.connection_id is not None or self.banking_connection_id is not None
+
     connection_id: Mapped[int | None]
 
 

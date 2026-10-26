@@ -38,7 +38,7 @@ function AccountEditForm({ account, busy, onBusyChange, onClose, onSaved }: { ac
   const controller = useRef<AbortController | null>(null)
   const mounted = useRef(false)
   const [error, setError] = useState('')
-  const linked = account.connection_id !== null
+  const linked = account.connection_id !== null || account.banking_connection_id !== null
   const { register, trigger, handleSubmit, formState: { errors } } = useForm<{ name: string; balance: string }>({ defaultValues: { name: account.name, balance: account.balance } })
   useEffect(() => {
     mounted.current = true
@@ -68,8 +68,8 @@ function AccountEditForm({ account, busy, onBusyChange, onClose, onSaved }: { ac
     }
   }
   return <KeyboardForm validateField={trigger} onSubmit={event => { void handleSubmit(save)(event) }} noValidate aria-busy={busy} className="mt-5 space-y-5">
-    <p className="text-sm text-[#526259]">{linked ? 'Revolut-linked' : 'Manual / internal'} · {formatAccountBalance(account)}</p>
-    <p id={`${prefix}-source`} className="rounded-xl bg-[#f7f8f2] p-4 text-sm text-[#526259]">{linked ? 'Revolut manages this balance, even when the connection expires. You can change the display name.' : 'This balance is managed internally. You can update it here; local transactions also adjust it.'}</p>
+    <p className="text-sm text-[#526259]">{account.banking_connection_id !== null ? 'Revolut · Enable Banking' : linked ? 'Revolut-linked' : 'Manual / internal'} · {formatAccountBalance(account)}</p>
+    <p id={`${prefix}-source`} className="rounded-xl bg-[#f7f8f2] p-4 text-sm text-[#526259]">{linked ? 'The bank manages this balance, even when the connection expires. You can change the display name.' : 'This balance is managed internally. You can update it here; local transactions also adjust it.'}</p>
     {error && <p role="alert" className="rounded-xl bg-[#fcf0ed] p-4 text-sm text-[#a43b32]">{error}</p>}
     <fieldset disabled={busy} className="grid gap-5">
       <label className="grid gap-2 text-sm">Display name<Input aria-label="Display name" autoFocus maxLength={120} {...register('name', { validate: value => value.trim().length > 0 || 'Display name is required.', maxLength: { value: 120, message: 'Use 120 characters or fewer.' } })} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? `${prefix}-name-error` : undefined} />{errors.name && <span id={`${prefix}-name-error`} role="alert" className="text-xs text-[#a43b32]">{errors.name.message}</span>}</label>

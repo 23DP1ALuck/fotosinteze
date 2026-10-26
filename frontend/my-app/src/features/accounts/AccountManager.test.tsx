@@ -278,3 +278,20 @@ it('lets the user set one main account and remembers it on reopening Accounts', 
   const mainCard = list.getByText('Main account').closest('li')!
   expect(within(mainCard).getByRole('heading', { name: 'Revolut' })).toBeInTheDocument()
 })
+
+
+it('protects real bank balances and distinguishes Enable Banking from the sandbox', async () => {
+  const realBank = { ...manual, banking_connection_id: 8, name: 'Personal Revolut' }
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url.endsWith('/accounts') ? [realBank] : realBank)))
+  render(<Harness />)
+  expect(await screen.findByText('Revolut · Enable Banking')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'View Personal Revolut details' }))
+  const dialog = within(screen.getByRole('dialog'))
+  await waitFor(() => expect(dialog.getByLabelText('Current balance (EUR)')).toHaveAttribute('readonly'))
+  expect(dialog.getByText(/bank manages this balance/i)).toBeInTheDocument()
+  await userEvent.clear(dialog.getByLabelText('Display name'))
+  await userEvent.type(dialog.getByLabelText('Display name'), 'My real bank')
+  await userEvent.click(dialog.getByRole('button', { name: 'Save changes' }))
+  const put = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === 'PUT')!
+  expect(JSON.parse(String(put[1]?.body))).toEqual({ name: 'My real bank' })
+})

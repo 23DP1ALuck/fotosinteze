@@ -65,9 +65,9 @@ async def create_transaction(request: CreateTransactionRequest,
         db.add(transaction)
 
         # Bank sync owns connected balances; local entries affect manual accounts only.
-        if account.connection_id is None and category.type == CategoryType.income:
+        if not account.bank_managed and category.type == CategoryType.income:
             account.balance += request.amount
-        elif account.connection_id is None:
+        elif not account.bank_managed:
             account.balance -= request.amount
         
         await db.commit()
@@ -89,9 +89,9 @@ async def create_transaction(request: CreateTransactionRequest,
                                   workspace_id=active_workspace.workspace_id,
                                   source=TransactionSourceEnum.EXPENSE)
         db.add(transaction)
-        if account.connection_id is None and category.type == CategoryType.income:
+        if not account.bank_managed and category.type == CategoryType.income:
             account.balance += request.amount
-        elif account.connection_id is None:
+        elif not account.bank_managed:
             account.balance -= request.amount
         
         if commit:
@@ -129,6 +129,13 @@ async def update_transaction(transaction_id: int,
     if category is None:
         raise HTTPException(status_code=404, detail="Category not found")
     account = await find_account_by_id(request.account_id, active_workspace, db)
+    if transaction.source == TransactionSourceEnum.BANK:
+        original_category = await db.get(Category, transaction.category_id) if transaction.category_id else None
+        if (request.account_id != transaction.account_id or request.amount != transaction.amount
+                or request.currency != transaction.currency or original_category is None
+                or category.workspace_id != active_workspace.workspace_id
+                or category.type != original_category.type):
+            raise HTTPException(409, 'Bank transaction amounts, accounts, currency and direction are managed by sync')
 
     # Finish business access checks before changing either account balance.
     if active_workspace.type == WorkspaceTypeEnum.BUSINESS:
@@ -146,9 +153,9 @@ async def update_transaction(transaction_id: int,
     new_effect = request.amount if category.type == CategoryType.income else -request.amount
 
     # undo the original entry, then apply its replacement, even if the account changed.
-    if old_account.connection_id is None:
+    if not old_account.bank_managed:
         old_account.balance -= old_effect
-    if account.connection_id is None:
+    if not account.bank_managed:
         account.balance += new_effect
     for field in ("amount", "description", "currency", "account_id", "category_id"):
         setattr(transaction, field, getattr(request, field))
@@ -173,12 +180,14 @@ async def delete_transaction(transaction_id: int,
     await authorize_transaction(transaction, current_user, active_workspace, db)
     if transaction.expense_id is not None:
         raise HTTPException(status_code=409, detail="Approved expense transactions cannot be deleted")
+    if transaction.source == TransactionSourceEnum.BANK:
+        raise HTTPException(409, 'Imported bank transactions cannot be deleted')
     account = await find_account_by_id(transaction.account_id, active_workspace, db)
     category = await db.get(Category, transaction.category_id) if transaction.category_id is not None else None
     effect = transaction.amount if category and category.type == CategoryType.income else -transaction.amount
 
     # Reverse the entry's balance effect before deleting it in the same commit.
-    if account.connection_id is None:
+    if not account.bank_managed:
         account.balance -= effect
     await db.delete(transaction)
     await db.commit()
