@@ -27,7 +27,7 @@ export function DeleteTransactionDialog({ workspaceId, transaction, onClose, onD
     try {
       await deleteTransaction(workspaceId, transaction.transaction_id)
       if (authAccountId() !== ownerId) return
-      await Promise.all(['transactions', 'dashboard', 'accounts', 'budgets', 'business-budgets'].map(feature => client.invalidateQueries({ queryKey: [feature, ownerId, workspaceId] })))
+      await Promise.all(['statistics', 'transactions', 'dashboard', 'accounts', 'budgets', 'business-budgets'].map(feature => client.invalidateQueries({ queryKey: [feature, ownerId, workspaceId] })))
       if (activeWorkspaceId() === workspaceId) onDeleted()
     } catch (cause) {
       if (authAccountId() === ownerId && activeWorkspaceId() === workspaceId) setError(cause instanceof Error ? cause.message : 'Could not delete the transaction. Please try again.')
