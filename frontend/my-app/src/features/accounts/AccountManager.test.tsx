@@ -205,7 +205,12 @@ it('adds Swedbank and Citadele as separate accounts and reloads them from the AP
     const dialog = within(screen.getByRole('dialog', { name: 'Add account' }))
     await user.type(dialog.getByLabelText('Account name'), name)
     expect(dialog.getByLabelText('Currency')).toHaveValue('EUR')
-    await user.clear(dialog.getByLabelText('Starting balance')); await user.type(dialog.getByLabelText('Starting balance'), balance)
+    await user.keyboard('{Enter}')
+    expect(dialog.getByLabelText('Currency')).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(dialog.getByLabelText('Starting balance')).toHaveFocus()
+    expect(dialog.getByLabelText('Starting balance')).toHaveValue('')
+    await user.keyboard(balance)
     await user.click(dialog.getByRole('button', { name: 'Add account' }))
     await screen.findByRole('button', { name: `View ${name} details` })
   }
@@ -227,6 +232,7 @@ it('preserves a new account draft after failure and blocks duplicate creates', a
   await user.click(screen.getByRole('button', { name: 'Add account' }))
   const dialog = within(screen.getByRole('dialog'))
   await user.type(dialog.getByLabelText('Account name'), 'Swedbank')
+  await user.type(dialog.getByLabelText('Starting balance'), '0.00')
   await user.dblClick(dialog.getByRole('button', { name: 'Add account' }))
   expect(dialog.getByRole('button', { name: /Adding/ })).toBeDisabled()
   expect(fetcher.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(1)
@@ -271,4 +277,21 @@ it('lets the user set one main account and remembers it on reopening Accounts', 
   const list = within(await screen.findByRole('list', { name: 'Accounts' }))
   const mainCard = list.getByText('Main account').closest('li')!
   expect(within(mainCard).getByRole('heading', { name: 'Revolut' })).toBeInTheDocument()
+})
+
+
+it('protects real bank balances and distinguishes Enable Banking from the sandbox', async () => {
+  const realBank = { ...manual, banking_connection_id: 8, name: 'Personal Revolut' }
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url.endsWith('/accounts') ? [realBank] : realBank)))
+  render(<Harness />)
+  expect(await screen.findByText('Revolut · Enable Banking')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'View Personal Revolut details' }))
+  const dialog = within(screen.getByRole('dialog'))
+  await waitFor(() => expect(dialog.getByLabelText('Current balance (EUR)')).toHaveAttribute('readonly'))
+  expect(dialog.getByText(/bank manages this balance/i)).toBeInTheDocument()
+  await userEvent.clear(dialog.getByLabelText('Display name'))
+  await userEvent.type(dialog.getByLabelText('Display name'), 'My real bank')
+  await userEvent.click(dialog.getByRole('button', { name: 'Save changes' }))
+  const put = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === 'PUT')!
+  expect(JSON.parse(String(put[1]?.body))).toEqual({ name: 'My real bank' })
 })

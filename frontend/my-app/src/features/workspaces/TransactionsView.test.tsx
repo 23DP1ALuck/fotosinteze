@@ -71,3 +71,15 @@ it.each([false, true])('restricts sources to the workspace with server filtering
   await user.selectOptions(businessSource, 'Expense')
   if (onFilterChange) expect(onFilterChange).toHaveBeenLastCalledWith({ source: 'EXPENSE' })
 })
+
+
+it('allows editing bank categorization but hides bank deletion', async () => {
+  const edit = vi.fn()
+  const remove = vi.fn()
+  render(<TransactionsView transactions={transactions} income={0} expenses={60} workspaceName="Personal" workspaceKind="personal" onEdit={edit} onDelete={remove} />)
+  expect(screen.queryByRole('button', { name: 'Delete Boundary' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Edit Boundary' }))
+  expect(edit).toHaveBeenCalledWith(2)
+  await userEvent.click(screen.getByRole('button', { name: 'Delete First' }))
+  expect(remove).toHaveBeenCalledWith(1)
+})

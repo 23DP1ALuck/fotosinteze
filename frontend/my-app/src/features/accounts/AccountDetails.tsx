@@ -1,3 +1,5 @@
+import { dismissDialogOnBackdropClick } from '@/lib/dialog-backdrop'
+import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -19,7 +21,7 @@ export function AccountDetails({ workspaceId, accountId, onClose, onSaved }: { w
     return () => { element?.close() }
   }, [])
   // Fetch fresh details before exposing editable fields, including the balance source.
-  return <dialog ref={dialog} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); if (!busy) onClose() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(540px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_24px_100px_#102c2330] backdrop:bg-[#102c23]/40 backdrop:backdrop-blur-[4px]">
+  return <dialog onClick={dismissDialogOnBackdropClick} ref={dialog} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); if (!busy) onClose() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(540px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_24px_100px_#102c2330] backdrop:bg-[#102c23]/40 backdrop:backdrop-blur-[4px]">
     <h2 id={titleId} className="text-2xl font-semibold!">Account details</h2>
     {detail.isPending && <p role="status" className="mt-5">Loading account details…</p>}
     {detail.isError && <div className="mt-5 rounded-xl bg-[#fcf0ed] p-4"><p role="alert" className="text-sm text-[#a43b32]">{detail.error.message}</p><button onClick={() => void detail.refetch()} className={`${secondary} mt-3`}>Retry</button></div>}
@@ -36,8 +38,8 @@ function AccountEditForm({ account, busy, onBusyChange, onClose, onSaved }: { ac
   const controller = useRef<AbortController | null>(null)
   const mounted = useRef(false)
   const [error, setError] = useState('')
-  const linked = account.connection_id !== null
-  const { register, handleSubmit, formState: { errors } } = useForm<{ name: string; balance: string }>({ defaultValues: { name: account.name, balance: account.balance } })
+  const linked = account.connection_id !== null || account.banking_connection_id !== null
+  const { register, trigger, handleSubmit, formState: { errors } } = useForm<{ name: string; balance: string }>({ defaultValues: { name: account.name, balance: account.balance } })
   useEffect(() => {
     mounted.current = true
     return () => { mounted.current = false; controller.current?.abort() }
@@ -65,9 +67,9 @@ function AccountEditForm({ account, busy, onBusyChange, onClose, onSaved }: { ac
       if (mounted.current) onBusyChange(false)
     }
   }
-  return <form onSubmit={event => { void handleSubmit(save)(event) }} noValidate aria-busy={busy} className="mt-5 space-y-5">
-    <p className="text-sm text-[#68796e]">{linked ? 'Revolut-linked' : 'Manual / internal'} · {formatAccountBalance(account)}</p>
-    <p id={`${prefix}-source`} className="rounded-xl bg-[#f7f8f2] p-4 text-sm text-[#68796e]">{linked ? 'Revolut manages this balance, even when the connection expires. You can change the display name.' : 'This balance is managed internally. You can update it here; local transactions also adjust it.'}</p>
+  return <KeyboardForm validateField={trigger} onSubmit={event => { void handleSubmit(save)(event) }} noValidate aria-busy={busy} className="mt-5 space-y-5">
+    <p className="text-sm text-[#526259]">{account.banking_connection_id !== null ? 'Revolut · Enable Banking' : linked ? 'Revolut-linked' : 'Manual / internal'} · {formatAccountBalance(account)}</p>
+    <p id={`${prefix}-source`} className="rounded-xl bg-[#f7f8f2] p-4 text-sm text-[#526259]">{linked ? 'The bank manages this balance, even when the connection expires. You can change the display name.' : 'This balance is managed internally. You can update it here; local transactions also adjust it.'}</p>
     {error && <p role="alert" className="rounded-xl bg-[#fcf0ed] p-4 text-sm text-[#a43b32]">{error}</p>}
     <fieldset disabled={busy} className="grid gap-5">
       <label className="grid gap-2 text-sm">Display name<Input aria-label="Display name" autoFocus maxLength={120} {...register('name', { validate: value => value.trim().length > 0 || 'Display name is required.', maxLength: { value: 120, message: 'Use 120 characters or fewer.' } })} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? `${prefix}-name-error` : undefined} />{errors.name && <span id={`${prefix}-name-error`} role="alert" className="text-xs text-[#a43b32]">{errors.name.message}</span>}</label>
@@ -78,5 +80,5 @@ function AccountEditForm({ account, busy, onBusyChange, onClose, onSaved }: { ac
     </fieldset>
     <div className="flex flex-wrap justify-end gap-3 border-t border-[#e1e5df] pt-5"><button type="button" disabled={busy} onClick={onClose} className={secondary}>Close</button><button disabled={busy} type="submit" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#193f33] px-5 py-3 text-sm text-white hover:bg-[#285947] disabled:opacity-40">{busy && <LoaderCircle size={16} className="animate-spin" />}{busy ? 'Saving…' : 'Save changes'}</button></div>
     <button type="button" disabled={busy} onClick={onClose} aria-label="Close account details" className="absolute top-6 right-6 rounded-lg p-2 hover:bg-[#eaf0e6] disabled:opacity-40"><X size={20} /></button>
-  </form>
+  </KeyboardForm>
 }

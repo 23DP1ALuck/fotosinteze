@@ -260,3 +260,88 @@ code {
     font-weight: 500;
   }
 }
+
+/* Short, interruptible motion. Layout and section spacing remain unchanged. */
+.workspace-surface, .demo-surface {
+  --motion-ease: cubic-bezier(.22, 1, .36, 1);
+}
+.workspace-surface button, .demo-surface button {
+  transition: background-color 200ms ease, color 200ms ease, box-shadow 240ms ease, transform 280ms var(--motion-ease);
+}
+.workspace-surface button:active:not(:disabled), .demo-surface button:active:not(:disabled) {
+  transform: scale(.98);
+}
+.demo-surface button:focus-visible, .demo-surface [role="tabpanel"]:focus-visible {
+  outline: 2px solid #213d33;
+  outline-offset: 4px;
+}
+.motion-content { animation: content-arrive 360ms cubic-bezier(.22, 1, .36, 1) both; }
+.insight-dialog[open] { animation: drawer-arrive 420ms cubic-bezier(.22, 1, .36, 1) both; }
+.insight-dialog::backdrop { animation: backdrop-arrive 260ms ease both; }
+@keyframes content-arrive { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes drawer-arrive { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes backdrop-arrive { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .workspace-surface *, .demo-surface *, .insight-dialog, .motion-content, .insight-dialog::backdrop {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  .workspace-surface button:active:not(:disabled), .demo-surface button:active:not(:disabled) { transform: none; }
+}
+.demo-switch-indicator { transition: transform 420ms cubic-bezier(.22, 1, .36, 1); }
+.review-toggle { transition: background-color 220ms ease; }
+.review-toggle-thumb { transition: transform 320ms cubic-bezier(.22, 1, .36, 1); }
+
+.workspace-nav-selection[data-ready="true"] {
+  transition: transform 420ms cubic-bezier(.22, 1, .36, 1), height 320ms cubic-bezier(.22, 1, .36, 1);
+}
+/* Keep the sidebar rows stationary while their shared indicator moves. */
+.workspace-surface .workspace-navigation button:active:not(:disabled) { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .workspace-nav-selection[data-ready="true"] { transition: none; }
+}
+
+.keyboard-form :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]) {
+  scroll-margin-block: 24px;
+  transition: border-color 180ms ease, box-shadow 240ms cubic-bezier(.22, 1, .36, 1), background-color 180ms ease;
+}
+.keyboard-form :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):focus {
+  border-color: #82965b;
+  box-shadow: 0 0 0 4px rgb(33 61 51 / 10%);
+}
+.keyboard-form :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):hover:not(:disabled):not(:focus) {
+  border-color: #a8b9a5;
+}
+.keyboard-form :is(input, select, textarea)[aria-invalid="true"]:focus {
+  border-color: #a43b32;
+  box-shadow: 0 0 0 4px rgb(164 59 50 / 10%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .keyboard-form :is(input, select, textarea) { transition: none !important; scroll-behavior: auto; }
+}
+.category-type-indicator { transition: transform 420ms cubic-bezier(.22, 1, .36, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .category-type-indicator { transition: none !important; }
+}
+
+/* Shared date/month picker: branded controls with no system calendar popup. */
+.date-input-trigger, .calendar-popup button {
+  cursor: pointer;
+  transition: background-color 180ms ease, color 180ms ease, box-shadow 220ms ease, transform 240ms cubic-bezier(.22, 1, .36, 1);
+}
+.calendar-popup { transform-origin: var(--transform-origin); transition: opacity 180ms ease, transform 260ms cubic-bezier(.22, 1, .36, 1); }
+.calendar-popup[data-starting-style], .calendar-popup[data-ending-style] { opacity: 0; transform: translateY(5px) scale(.98); }
+.calendar-popup button:disabled { cursor: default; opacity: .3; }
+.calendar-popup button:focus-visible { outline: 2px solid #82965b; outline-offset: 1px; }
+.calendar-popup button:active:not(:disabled) { transform: scale(.94); }
+.calendar-nav { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 10px; background: #f3f5ee; }
+.calendar-nav:hover:not(:disabled) { background: #e6ebe3; }
+.calendar-hover { transition: transform 260ms cubic-bezier(.22, 1, .36, 1), width 200ms ease, height 200ms ease, opacity 140ms ease; }
+.calendar-grid { animation: calendar-forward 250ms cubic-bezier(.22, 1, .36, 1) both; }
+.calendar-grid[data-direction="back"] { animation-name: calendar-back; }
+@keyframes calendar-forward { from { opacity: 0; transform: translateX(7px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes calendar-back { from { opacity: 0; transform: translateX(-7px); } to { opacity: 1; transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .calendar-popup, .calendar-popup *, .date-input-trigger { transition: none !important; animation: none !important; }
+}

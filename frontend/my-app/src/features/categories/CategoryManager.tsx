@@ -1,3 +1,5 @@
+import { dismissDialogOnBackdropClick } from '@/lib/dialog-backdrop'
+import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { authAccountId, workspaceQueryKey } from '@/features/workspaces/workspace-state'
@@ -12,9 +14,9 @@ import { listAccessibleWorkspaces, type AccessibleWorkspace } from '@/features/w
 
 const primaryButton = 'inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#193f33] px-4 py-3 text-sm text-white transition-colors hover:bg-[#285947] disabled:cursor-not-allowed disabled:opacity-50'
 const secondaryButton = 'inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#eaf0e6] px-4 py-3 text-sm text-[#193f33] transition-colors hover:bg-[#dce6d4] disabled:opacity-50'
-const iconButton = 'rounded-lg p-2 text-[#7d877f] transition-colors hover:bg-[#edf0e8] hover:text-[#193f33] disabled:opacity-50'
+const iconButton = 'rounded-lg p-2 text-[#627168] transition-colors hover:bg-[#edf0e8] hover:text-[#193f33] disabled:opacity-50'
 const schema = z.object({ name: z.string().trim().min(1, 'Name is required').max(100, 'Use 100 characters or fewer'), type: z.enum(['income', 'expense']) })
-type Action = { kind: 'create' } | { kind: 'edit' | 'delete'; category: Category }
+type Action = { kind: 'create'; type: Category['type'] } | { kind: 'edit' | 'delete'; category: Category }
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong. Please try again.'
 type ConnectionProps = { canManage?: boolean; workspaceKind: WorkspaceKind; workspaceName?: string; workspaceId?: number; onConnect: (id: number | undefined) => void }
 
@@ -27,8 +29,8 @@ function CategoryDialog({ action, categories, workspaceId, onClose, onSaved }: {
   const category = action.kind === 'create' ? undefined : action.category
   const [busy, setBusy] = useState(false)
   const [error, setErrorMessage] = useState('')
-  const { register, handleSubmit, setError, formState: { errors } } = useForm<CategoryInput>({
-    resolver: zodResolver(schema), defaultValues: { name: category?.name ?? '', type: category?.type ?? 'expense' },
+  const { register, trigger, handleSubmit, setError, formState: { errors } } = useForm<CategoryInput>({
+    resolver: zodResolver(schema), defaultValues: { name: category?.name ?? '', type: category?.type ?? (action.kind === 'create' ? action.type : 'expense') },
   })
   useEffect(() => { dialog.current?.showModal() }, [])
   async function mutate(input?: CategoryInput) {
@@ -53,15 +55,15 @@ function CategoryDialog({ action, categories, workspaceId, onClose, onSaved }: {
   })
   const close = () => { if (!busy) onClose() }
   const title = action.kind === 'create' ? 'Create category' : action.kind === 'edit' ? 'Edit category' : 'Delete category'
-  return <dialog ref={dialog} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); close() }}
+  return <dialog onClick={dismissDialogOnBackdropClick} ref={dialog} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); close() }}
     className="m-auto max-h-[calc(100svh-40px)] w-[min(460px,calc(100%_-_32px))] overflow-y-auto rounded-[18px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/35 backdrop:backdrop-blur-[3px]">
     <div className="flex items-center justify-between gap-4"><h2 id={titleId} className="m-0 text-[23px] font-semibold!">{title}</h2><button disabled={busy} type="button" aria-label="Close category dialog" onClick={close} className={iconButton}><X size={20} /></button></div>
     {error && <p role="alert" className="mt-5 rounded-lg bg-[#fcf0ed] p-3 text-sm text-[#a43b32]">{error}</p>}
-    {action.kind === 'delete' ? <div className="mt-5 space-y-5"><p className="text-sm">Delete <strong>{category?.name}</strong> from this workspace?</p><p className="text-xs text-[#7d877f]">If this category is in use, the server may prevent deletion.</p><div className="flex justify-end gap-3"><button disabled={busy} onClick={close} className={secondaryButton}>Cancel</button><button disabled={busy} onClick={() => void mutate()} className="inline-flex items-center gap-2 rounded-[10px] bg-[#a43b32] px-4 py-3 text-sm text-white hover:bg-[#862e27] disabled:opacity-50">{busy && <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" />}Delete category</button></div></div>
-      : <form onSubmit={save} noValidate className="mt-5 grid gap-5"><fieldset disabled={busy} className="grid gap-5">
+    {action.kind === 'delete' ? <div className="mt-5 space-y-5"><p className="text-sm">Delete <strong>{category?.name}</strong> from this workspace?</p><p className="text-xs text-[#627168]">If this category is in use, the server may prevent deletion.</p><div className="flex justify-end gap-3"><button disabled={busy} onClick={close} className={secondaryButton}>Cancel</button><button disabled={busy} onClick={() => void mutate()} className="inline-flex items-center gap-2 rounded-[10px] bg-[#a43b32] px-4 py-3 text-sm text-white hover:bg-[#862e27] disabled:opacity-50">{busy && <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" />}Delete category</button></div></div>
+      : <KeyboardForm validateField={trigger} onSubmit={save} noValidate className="mt-5 grid gap-5"><fieldset disabled={busy} className="grid gap-5">
         <label className="grid gap-2 text-sm">Name<Input autoFocus maxLength={100} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? errorId : undefined} {...register('name')} />{errors.name && <span id={errorId} role="alert" className="text-xs text-[#a43b32]">{errors.name.message}</span>}</label>
         <label className="grid gap-2 text-sm">Type<select {...register('type')} className="h-11 rounded-lg border border-[#d8d8d0] bg-white px-3 text-sm focus-visible:outline-2 focus-visible:outline-[#193f33]"><option value="expense">Expense</option><option value="income">Income</option></select></label>
-      </fieldset><div className="flex justify-end gap-3"><button disabled={busy} type="button" onClick={close} className={secondaryButton}>Cancel</button><button disabled={busy} type="submit" className={primaryButton}>{busy && <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" />}{action.kind === 'create' ? 'Create category' : 'Save changes'}</button></div></form>}
+      </fieldset><div className="flex justify-end gap-3"><button disabled={busy} type="button" onClick={close} className={secondaryButton}>Cancel</button><button disabled={busy} type="submit" className={primaryButton}>{busy && <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" />}{action.kind === 'create' ? 'Create category' : 'Save changes'}</button></div></KeyboardForm>}
   </dialog>
 }
 
@@ -74,6 +76,9 @@ function ConnectedCategories({ workspaceId, workspaceKind, onConnect, canManage 
   const error = query.error instanceof Error ? query.error.message : ''
   const [action, setAction] = useState<Action | null>(null)
   const [notice, setNotice] = useState('')
+  const [selectedType, setSelectedType] = useState<Category['type']>('expense')
+  const switchId = useId()
+  const visibleCategories = categories.filter(category => category.type === selectedType)
   function reload() { void client.invalidateQueries({ queryKey:key, exact:true }) }
   function saved(category: Category, deleted: boolean) {
     if (authAccountId() !== key[1]) return
@@ -81,19 +86,34 @@ function ConnectedCategories({ workspaceId, workspaceKind, onConnect, canManage 
       const rows = previous ?? []
       return deleted ? rows.filter(item=>item.id!==category.id) : rows.some(item=>item.id===category.id) ? rows.map(item=>item.id===category.id?category:item) : [...rows,category]
     })
+    if (!deleted) setSelectedType(category.type)
     setNotice(deleted ? 'Category deleted.' : action?.kind === 'create' ? 'Category created.' : 'Category updated.')
     reload()
     for (const feature of ['statistics', 'dashboard', 'transactions', 'budgets', 'business-budgets']) void client.invalidateQueries({ queryKey: workspaceQueryKey(feature, workspaceId) })
   }
   const label = workspaceKind === 'personal' ? 'Personal' : 'Business'
   return <>
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="m-0 text-[22px] font-semibold!">Your categories</h2><p className="mt-2 text-xs text-[#7d877f]">Organise your income and expenses.</p></div>{canManage && <button disabled={loading || Boolean(error)} onClick={() => setAction({ kind: 'create' })} className={primaryButton}><Plus size={17} />Create category</button>}</div>
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[#7d877f]"><span>{label} workspace · ID {workspaceId}</span><div className="flex gap-4"><button disabled={loading} onClick={reload} className="inline-flex items-center gap-1 hover:text-[#193f33] disabled:opacity-50"><RefreshCw size={13} />Refresh</button><button onClick={() => onConnect(undefined)} className="hover:text-[#193f33]">Change workspace</button></div></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="m-0 text-[22px] font-semibold!">Your categories</h2><p className="mt-2 text-xs text-[#627168]">Organise your income and expenses.</p></div>{canManage && <button disabled={loading || Boolean(error)} onClick={() => setAction({ kind: 'create', type: selectedType })} className={primaryButton}><Plus size={17} />Create category</button>}</div>
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[#627168]"><span>{label} workspace · ID {workspaceId}</span><div className="flex gap-4"><button disabled={loading} onClick={reload} className="inline-flex items-center gap-1 hover:text-[#193f33] disabled:opacity-50"><RefreshCw size={13} />Refresh</button><button onClick={() => onConnect(undefined)} className="hover:text-[#193f33]">Change workspace</button></div></div>
     {notice && <p role="status" className="mt-4 rounded-lg bg-[#eaf0e5] px-4 py-3 text-sm">{notice}</p>}
-    {loading && <p role="status" className="mt-5 flex items-center gap-2 text-sm text-[#7d877f]"><LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" />Loading categories…</p>}
-    {error && <div className="mt-5 rounded-xl bg-[#fcf0ed] p-4"><p role="alert" className="text-sm text-[#a43b32]">{error}</p><button onClick={reload} className={`${secondaryButton} mt-3`}>Retry</button></div>}
-    {!loading && !error && categories.length === 0 && <div className="mt-5 rounded-xl border border-dashed border-[#dce4d8] px-5 py-10 text-center"><p className="font-medium">No categories yet</p><p className="mt-2 text-sm text-[#7d877f]">Create the first category for your {label.toLowerCase()} workspace.</p></div>}
-    {categories.length > 0 && <ul aria-label={`${label} categories`} className="mt-5 space-y-3">{categories.map(category => <li key={category.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#e1e5df] bg-[#f7f8f2] px-4 py-3"><div className="min-w-0"><strong className="block wrap-anywhere text-sm font-semibold">{category.name}</strong><span className="text-xs text-[#7d877f]">{category.type === 'income' ? 'Income' : 'Expense'}</span></div>{canManage && <div className="flex shrink-0 gap-1"><button disabled={loading} aria-label={`Edit ${category.name}`} onClick={() => setAction({ kind: 'edit', category })} className={iconButton}><Pencil size={16} /></button><button disabled={loading} aria-label={`Delete ${category.name}`} onClick={() => setAction({ kind: 'delete', category })} className={`${iconButton} hover:text-[#a43b32]`}><Trash2 size={16} /></button></div>}</li>)}</ul>}
+    <div className="relative mt-6 grid w-full max-w-[360px] grid-cols-2 rounded-full bg-[#eaf0e6] p-1" role="tablist" aria-label="Category type">
+      <span aria-hidden className="category-type-indicator pointer-events-none absolute inset-y-1 left-1 w-[calc(50%_-_4px)] rounded-full bg-[#193f33] shadow-sm" style={{ transform: `translateX(${selectedType === 'expense' ? '0' : '100'}%)` }} />
+      {(['expense', 'income'] as const).map((type, index) => <button key={type} type="button" role="tab" id={`${switchId}-${type}`} aria-label={type === 'expense' ? 'Expenses' : 'Income'} aria-selected={selectedType === type} aria-controls={`${switchId}-panel`} tabIndex={selectedType === type ? 0 : -1} onClick={() => setSelectedType(type)} onKeyDown={event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+        event.preventDefault()
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : 1 - index
+        setSelectedType(next === 0 ? 'expense' : 'income')
+        ;(event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next])?.focus()
+      }} className={`relative z-10 flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium ${selectedType === type ? 'text-white' : 'text-[#526259]'}`}>
+        {type === 'expense' ? 'Expenses' : 'Income'}<span aria-hidden className={`rounded-full px-2 py-0.5 text-[11px] tabular-nums ${selectedType === type ? 'bg-white/15 text-white' : 'bg-white/70 text-[#526259]'}`}>{categories.filter(category => category.type === type).length}</span>
+      </button>)}
+    </div>
+    <div key={selectedType} role="tabpanel" id={`${switchId}-panel`} aria-labelledby={`${switchId}-${selectedType}`} tabIndex={0} className="motion-content mt-5 min-h-[180px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#82965b]">
+      {loading && <p role="status" className="flex items-center gap-2 text-sm text-[#627168]"><LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" />Loading categories…</p>}
+      {error && <div className="rounded-xl bg-[#fcf0ed] p-4"><p role="alert" className="text-sm text-[#a43b32]">{error}</p><button onClick={reload} className={`${secondaryButton} mt-3`}>Retry</button></div>}
+      {!loading && !error && visibleCategories.length === 0 && <div className="rounded-xl border border-dashed border-[#dce4d8] px-5 py-10 text-center"><p className="font-medium">{categories.length === 0 ? 'No categories yet' : `No ${selectedType} categories yet`}</p><p className="mt-2 text-sm text-[#627168]">{canManage ? `Create ${selectedType === 'income' ? 'an income' : 'an expense'} category for your ${label.toLowerCase()} workspace.` : 'The workspace owner can add categories here.'}</p></div>}
+      {visibleCategories.length > 0 && <ul aria-label={`${label} categories`} className="space-y-3">{visibleCategories.map(category => <li key={category.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#e1e5df] bg-[#f7f8f2] px-4 py-3"><div className="min-w-0"><strong className="block wrap-anywhere text-sm font-semibold">{category.name}</strong><span className="text-xs text-[#627168]">{category.type === 'income' ? 'Income' : 'Expense'}</span></div>{canManage && <div className="flex shrink-0 gap-1"><button disabled={loading} aria-label={`Edit ${category.name}`} onClick={() => setAction({ kind: 'edit', category })} className={iconButton}><Pencil size={16} /></button><button disabled={loading} aria-label={`Delete ${category.name}`} onClick={() => setAction({ kind: 'delete', category })} className={`${iconButton} hover:text-[#a43b32]`}><Trash2 size={16} /></button></div>}</li>)}</ul>}
+    </div>
     {canManage && action && <CategoryDialog action={action} workspaceId={workspaceId} categories={categories} onClose={() => setAction(null)} onSaved={saved} />}
   </>
 }
@@ -140,11 +160,11 @@ function WorkspaceConnection({ workspaceKind, workspaceName, onConnect }: Connec
   useEffect(() => () => { request.current?.abort() }, [])
   const label = workspaceKind === 'personal' ? 'Personal' : 'Business'
   return <><h2 className="text-[22px] font-semibold!">Your categories</h2>
-    <p className="mt-2 text-sm text-[#7d877f]">Choose one of your accessible {label.toLowerCase()} workspaces.</p>
-    {loading && <p role="status" className="mt-5 text-sm text-[#7d877f]">Loading your workspaces…</p>}
+    <p className="mt-2 text-sm text-[#627168]">Choose one of your accessible {label.toLowerCase()} workspaces.</p>
+    {loading && <p role="status" className="mt-5 text-sm text-[#627168]">Loading your workspaces…</p>}
     {error && <div className="mt-4 rounded-xl bg-[#fcf0ed] p-4"><p role="alert" className="text-sm text-[#a43b32]">{error}</p><button className={`${secondaryButton} mt-3`} onClick={() => { setLoading(true); setError(''); setRevision(value => value + 1) }}>Retry</button></div>}
-    {!loading && !error && !workspaces.length && <div className="mt-5 rounded-xl border border-dashed border-[#dce4d8] p-5"><p className="font-medium">No accessible {label} workspaces</p><p className="mt-2 text-sm text-[#7d877f]">{workspaceKind === 'business' ? 'Ask your workspace owner to add your account to a Business workspace. A session-only workspace is not a backend workspace.' : 'Your account has no Personal workspace available. Please ask your backend developer to check your workspace membership.'}</p></div>}
-    {!loading && workspaces.length > 0 && <form className="mt-5 flex max-w-md flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); void connect() }}><label className="grid flex-1 gap-2 text-sm">Workspace<select disabled={connecting} value={selectedId} onChange={event => setSelectedId(event.target.value)} required className="h-11 rounded-lg border border-[#d8d8d0] bg-white px-3 text-sm"><option value="">Select a workspace</option>{workspaces.map(item => <option key={item.id} value={String(item.id)}>{item.name}</option>)}</select></label><button disabled={connecting || !selectedId} className={primaryButton}>{connecting ? 'Checking access…' : 'Load categories'}</button></form>}
+    {!loading && !error && !workspaces.length && <div className="mt-5 rounded-xl border border-dashed border-[#dce4d8] p-5"><p className="font-medium">No accessible {label} workspaces</p><p className="mt-2 text-sm text-[#627168]">{workspaceKind === 'business' ? 'Ask your workspace owner to add your account to a Business workspace. A session-only workspace is not a backend workspace.' : 'Your account has no Personal workspace available. Please ask your backend developer to check your workspace membership.'}</p></div>}
+    {!loading && workspaces.length > 0 && <KeyboardForm className="mt-5 flex max-w-md flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); void connect() }}><label className="grid flex-1 gap-2 text-sm">Workspace<select disabled={connecting} value={selectedId} onChange={event => setSelectedId(event.target.value)} required className="h-11 rounded-lg border border-[#d8d8d0] bg-white px-3 text-sm"><option value="">Select a workspace</option>{workspaces.map(item => <option key={item.id} value={String(item.id)}>{item.name}</option>)}</select></label><button disabled={connecting || !selectedId} className={primaryButton}>{connecting ? 'Checking access…' : 'Load categories'}</button></KeyboardForm>}
   </>
 }
 

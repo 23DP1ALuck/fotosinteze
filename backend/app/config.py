@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     revolut_signing_kid: str = "fotosinteze-sandbox"
     revolut_redirect_uri: HttpUrl | None = None
     revolut_token_encryption_key: SecretStr | None = None
+    enable_banking_app_id: str | None = None
+    enable_banking_private_key_path: Path | None = None
+    enable_banking_redirect_uri: HttpUrl | None = None
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

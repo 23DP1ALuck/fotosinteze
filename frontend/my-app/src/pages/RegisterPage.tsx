@@ -1,3 +1,4 @@
+import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowRight } from 'lucide-react'
 import { useState } from 'react'
@@ -23,7 +24,7 @@ function RegisterPage() {
   const [serverError, setServerError] = useState<string | null>(null)
 
   const {
-    register,
+    register, trigger,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormValues>({
@@ -60,12 +61,12 @@ function RegisterPage() {
         <h2 className="text-3xl font-semibold tracking-tight text-[#1a2e2a]">
           A clearer start.
         </h2>
-        <p className="text-[#6b7280]">
+        <p className="text-[#526259]">
           Create one account. Make room for every goal.
         </p>
       </div>
 
-      <form className="mt-8 space-y-5 text-left" onSubmit={onSubmit} noValidate>
+      <KeyboardForm validateField={trigger} className="mt-8 space-y-5 text-left" onSubmit={onSubmit} noValidate>
         {serverError ? <FormAlert message={serverError} /> : null}
 
         <div className="space-y-2">
@@ -112,13 +113,13 @@ function RegisterPage() {
           {errors.password ? (
             <p className="text-sm text-red-600">{errors.password.message}</p>
           ) : (
-            <p className="text-sm text-[#6b7280]">
+            <p className="text-sm text-[#526259]">
               Use at least 8 characters. A longer phrase works well.
             </p>
           )}
         </div>
 
-        <p className="text-sm text-[#6b7280]">
+        <p className="text-sm text-[#526259]">
           By creating an account, you agree to the Terms of Service and Privacy
           Policy.
         </p>
@@ -133,9 +134,9 @@ function RegisterPage() {
           {isSubmitting ? 'Creating account…' : 'Create account'}
           {!isSubmitting ? <ArrowRight className="size-4" aria-hidden /> : null}
         </button>
-      </form>
+      </KeyboardForm>
 
-      <p className="mt-6 text-center text-sm text-[#6b7280]">
+      <p className="mt-6 text-center text-sm text-[#526259]">
         Already have an account?{' '}
         <Link className="font-medium text-[#1a3c34] hover:underline" to="/login">
           Log in

@@ -1,5 +1,6 @@
 from fastapi import HTTPException
-from app.models import Workspace, Category
+from app.models import Workspace, Category, Transaction
+from app.models.transaction import TransactionSourceEnum
 from app.database import AsyncSession
 from app.services.name_uniqueness import check_unique_name
 
@@ -88,6 +89,9 @@ async def update_category(
     await check_unique_name(db, Category.name, request.name,
         Category.workspace_id == workspace_id, Category.category_id != category_id,
         detail='Category name is already taken in this workspace')
+    if request.type != category.type and await db.scalar(select(Transaction.transaction_id).where(
+            Transaction.category_id == category_id, Transaction.source == TransactionSourceEnum.BANK).limit(1)):
+        raise HTTPException(409, 'The income/expense type of a category used by bank transactions cannot be changed')
     update_request_data = request.model_dump(exclude_unset=True)
     update_request_data['name'] = request.name.strip()
     for field, value in update_request_data.items():

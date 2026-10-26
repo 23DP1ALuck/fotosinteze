@@ -6,7 +6,7 @@ const id = z.number().int().positive()
 export const accountSchema = z.object({
   account_id: id, workspace_id: id, name: z.string(), currency: z.string().regex(/^[A-Z]{3}$/),
   balance: z.union([z.string().regex(/^[+-]?\d+(\.\d+)?$/), z.number().finite()]).transform(String),
-  connection_id: id.nullable().default(null), is_main: z.boolean().optional(),
+  connection_id: id.nullable().default(null), banking_connection_id: id.nullable().default(null), is_main: z.boolean().optional(),
 })
 export type ApiAccount = z.infer<typeof accountSchema>
 export type AccountCreate = { name: string; currency: string; balance: string }

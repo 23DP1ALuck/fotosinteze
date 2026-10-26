@@ -18,7 +18,7 @@ beforeEach(()=>{
   const finance = createFinanceTransport()
   vi.stubGlobal('fetch',vi.fn(async(url,init)=>{
     if(String(url).endsWith('/workspaces')) return Response.json(workspaces)
-    if(String(url).endsWith('/revolut/connection'))return Response.json({status:'not_connected',expires_at:null,last_sync_at:null})
+    if(String(url).endsWith('/revolut/connection') || String(url).endsWith('/enable-banking/connection'))return Response.json({status:'not_connected',expires_at:null,last_sync_at:null})
     const response = finance.respond(url, init)
     if (response) return response
     const id=Number(new Headers(init.headers).get('X-Workspace-ID'))
@@ -44,6 +44,7 @@ it('loads actual memberships and displays Personal, Business and membership role
   expect(screen.getByRole('heading',{name:'Your business, at a glance.'})).toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'Revolut'})).not.toBeInTheDocument()
   expect(screen.queryByRole('button',{name:/Connect Revolut sandbox/})).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Connect real Revolut' })).not.toBeInTheDocument()
 })
 it('keeps business and personal transaction data separate across switches',async()=>{
   const user=userEvent.setup();await renderWorkspace()
@@ -291,12 +292,18 @@ it('keeps employees on the dashboard when their workspace has no accounts', asyn
   expect(screen.queryByRole('region', { name: 'Account management' })).not.toBeInTheDocument()
 })
 
-it('keeps Revolut connection in Accounts instead of the dashboard or navigation', async () => {
+it('keeps real and sandbox Revolut connections in Personal Accounts', async () => {
   await renderWorkspace()
   expect(screen.queryByRole('button', { name: 'Connect Revolut sandbox' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Connect real Revolut' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Revolut' })).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Accounts' }))
   expect(await screen.findByRole('button', { name: 'Connect Revolut sandbox' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Connect real Revolut' })).toBeInTheDocument()
+  await switchWorkspace('Personal', 'Acme Studio')
+  await userEvent.click(screen.getByRole('button', { name: 'Accounts' }))
+  expect(screen.queryByRole('button', { name: 'Connect real Revolut' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Connect Revolut sandbox' })).not.toBeInTheDocument()
 })
 
 it('does not override navigation chosen before accounts finish loading', async () => {
