@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from app.models import Account, Workspace
 from app.models.workspace import WorkspaceTypeEnum
 from app.dto import CreateAccountRequest, CreateAccountResponse
@@ -76,6 +76,21 @@ async def update_account(account_id: int, request: UpdateAccountRequest, current
     await db.commit()
     await db.refresh(account)
     return CreateAccountResponse.model_validate(account)
+
+
+async def delete_account(account_id: int, current_user: dict, workspace: Workspace, db: AsyncSession) -> None:
+    await authorize_accounts(current_user, workspace, db, owner=True)
+    await get_account(account_id, current_user, workspace, db)
+    # Delete conditionally without the ORM's transaction delete-orphan cascade.
+    result = await db.execute(delete(Account).where(
+        Account.account_id == account_id,
+        Account.workspace_id == workspace.workspace_id,
+        Account.connection_id.is_(None),
+        ~Account.transactions.any(),
+    ))
+    if result.rowcount == 0:
+        raise HTTPException(status_code=409, detail='Account has transactions or is bank-linked and cannot be deleted')
+    await db.commit()
 
 
 async def lock_main_accounts(workspace_id: int, db: AsyncSession) -> None:

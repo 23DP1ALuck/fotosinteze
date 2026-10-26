@@ -1,5 +1,5 @@
 from decimal import Decimal
-from app.models import Account, RevolutConnection
+from app.models import Account, RevolutConnection, Transaction
 import unittest
 from tests import test_transaction_routes
 
@@ -7,6 +7,46 @@ from tests import test_transaction_routes
 class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
     asyncSetUp = test_transaction_routes.TransactionRouteTests.asyncSetUp
     asyncTearDown = test_transaction_routes.TransactionRouteTests.asyncTearDown
+
+    async def test_delete_unused_accounts_in_personal_and_business_workspaces(self):
+        for workspace_id in (1, 2):
+            headers = {'Workspace-ID': str(workspace_id)}
+            created = await self.client.post('/accounts', headers=headers,
+                json={'name': 'Disposable', 'currency': 'EUR', 'balance': 0, 'is_main': True})
+            self.assertEqual(created.status_code, 201, created.text)
+            account_id = created.json()['account_id']
+            response = await self.client.delete(f'/accounts/{account_id}', headers=headers)
+            self.assertEqual(response.status_code, 204, response.text)
+            self.assertEqual(response.content, b'')
+            self.assertEqual((await self.client.get(f'/accounts/{account_id}', headers=headers)).status_code, 404)
+            self.assertNotIn(account_id, [a['account_id'] for a in (await self.client.get('/accounts', headers=headers)).json()])
+            self.assertEqual((await self.client.delete(f'/accounts/{account_id}', headers=headers)).status_code, 404)
+
+    async def test_delete_enforces_workspace_scope_and_owner_access(self):
+        self.assertEqual((await self.client.delete('/accounts/999')).status_code, 404)
+        self.assertEqual((await self.client.delete('/accounts/1', headers={'Workspace-ID': '2'})).status_code, 404)
+        self.user = {'sub': '2'}
+        self.assertEqual((await self.client.delete('/accounts/1')).status_code, 403)
+        self.assertEqual((await self.client.delete('/accounts/1', headers={'Workspace-ID': '2'})).status_code, 403)
+        self.user = {'sub': '999'}
+        self.assertEqual((await self.client.delete('/accounts/1')).status_code, 401)
+        self.assertIsNotNone(await self.db.get(Account, 1))
+
+    async def test_delete_rejects_accounts_with_transactions_without_losing_history(self):
+        response = await self.client.delete('/accounts/1')
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIsNotNone(await self.db.get(Account, 1))
+        self.assertIsNotNone(await self.db.get(Transaction, 1))
+        self.assertEqual((await self.client.get('/accounts/1')).json()['balance'], '80.00')
+
+    async def test_delete_rejects_bank_linked_accounts_without_deleting_connection(self):
+        self.db.add(RevolutConnection(revolut_connection_id=1, external_consent_id='consent', status='active', connected_by_id=1))
+        self.db.add(Account(account_id=2, name='Bank', currency='EUR', workspace_id=1, balance=0, connection_id=1))
+        await self.db.commit()
+        response = await self.client.delete('/accounts/2')
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIsNotNone(await self.db.get(Account, 2))
+        self.assertIsNotNone(await self.db.get(RevolutConnection, 1))
 
     async def test_reads_scope_and_business_access(self):
         response = await self.client.get('/accounts')

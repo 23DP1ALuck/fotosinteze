@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from app.database import AsyncSession, get_db_session
 from app.dependencies.auth import get_current_user
 from app.dependencies.workspace import get_current_workspace
@@ -37,3 +37,11 @@ async def update_account(account_id: int, request: UpdateAccountRequest,
                          workspace: Workspace = Depends(get_current_workspace),
                          db: AsyncSession = Depends(get_db_session)):
     return await account_service.update_account(account_id, request, current_user, workspace, db)
+
+
+@router.delete('/accounts/{account_id}', status_code=204, responses={404: {'description': 'Account not found'}, 409: {'description': 'Account has transactions or is bank-linked'}})
+async def delete_account(account_id: int, current_user: dict = Depends(get_current_user),
+                         workspace: Workspace = Depends(get_current_workspace),
+                         db: AsyncSession = Depends(get_db_session)):
+    await account_service.delete_account(account_id, current_user, workspace, db)
+    return Response(status_code=204)
