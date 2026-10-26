@@ -1,3 +1,4 @@
+import { useAdminTranslation } from '@/i18n/use-admin-translation'
 import { useLayoutEffect, useRef } from 'react'
 
 export function WorkspaceNavigation({ items, activeItem, onSelect }: {
@@ -5,6 +6,7 @@ export function WorkspaceNavigation({ items, activeItem, onSelect }: {
   activeItem: string
   onSelect: (item: string) => void
 }) {
+  const { tr } = useAdminTranslation()
   const container = useRef<HTMLDivElement>(null)
   const selectedIndicator = useRef<HTMLSpanElement>(null)
   useLayoutEffect(() => {
@@ -28,10 +30,10 @@ export function WorkspaceNavigation({ items, activeItem, onSelect }: {
     return () => { cancelAnimationFrame(frame); observer?.disconnect(); window.removeEventListener('resize', measure) }
   }, [activeItem, items])
 
-  return <nav aria-label="Workspace" className="min-h-0 overflow-y-auto overscroll-contain pb-1 [scrollbar-width:thin]">
+  return <nav aria-label={tr("Workspace")} className="min-h-0 overflow-y-auto overscroll-contain pb-1 [scrollbar-width:thin]">
     <div ref={container} className="workspace-navigation relative isolate grid content-start gap-1">
       <span ref={selectedIndicator} aria-hidden className="workspace-nav-selection pointer-events-none absolute inset-x-0 top-0 rounded-[10px] bg-[#193f33] opacity-0" />
-      {items.map(item => <button type="button" key={item} onClick={() => onSelect(item)} aria-current={activeItem === item ? 'page' : undefined} className={`relative z-10 rounded-[10px] border-0 bg-transparent px-[19px] py-2.5 text-left font-medium ${activeItem === item ? 'text-white' : 'text-[#213d33] hover:bg-[#f1f4ec] focus-visible:bg-[#f1f4ec]'}`}>{item}</button>)}
+      {items.map(item => <button type="button" key={item} onClick={() => onSelect(item)} aria-current={activeItem === item ? 'page' : undefined} className={`relative z-10 rounded-[10px] border-0 bg-transparent px-[19px] py-2.5 text-left font-medium ${activeItem === item ? 'text-white' : 'text-[#213d33] hover:bg-[#f1f4ec] focus-visible:bg-[#f1f4ec]'}`}>{tr(item)}</button>)}
     </div>
   </nav>
 }

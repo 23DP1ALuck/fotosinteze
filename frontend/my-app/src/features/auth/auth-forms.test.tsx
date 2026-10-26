@@ -75,8 +75,8 @@ describe('auth forms', () => {
   })
 
   it.each([
-    ['server error', () => Promise.resolve({ ok: false, status: 500 }), 'The server returned an error (HTTP 500). Please check the backend logs.'],
-    ['connection failure', () => Promise.reject(new TypeError('Failed to fetch')), 'Cannot reach the server. Check that the backend is running and try again.'],
+    ['server error', () => Promise.resolve({ ok: false, status: 500 }), 'The server is temporarily unavailable. Please try again.'],
+    ['connection failure', () => Promise.reject(new TypeError('Failed to fetch')), 'Cannot reach the server. Please check your connection and try again.'],
   ])('shows an actionable message for %s', async (_label, response, message) => {
     stubAuthFetch(vi.fn().mockImplementation(response))
     const user = userEvent.setup()

@@ -1,3 +1,5 @@
+import { pageText } from '@/i18n/pages'
+import { useTranslation } from 'react-i18next'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowRight } from 'lucide-react'
@@ -16,6 +18,7 @@ import { loginSchema, type LoginFormValues } from '@/features/auth/schemas'
 import { cn } from '@/lib/utils'
 
 function LoginPage() {
+  const { t } = useTranslation('pages')
   const navigate = useNavigate()
   const location = useLocation()
   const { login } = useAuth()
@@ -49,49 +52,49 @@ function LoginPage() {
   })
 
   return (
-    <AuthShell headline="Slow and steady wins the race">
+    <AuthShell headline={t('slowAndSteadyWinsTheRace')}>
       <AuthBackLink />
       <div className="space-y-2 text-left">
         <h2 className="text-3xl font-semibold tracking-tight text-[#1a2e2a]">
-          Welcome back.
+          {t('welcomeBack')}
         </h2>
-        <p className="text-[#526259]">Log in to pick up where you left off.</p>
+        <p className="text-[#526259]">{t('logInToPickUpWhereYouLeftOff')}</p>
       </div>
 
       <KeyboardForm validateField={trigger} className="mt-8 space-y-5 text-left" onSubmit={onSubmit} noValidate>
         {serverError ? <FormAlert message={serverError} /> : null}
 
         <div className="space-y-2">
-          <Label htmlFor="email">Email address</Label>
+          <Label htmlFor="email">{t('emailAddress')}</Label>
           <Input
             id="email"
             type="email"
             autoComplete="email"
-            placeholder="you@example.com"
+            placeholder={t('emailPlaceholder')}
             aria-invalid={Boolean(errors.email)}
             disabled={isSubmitting}
             {...register('email')}
           />
           {errors.email ? (
-            <p className="text-sm text-red-600">{errors.email.message}</p>
+            <p className="text-sm text-red-600">{pageText(errors.email.message, t)}</p>
           ) : null}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t('password')}</Label>
           <PasswordField
             id="password"
             autoComplete="current-password"
-            placeholder="Enter your password"
+            placeholder={t('enterYourPassword')}
             aria-invalid={Boolean(errors.password)}
             disabled={isSubmitting}
             {...register('password')}
           />
           {errors.password ? (
-            <p className="text-sm text-red-600">{errors.password.message}</p>
+            <p className="text-sm text-red-600">{pageText(errors.password.message, t)}</p>
           ) : null}
           <div className="flex justify-end">
-            <span className="text-sm text-[#526259]">Forgot password?</span>
+            <span className="text-sm text-[#526259]">{t('forgotPassword')}</span>
           </div>
         </div>
 
@@ -102,15 +105,15 @@ function LoginPage() {
             'inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#1a3c34] text-sm font-medium text-white transition-opacity hover:bg-[#163329] disabled:cursor-not-allowed disabled:opacity-60',
           )}
         >
-          {isSubmitting ? 'Logging in…' : 'Log in'}
+          {isSubmitting ? t('loggingIn') : t('logIn')}
           {!isSubmitting ? <ArrowRight className="size-4" aria-hidden /> : null}
         </button>
       </KeyboardForm>
 
       <p className="mt-6 text-center text-sm text-[#526259]">
-        New here?{' '}
+        {t('newHere')}{' '}
         <Link className="font-medium text-[#1a3c34] hover:underline" to="/register">
-          Create an account
+          {t('createAnAccount')}
         </Link>
       </p>
     </AuthShell>
