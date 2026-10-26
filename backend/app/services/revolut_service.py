@@ -1,5 +1,6 @@
 import asyncio
 import ssl
+import re
 from typing import Literal
 
 import httpx
@@ -20,7 +21,8 @@ async def sandbox_request(method: str, path: str, config: Settings, **kwargs) ->
                 config.revolut_private_key_path, config.revolut_ca_bundle_path)):
         raise RuntimeError('Configure REVOLUT_API_CLIENT_ID, REVOLUT_TRANSPORT_CERT_PATH, '
                            'REVOLUT_PRIVATE_KEY_PATH and REVOLUT_CA_BUNDLE_PATH first')
-    if path not in ('/token', '/account-access-consents'):
+    if not ((method == 'POST' and path in ('/token', '/account-access-consents'))
+            or (method == 'GET' and re.fullmatch(r'/accounts(?:/[A-Za-z0-9_-]{1,255}/balances)?', path))):
         raise RuntimeError('Unsupported sandbox endpoint')
     try:
         context = ssl.create_default_context(cafile=str(config.revolut_ca_bundle_path.expanduser()))

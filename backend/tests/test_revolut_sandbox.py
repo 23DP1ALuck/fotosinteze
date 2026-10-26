@@ -105,3 +105,20 @@ class RevolutSandboxTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(RuntimeError, 'Could not reach Revolut sandbox securely') as error:
                 await revolut_service.get_sandbox_access_token(self.config())
             self.assertNotIn('sensitive-details', str(error.exception))
+
+
+    async def test_account_reads_use_pinned_verified_transport_and_reject_other_paths(self):
+        requests = []
+        def respond(request):
+            requests.append(str(request.url))
+            return httpx.Response(200, json={'Data': {}})
+        with patch.object(revolut_service.httpx, 'AsyncClient', self.client_factory(respond)):
+            for path in ['/accounts', '/accounts/abc-123/balances']:
+                await revolut_service.sandbox_request('GET', path, self.config())
+            for method, path in [('GET', '/token'), ('POST', '/accounts'),
+                                 ('GET', '/accounts/../../token'), ('GET', 'https://evil.test/accounts'),
+                                 ('GET', '/accounts/abc%2F..%2Ftoken/balances')]:
+                with self.assertRaisesRegex(RuntimeError, 'Unsupported sandbox endpoint'):
+                    await revolut_service.sandbox_request(method, path, self.config())
+        self.assertEqual(requests, ['https://sandbox-oba-auth.revolut.com/accounts',
+                                  'https://sandbox-oba-auth.revolut.com/accounts/abc-123/balances'])

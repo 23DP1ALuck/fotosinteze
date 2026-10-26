@@ -7,8 +7,6 @@ export function stubAuthFetch(mock: unknown) {
   vi.stubGlobal('fetch',vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
     if (String(url).endsWith('/workspaces')) return Promise.resolve(Response.json([{ id:7, name:'Personal', type:'PERSONAL', role:'OWNER' }]))
     if (String(url).endsWith('/revolut/connection')) return Promise.resolve(Response.json({ status:'not_connected', expires_at:null, last_sync_at:null }))
-    const response = finance.respond(url, init)
-    if (response) return Promise.resolve(response)
-    return transport(url,init)
+    return finance.respond(url,init) ?? transport(url,init)
   }))
 }

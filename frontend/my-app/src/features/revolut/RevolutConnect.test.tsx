@@ -1,12 +1,17 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { setAccessToken, clearSession } from '@/features/auth/storage'
 import { API_URL } from '@/features/auth/api'
 import { RevolutConnect } from './RevolutConnect'
 
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function render(ui: Parameters<typeof rtlRender>[0]) { return rtlRender(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>) }
+
 const disconnected = { status: 'not_connected', expires_at: null, last_sync_at: null }
 beforeEach(() => {
+  queryClient.clear()
   const token = `h.${btoa(JSON.stringify({ sub: '1', exp: Date.now() / 1000 + 3600 }))}.s`
   setAccessToken(token)
 })
@@ -93,4 +98,32 @@ it('does not accept malformed connection status data', async () => {
   render(<RevolutConnect workspaceId={7} />)
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not check Revolut connection')
   expect(screen.queryByText('Connected')).not.toBeInTheDocument()
+})
+
+
+it('loads accounts and refreshes workspace account queries after success', async () => {
+  const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+  vi.stubGlobal('fetch', vi.fn((url) => Promise.resolve(Response.json(
+    String(url).endsWith('/revolut/connection')
+      ? { ...disconnected, status: 'connected' }
+      : { imported_count: 3, last_sync_at: '2026-10-25T20:00:00Z' }))))
+  render(<RevolutConnect workspaceId={7} />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Load accounts' }))
+  expect(await screen.findByText('Loaded 3 Revolut accounts.')).toBeInTheDocument()
+  expect(screen.getByText(/Last account sync:/)).toBeInTheDocument()
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['accounts', 1, 7] })
+  const call = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/revolut/accounts/import'))
+  expect(call?.[1]?.method).toBe('POST')
+  expect(new Headers(call?.[1]?.headers).get('Workspace-ID')).toBe('7')
+  invalidate.mockRestore()
+})
+
+it('shows import errors and allows another attempt', async () => {
+  vi.stubGlobal('fetch', vi.fn((url) => Promise.resolve(String(url).endsWith('/revolut/connection')
+    ? Response.json({ ...disconnected, status: 'connected' })
+    : Response.json({ detail: 'Reconnect Revolut before loading accounts' }, { status: 409 }))))
+  render(<RevolutConnect workspaceId={7} />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Load accounts' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Reconnect Revolut before loading accounts')
+  expect(screen.getByRole('button', { name: 'Load accounts' })).toBeEnabled()
 })

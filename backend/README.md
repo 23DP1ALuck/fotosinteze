@@ -777,8 +777,8 @@ hostname to the frontend hostname.
 
 This remains the Open Banking sandbox. Deployment does not enable live accounts:
 production credentials, certificates and provider endpoints need a separate
-production rollout. Authorization stores tokens but does not yet import accounts
-or transactions, or refresh Revolut tokens.
+production rollout. Authorization stores tokens. Account/balance import is a
+separate action; transaction import and token refresh remain unimplemented.
 
 ### Personal Workspace connection UI (REV-05)
 
@@ -797,9 +797,29 @@ mount and when the tab regains focus; failed or malformed status responses show
 an error. The callback page provides a Return to Fotosinteze link to `/app`, where
 status is fetched again. Business Workspaces do not render these controls.
 
-REV-03 account/balance retrieval, REV-04 transaction imports, and the RSYNC
-service, UI and tests remain separate work. A connection does not yet populate
-the sample dashboard with Revolut data.
+### Personal account and balance import (REV-03)
+
+After connecting, open **Personal → Accounts → Load accounts**. The authenticated
+`POST /revolut/accounts/import` uses the selected `Workspace-ID`, imports all
+approved sandbox accounts and available balances, and returns `imported_count`
+and a UTC `last_sync_at`. The Accounts list refreshes after success.
+
+Apply `alembic upgrade head` before starting this version. Migration
+`d73e41a9c602` adds external account IDs and permits multiple accounts per
+connection. It preserves existing accounts and transaction links. Its downgrade
+refuses to proceed if multiple accounts would violate the old unique constraint.
+
+The import uses verified mTLS, validates account/currency IDs and Decimal
+credit/debit amounts, and saves all results in one transaction. Repeating it
+updates balances without duplicates; existing account names, manual accounts
+and the selected main account are preserved. Failed reads or validation leave
+stored balances and last-sync time unchanged. Expired or invalid credentials
+return `409` and require reconnecting; Business Workspaces return `400`.
+Paginated results and unsupported/ambiguous balance types fail safely without
+partial imports; the verified sandbox returns one page and `InterimAvailable`.
+
+REV-04 transaction imports and the RSYNC service/UI remain separate work.
+Loading accounts does not import transaction history.
 
 ### Endpoints and browser flow
 
