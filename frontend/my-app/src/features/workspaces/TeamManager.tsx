@@ -1,3 +1,4 @@
+import { dismissDialogOnBackdropClick } from '@/lib/dialog-backdrop'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -79,7 +80,7 @@ function TeamDialog({ section, data, onChange, ownerName, action, onClose, onSuc
     onClose()
   }
 
-  return <dialog ref={dialog} aria-labelledby={headingId} onCancel={onClose} className="m-auto max-h-[calc(100svh-32px)] w-[min(520px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_24px_100px_#102c2330] backdrop:bg-[#102c23]/40 backdrop:backdrop-blur-[4px]">
+  return <dialog onClick={dismissDialogOnBackdropClick} ref={dialog} aria-labelledby={headingId} onCancel={onClose} className="m-auto max-h-[calc(100svh-32px)] w-[min(520px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_24px_100px_#102c2330] backdrop:bg-[#102c23]/40 backdrop:backdrop-blur-[4px]">
     <div className="flex items-center justify-between gap-4"><h2 id={headingId} className="m-0 font-sans! text-[24px] font-semibold! tracking-tight">{action.kind === 'create' ? 'Add' : action.kind === 'edit' ? 'Edit' : section === 'Employees' ? 'Remove' : 'Delete'} {noun}</h2><button className={iconButton} aria-label="Close management dialog" onClick={onClose}><X size={20} /></button></div>
     {action.kind === 'delete' ? <div className="mt-5 space-y-5">
       <p className="text-sm">{section === 'Employees' ? 'Remove' : 'Delete'} <strong>{item?.name}</strong> from this workspace?</p>

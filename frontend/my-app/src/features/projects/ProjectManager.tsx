@@ -1,3 +1,4 @@
+import { dismissDialogOnBackdropClick } from '@/lib/dialog-backdrop'
 import { DateInput } from '@/components/calendar/DateInput'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useId, useRef, useState } from 'react'
@@ -45,7 +46,7 @@ function ProjectDialog({ action, catalog, canManage, onClose, onSuccess }: { act
   }
   const close = () => { if (!busy) onClose() }
   const statuses = [...new Set(['Planned', 'Active', 'Completed', ...(project?.status ? [project.status] : [])])]
-  return <dialog ref={dialog} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); close() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(540px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_24px_100px_#102c2330] backdrop:bg-[#102c23]/40 backdrop:backdrop-blur-[4px]">
+  return <dialog onClick={dismissDialogOnBackdropClick} ref={dialog} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); close() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(540px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_24px_100px_#102c2330] backdrop:bg-[#102c23]/40 backdrop:backdrop-blur-[4px]">
     <div className="flex items-center justify-between"><h2 id={titleId} className="text-2xl font-semibold!">{action.kind === 'create' ? 'Add' : action.kind === 'edit' ? 'Edit' : 'Delete'} project</h2><button disabled={busy} aria-label="Close project dialog" onClick={close} className={iconButton}><X size={20} /></button></div>
     {error && <p role="alert" className="mt-4 rounded-xl bg-[#fcf0ed] p-4 text-sm text-[#a43b32]">{error}</p>}
     {action.kind === 'delete' ? <div className="mt-5 space-y-5"><p>Delete <strong>{project?.name}</strong> from this workspace?</p><div className="flex justify-end gap-3"><button disabled={busy} onClick={close} className={secondary}>Cancel</button><button disabled={busy} onClick={() => void mutate()} className="rounded-xl bg-[#a43b32] px-4 py-3 text-sm text-white disabled:opacity-40">Delete project</button></div></div> : <KeyboardForm validateField={trigger} onSubmit={handleSubmit(values => mutate(values))} className="mt-5 space-y-5" noValidate><fieldset disabled={busy} className="grid gap-5">

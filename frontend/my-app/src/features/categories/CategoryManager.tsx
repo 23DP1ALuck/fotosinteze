@@ -1,3 +1,4 @@
+import { dismissDialogOnBackdropClick } from '@/lib/dialog-backdrop'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -54,7 +55,7 @@ function CategoryDialog({ action, categories, workspaceId, onClose, onSaved }: {
   })
   const close = () => { if (!busy) onClose() }
   const title = action.kind === 'create' ? 'Create category' : action.kind === 'edit' ? 'Edit category' : 'Delete category'
-  return <dialog ref={dialog} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); close() }}
+  return <dialog onClick={dismissDialogOnBackdropClick} ref={dialog} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); close() }}
     className="m-auto max-h-[calc(100svh-40px)] w-[min(460px,calc(100%_-_32px))] overflow-y-auto rounded-[18px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/35 backdrop:backdrop-blur-[3px]">
     <div className="flex items-center justify-between gap-4"><h2 id={titleId} className="m-0 text-[23px] font-semibold!">{title}</h2><button disabled={busy} type="button" aria-label="Close category dialog" onClick={close} className={iconButton}><X size={20} /></button></div>
     {error && <p role="alert" className="mt-5 rounded-lg bg-[#fcf0ed] p-3 text-sm text-[#a43b32]">{error}</p>}
