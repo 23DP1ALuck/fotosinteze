@@ -868,3 +868,22 @@ mocked provider responses, not real customer credentials:
 ```bash
 .venv/bin/python -m unittest discover -s tests -p 'test_revolut*.py'
 ```
+
+### Local demo transactions
+
+To populate an existing local Personal workspace with sample transaction history:
+
+```bash
+cd backend
+.venv/bin/alembic upgrade head
+.venv/bin/python -m app.services.revolut_demo --workspace-id YOUR_PERSONAL_WORKSPACE_ID
+```
+
+The command is restricted to this checkout's `backend/database.sqlite` and a
+localhost frontend origin. It creates three `[DEMO] Revolut` accounts (GBP, EUR,
+USD), with sample salary, grocery and coffee records: nine transactions total.
+All descriptions/categories are labelled `[DEMO]`, and records use the `MANUAL`
+source. They are local fixtures, not transactions returned by Revolut. Existing
+accounts and the selected main account are preserved. Rerunning skips existing
+demo transaction IDs. It never sends requests to Revolut or changes its balances.
+Use a backup before populating an existing development database.
