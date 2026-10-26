@@ -1,3 +1,4 @@
+import { dismissDialogOnBackdropClick } from '@/lib/dialog-backdrop'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -16,7 +17,7 @@ export function WorkspaceSettingsDialog({ workspaceId, onSave, onClose }: Props)
   const [busy, setBusy] = useState(false)
   const query = useQuery({ queryKey: workspaceQueryKey('workspace-settings', workspaceId), queryFn: ({ signal }) => getBusinessWorkspaceSettings(workspaceId, signal), staleTime: 0, refetchOnWindowFocus: false, refetchOnReconnect: false })
   useEffect(() => { dialog.current?.showModal() }, [])
-  return <dialog ref={dialog} aria-labelledby={titleId} aria-busy={busy || query.isFetching} onCancel={event => { event.preventDefault(); if (!busy) onClose() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(520px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/40 max-sm:p-5">
+  return <dialog onClick={dismissDialogOnBackdropClick} ref={dialog} aria-labelledby={titleId} aria-busy={busy || query.isFetching} onCancel={event => { event.preventDefault(); if (!busy) onClose() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(520px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/40 max-sm:p-5">
     <div className="mb-5 flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-[#ecf0e6]"><Settings aria-hidden size={22} /></span><h2 id={titleId} className="text-[23px] font-semibold!">Business workspace settings</h2></div>
     {query.isFetching && <p role="status" className="text-sm">Loading workspace settings…</p>}
     {query.isError && <div className="rounded-xl bg-[#fcf0ed] p-4 text-sm"><p role="alert">{query.error.message}</p><button type="button" onClick={() => void query.refetch()} className="mt-3 underline">Retry</button></div>}

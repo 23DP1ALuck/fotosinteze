@@ -1,3 +1,4 @@
+import { dismissDialogOnBackdropClick } from '@/lib/dialog-backdrop'
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -163,7 +164,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate,
       {active && isBusiness && workspace.role === 'OWNER' && view === 'Employees' && <EmployeeManager key={backendWorkspaceId} workspaceId={backendWorkspaceId} workspaceName={workspace.name} canManage={workspace.role === 'OWNER'} />}
     </main>
     {active && exploringExpenses && summary && <ExpenseExplorer workspaceId={backendWorkspaceId} range={{from:summary.period_start,to:new Date(Date.parse(`${summary.period_end}T00:00:00Z`)-86400000).toISOString().slice(0,10)}} onClose={()=>setExploringExpenses(false)} />}
-    <dialog ref={dialog} className="m-auto max-h-[calc(100svh-40px)] w-[min(460px,calc(100%_-_32px))] overflow-y-auto rounded-[18px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/35 backdrop:backdrop-blur-[3px] [&_h2]:m-0 [&_h2]:text-[23px] [&_h2]:font-semibold" aria-labelledby="dashboard-dialog-title">
+    <dialog onClick={dismissDialogOnBackdropClick} ref={dialog} className="m-auto max-h-[calc(100svh-40px)] w-[min(460px,calc(100%_-_32px))] overflow-y-auto rounded-[18px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/35 backdrop:backdrop-blur-[3px] [&_h2]:m-0 [&_h2]:text-[23px] [&_h2]:font-semibold" aria-labelledby="dashboard-dialog-title">
       <div className="flex items-center justify-between gap-[15px]"><h2 id="dashboard-dialog-title">Your account</h2><button className="rounded-full border-0 bg-[#eff2e9] p-[6px]" aria-label="Close dialog" onClick={() => dialog.current?.close()}><X size={20} /></button></div>
       {dialogType === 'profile' && <div className={formClasses}><strong>{displayName}</strong><p>{user?.email}</p><p className="text-xs text-[#627168]">{workspace.name} workspace</p><button className={primaryButtonClasses} onClick={handleLogout}>Log out</button>{logoutError && <p role="alert">{logoutError}</p>}</div>}
     </dialog>

@@ -1,3 +1,4 @@
+import { dismissDialogOnBackdropClick } from '@/lib/dialog-backdrop'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -29,7 +30,7 @@ function DepartmentDialog({ action, onChange, onClose }: { action: Action; onCha
     finally { setBusy(false) }
   }
   const title = action.kind === 'create' ? 'Create department' : action.kind === 'rename' ? 'Rename department' : 'Delete department'
-  return <dialog ref={dialog} aria-labelledby={`${id}-title`} aria-busy={busy} onCancel={event => { event.preventDefault(); if (!busy) onClose() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(480px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_24px_100px_#102c2330] backdrop:bg-[#102c23]/40 max-sm:p-5">
+  return <dialog onClick={dismissDialogOnBackdropClick} ref={dialog} aria-labelledby={`${id}-title`} aria-busy={busy} onCancel={event => { event.preventDefault(); if (!busy) onClose() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(480px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_24px_100px_#102c2330] backdrop:bg-[#102c23]/40 max-sm:p-5">
     <div className="flex items-center justify-between gap-4"><h2 id={`${id}-title`} className="text-2xl font-semibold!">{title}</h2><button type="button" aria-label="Close department dialog" disabled={busy} onClick={onClose} className={iconButton}><X size={20} /></button></div>
     {error && <p role="alert" className="mt-5 rounded-xl bg-[#fcf0ed] p-4 text-sm text-[#a43b32]">{error}</p>}
     {action.kind === 'delete' ? <div className="mt-6"><p className="text-sm">Delete <strong>{action.department.name}</strong> from this workspace?</p><p className="mt-3 text-xs text-[#526259]">Employees must be reassigned first. Projects remain in the workspace.</p><div className="mt-6 flex justify-end gap-3 border-t border-[#e1e5df] pt-5"><button type="button" disabled={busy} onClick={onClose} className={secondary}>Cancel</button><button type="button" disabled={busy} onClick={() => void submit()} className="rounded-xl bg-[#a43b32] px-5 py-3 text-sm text-white disabled:opacity-50">{busy ? 'Deleting…' : 'Delete department'}</button></div></div> : <KeyboardForm validateField={trigger} onSubmit={handleSubmit(value => submit(value.name))} noValidate className="mt-6">

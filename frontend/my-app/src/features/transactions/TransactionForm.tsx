@@ -1,3 +1,4 @@
+import { dismissDialogOnBackdropClick } from '@/lib/dialog-backdrop'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useId, useMemo, useRef } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
@@ -94,7 +95,7 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
     }
   })
   const title = transaction ? 'Edit transaction' : `Add ${type}`
-  return <dialog ref={dialog} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); if (!busy) onClose() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(520px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/40 max-sm:p-5">
+  return <dialog onClick={dismissDialogOnBackdropClick} ref={dialog} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); if (!busy) onClose() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(520px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/40 max-sm:p-5">
     <div className="flex items-center justify-between gap-4"><div><p className="mb-2 text-xs text-[#526259]">{effectiveType === 'income' ? 'Money in' : 'Money out'}</p><h2 id={titleId} className="text-[25px] font-semibold!">{title}</h2></div><button type="button" disabled={busy} onClick={onClose} aria-label="Close transaction form" className="rounded-xl p-2 hover:bg-[#eaf0e6]"><X size={20} /></button></div>
     {loading && <p role="status" className="mt-5 text-sm">Loading transaction options…</p>}
     {loadError && <div className="mt-5 rounded-xl bg-[#fcf0ed] p-4 text-sm"><p role="alert">{loadError}</p><button type="button" onClick={() => { options.retry(); catalog?.refresh() }} className="mt-3 underline">Retry options</button></div>}

@@ -1,3 +1,4 @@
+import { dismissDialogOnBackdropClick } from '@/lib/dialog-backdrop'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -73,7 +74,7 @@ export function CreateBusinessDialog({ workspaces, onCreate, onClose }: {
     }
   })
 
-  return <dialog ref={dialog} aria-labelledby="create-business-title" onCancel={event => { if (isSubmitting) event.preventDefault(); else onClose() }}
+  return <dialog onClick={dismissDialogOnBackdropClick} ref={dialog} aria-labelledby="create-business-title" onCancel={event => { if (isSubmitting) event.preventDefault(); else onClose() }}
     className="relative m-auto max-h-[calc(100svh-32px)] w-[min(640px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-8 font-sans scheme-light [&_button]:cursor-pointer text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/40 max-sm:p-5">
     <button type="button" aria-label="Close business workspace dialog" disabled={isSubmitting} onClick={onClose} className="absolute top-7 right-7 rounded-lg p-2 text-[#526259] hover:bg-[#edf0e8]"><X size={18} /></button>
     <div className="grid size-12 place-items-center rounded-2xl bg-[#d5f579]"><Plus size={28} strokeWidth={1.5} /></div>

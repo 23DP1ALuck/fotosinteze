@@ -227,3 +227,32 @@ it('does not guess a bank transaction direction when its original category is un
   expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   expect(screen.getByRole('alert')).toHaveTextContent('Bank transaction direction is unavailable')
 })
+
+it('closes on a backdrop click while keeping clicks inside the transaction form open', async () => {
+  const onClose = vi.fn()
+  render(<TransactionForm workspaceId={7} type="expense" options={options} onClose={onClose} onSaved={() => {}} />)
+  const dialog = screen.getByRole('dialog')
+  dialog.getBoundingClientRect = () => ({ left: 100, right: 600, top: 100, bottom: 600, width: 500, height: 500, x: 100, y: 100, toJSON() {} })
+  fireEvent.click(screen.getByLabelText('Description'), { clientX: 200, clientY: 200 })
+  fireEvent.click(dialog, { clientX: 120, clientY: 120 })
+  expect(onClose).not.toHaveBeenCalled()
+  fireEvent.click(dialog, { clientX: 50, clientY: 200 })
+  expect(onClose).toHaveBeenCalledTimes(1)
+})
+
+it('keeps the transaction modal open on backdrop clicks while saving', async () => {
+  let finish!: (response: Response) => void
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { finish = resolve })))
+  const onClose = vi.fn()
+  const onSaved = vi.fn()
+  render(<TransactionForm workspaceId={7} type="expense" options={options} onClose={onClose} onSaved={onSaved} />)
+  await userEvent.selectOptions(screen.getByLabelText('Account'), '12')
+  await userEvent.selectOptions(screen.getByLabelText('Category'), '4')
+  await userEvent.type(screen.getByLabelText('Amount (EUR)'), '10')
+  await userEvent.click(screen.getByRole('button', { name: 'Save expense' }))
+  await waitFor(() => expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true'))
+  fireEvent.click(screen.getByRole('dialog'), { clientX: -10, clientY: -10 })
+  expect(onClose).not.toHaveBeenCalled()
+  await act(async () => finish(Response.json(transaction)))
+  expect(onSaved).toHaveBeenCalledTimes(1)
+})
