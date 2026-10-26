@@ -1,3 +1,4 @@
+import { dismissDialogOnBackdropClick } from '@/lib/dialog-backdrop'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -31,7 +32,7 @@ export function EmployeeDialog({ action, departments, onSave, onClose }: {
     finally { locked.current = false; setBusy(false) }
   }
   const title = action.kind === 'add' ? 'Add employee' : action.kind === 'assign' ? 'Assign department' : 'Remove employee'
-  return <dialog ref={dialog} aria-labelledby={`${id}-title`} aria-busy={busy} onCancel={event => { event.preventDefault(); if (!locked.current) onClose() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(500px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_24px_100px_#102c2330] backdrop:bg-[#102c23]/40 max-sm:p-5">
+  return <dialog onClick={dismissDialogOnBackdropClick} ref={dialog} aria-labelledby={`${id}-title`} aria-busy={busy} onCancel={event => { event.preventDefault(); if (!locked.current) onClose() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(500px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_24px_100px_#102c2330] backdrop:bg-[#102c23]/40 max-sm:p-5">
     <div className="flex items-center justify-between gap-4"><h2 id={`${id}-title`} className="text-2xl font-semibold!">{title}</h2><button type="button" disabled={busy} aria-label="Close employee dialog" onClick={onClose} className="rounded-lg p-2 hover:bg-[#eaf0e6] disabled:opacity-50"><X size={20} /></button></div>
     {error && <p role="alert" className="mt-5 rounded-xl bg-[#fcf0ed] p-4 text-sm text-[#a43b32]">{error}</p>}
     {action.kind === 'add' ? <KeyboardForm validateField={trigger} noValidate onSubmit={event => { void handleSubmit(values => submit(values.email))(event) }} className="mt-6">
