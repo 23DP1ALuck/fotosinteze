@@ -1,3 +1,4 @@
+import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useQueryClient } from '@tanstack/react-query'
@@ -16,7 +17,7 @@ export function CreateAccountDialog({ workspaceId, onClose, onCreated }: { works
   const controller = useRef<AbortController | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const { register, handleSubmit, formState: { errors } } = useForm<AccountCreate>({ defaultValues: { name: '', currency: 'EUR', balance: '0.00' } })
+  const { register, trigger, handleSubmit, formState: { errors } } = useForm<AccountCreate>({ defaultValues: { name: '', currency: 'EUR', balance: '0.00' } })
   useEffect(() => {
     const element = dialog.current
     mounted.current = true
@@ -44,10 +45,10 @@ export function CreateAccountDialog({ workspaceId, onClose, onCreated }: { works
   const close = () => { if (!saving.current) onClose() }
   return <dialog ref={dialog} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); close() }} className="m-auto max-h-[calc(100svh-32px)] w-[min(540px,calc(100%_-_32px))] overflow-y-auto rounded-[24px] border-0 bg-white p-7 text-[#193f33] shadow-[0_24px_100px_#102c2330] backdrop:bg-[#102c23]/40 backdrop:backdrop-blur-[4px]">
     <div className="flex items-center justify-between gap-3"><h2 id={titleId} className="text-2xl font-semibold!">Add account</h2><button type="button" disabled={busy} onClick={close} aria-label="Close add account" className="rounded-lg p-2 hover:bg-[#eaf0e6] disabled:opacity-40"><X size={20} /></button></div>
-    <p className="mt-3 text-sm text-[#68796e]">Keep each bank account separate, for example Swedbank or Citadele. Enter its current balance to get started.</p>
-    <p className="mt-3 rounded-xl bg-[#f7f8f2] p-4 text-sm text-[#68796e]">This creates a manually tracked account. Balances change when you record transactions or update them yourself.</p>
+    <p className="mt-3 text-sm text-[#526259]">Keep each bank account separate, for example Swedbank or Citadele. Enter its current balance to get started.</p>
+    <p className="mt-3 rounded-xl bg-[#f7f8f2] p-4 text-sm text-[#526259]">This creates a manually tracked account. Balances change when you record transactions or update them yourself.</p>
     {error && <p role="alert" className="mt-4 rounded-xl bg-[#fcf0ed] p-4 text-sm text-[#a43b32]">{error}</p>}
-    <form onSubmit={event => { void handleSubmit(save)(event) }} noValidate className="mt-5 space-y-5">
+    <KeyboardForm validateField={trigger} onSubmit={event => { void handleSubmit(save)(event) }} noValidate className="mt-5 space-y-5">
       <fieldset disabled={busy} className="grid gap-5">
         <label className="grid gap-2 text-sm">Account name<Input autoFocus aria-label="Account name" placeholder="e.g. Swedbank" maxLength={120} {...register('name', { validate: value => value.trim().length > 0 || 'Account name is required.', maxLength: { value: 120, message: 'Use 120 characters or fewer.' } })} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? `${titleId}-name-error` : undefined} />{errors.name && <span id={`${titleId}-name-error`} role="alert" className="text-xs text-[#a43b32]">{errors.name.message}</span>}</label>
         <div className="grid grid-cols-2 gap-4 max-sm:grid-cols-1">
@@ -56,6 +57,6 @@ export function CreateAccountDialog({ workspaceId, onClose, onCreated }: { works
         </div>
       </fieldset>
       <div className="flex flex-wrap justify-end gap-3 border-t border-[#e1e5df] pt-5"><button type="button" disabled={busy} onClick={close} className="rounded-xl bg-[#eaf0e6] px-4 py-3 text-sm hover:bg-[#dce6d4] disabled:opacity-40">Cancel</button><button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-xl bg-[#193f33] px-5 py-3 text-sm text-white hover:bg-[#285947] disabled:opacity-40">{busy && <LoaderCircle size={16} className="animate-spin" />}{busy ? 'Adding…' : 'Add account'}</button></div>
-    </form>
+    </KeyboardForm>
   </dialog>
 }

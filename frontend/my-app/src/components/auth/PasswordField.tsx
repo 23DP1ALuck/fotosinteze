@@ -19,7 +19,7 @@ function PasswordField({ className, disabled, ...props }: PasswordFieldProps) {
       <button
         type="button"
         className={cn(
-          'absolute top-1/2 right-3 -translate-y-1/2 text-sm text-[#6b7280] hover:text-[#1a3c34]',
+          'absolute top-1/2 right-3 -translate-y-1/2 text-sm text-[#526259] hover:text-[#1a3c34]',
           disabled && 'pointer-events-none opacity-50',
         )}
         onClick={() => setVisible((current) => !current)}
