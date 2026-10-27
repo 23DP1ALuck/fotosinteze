@@ -18,6 +18,10 @@ function transport(rows = [manual, bank]) {
     expect(new Headers(init.headers).get('Workspace-ID')).toBe('42')
     expect(new Headers(init.headers).get('Authorization')).toMatch(/^Bearer /)
     const accountId = Number(url.split('/').at(-1))
+    if (init.method === 'DELETE') {
+      rows = rows.filter(row => row.account_id !== accountId)
+      return new Response(null, { status: 204 })
+    }
     if (init.method === 'PUT') {
       const input = JSON.parse(String(init.body))
       rows = rows.map(row => row.account_id === accountId ? { ...row, ...input } : input.is_main ? { ...row, is_main: false } : row)
@@ -294,4 +298,105 @@ it('protects real bank balances and distinguishes Enable Banking from the sandbo
   await userEvent.click(dialog.getByRole('button', { name: 'Save changes' }))
   const put = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === 'PUT')!
   expect(JSON.parse(String(put[1]?.body))).toEqual({ name: 'My real bank' })
+})
+
+
+it('confirms deletion from account details without losing an edit when cancelled', async () => {
+  const fetcher = transport()
+  vi.stubGlobal('fetch', fetcher)
+  const user = userEvent.setup()
+  render(<Harness />)
+  await user.click(await screen.findByRole('button', { name: 'View Cash details' }))
+  await user.clear(await screen.findByLabelText('Display name'))
+  await user.type(screen.getByLabelText('Display name'), 'Unsaved name')
+  await user.click(screen.getByRole('button', { name: 'Delete account' }))
+  const confirmation = within(screen.getByRole('dialog', { name: 'Delete account?' }))
+  expect(confirmation.getByText('Cash')).toBeInTheDocument()
+  expect(confirmation.getByText('€1,234.56')).toBeInTheDocument()
+  expect(confirmation.getByRole('button', { name: 'Keep account' })).toHaveFocus()
+  expect(fetcher.mock.calls.some(([, init]) => init.method === 'DELETE')).toBe(false)
+  await user.click(confirmation.getByRole('button', { name: 'Keep account' }))
+  expect(screen.getByLabelText('Display name')).toHaveValue('Unsaved name')
+})
+
+it('deletes an account directly from its card and keeps it deleted after reopening', async () => {
+  const fetcher = transport()
+  vi.stubGlobal('fetch', fetcher)
+  const user = userEvent.setup()
+  const view = render(<Harness />)
+  await user.click(await screen.findByRole('button', { name: 'Delete Cash' }))
+  const confirmation = within(screen.getByRole('dialog', { name: 'Delete account?' }))
+  await user.click(confirmation.getByRole('button', { name: 'Delete account' }))
+  await screen.findByText('“Cash” was deleted.')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'View Cash details' })).not.toBeInTheDocument()
+  const deletion = fetcher.mock.calls.find(([, init]) => init.method === 'DELETE')!
+  expect(deletion[0]).toBe('/api/accounts/10')
+  view.unmount()
+  render(<Harness />)
+  await screen.findByRole('button', { name: 'View Revolut details' })
+  expect(screen.queryByRole('button', { name: 'View Cash details' })).not.toBeInTheDocument()
+})
+
+it('explains protected transaction history when the API rejects deletion', async () => {
+  const base = transport()
+  vi.stubGlobal('fetch', vi.fn(async (url, init: RequestInit) => init.method === 'DELETE'
+    ? Response.json({ detail: 'Account has transactions or is bank-linked and cannot be deleted' }, { status: 409 }) : base(url, init)))
+  const user = userEvent.setup()
+  render(<Harness />)
+  await user.click(await screen.findByRole('button', { name: 'Delete Cash' }))
+  const confirmation = within(screen.getByRole('dialog', { name: 'Delete account?' }))
+  await user.click(confirmation.getByRole('button', { name: 'Delete account' }))
+  expect(await confirmation.findByRole('alert')).toHaveTextContent('Your account and transaction history are unchanged.')
+  expect(confirmation.getByRole('button', { name: 'Delete account' })).toBeDisabled()
+  await user.click(confirmation.getByRole('button', { name: 'Keep account' }))
+  expect(screen.getByRole('button', { name: 'View Cash details' })).toBeInTheDocument()
+})
+
+it('prevents duplicate deletion and accidental dismissal while the request is pending', async () => {
+  let finish: (response: Response) => void = () => {}
+  const base = transport()
+  const fetcher = vi.fn(async (url, init: RequestInit) => init.method === 'DELETE'
+    ? new Promise<Response>(resolve => { finish = resolve }) : base(url, init))
+  vi.stubGlobal('fetch', fetcher)
+  const user = userEvent.setup()
+  render(<Harness />)
+  await user.click(await screen.findByRole('button', { name: 'Delete Cash' }))
+  const element = screen.getByRole('dialog', { name: 'Delete account?' })
+  const confirmation = within(element)
+  await user.dblClick(confirmation.getByRole('button', { name: 'Delete account' }))
+  expect(confirmation.getByRole('button', { name: 'Deleting…' })).toBeDisabled()
+  expect(confirmation.getByRole('button', { name: 'Keep account' })).toBeDisabled()
+  expect(fetcher.mock.calls.filter(([, init]) => init.method === 'DELETE')).toHaveLength(1)
+  act(() => { element.dispatchEvent(new Event('cancel', { cancelable: true })) })
+  expect(element).toBeInTheDocument()
+  await act(async () => finish(Response.json({ detail: 'Unavailable' }, { status: 503 })))
+  expect(await confirmation.findByRole('alert')).toHaveTextContent('Please try again')
+  expect(confirmation.getByRole('button', { name: 'Try again' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'View Cash details' })).toBeInTheDocument()
+})
+
+it('explains bank-linked protection before sending a deletion request', async () => {
+  const fetcher = transport()
+  vi.stubGlobal('fetch', fetcher)
+  const user = userEvent.setup()
+  render(<Harness />)
+  await user.click(await screen.findByRole('button', { name: 'Delete Revolut' }))
+  const confirmation = within(screen.getByRole('dialog', { name: 'Delete account?' }))
+  expect(confirmation.getByText(/Connected bank accounts are protected/)).toBeInTheDocument()
+  expect(confirmation.queryByRole('button', { name: 'Delete account' })).not.toBeInTheDocument()
+  expect(fetcher.mock.calls.some(([, init]) => init.method === 'DELETE')).toBe(false)
+  await user.click(confirmation.getByRole('button', { name: 'Got it' }))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+})
+
+it('hides deletion actions from workspace members who cannot manage accounts', async () => {
+  vi.stubGlobal('fetch', transport())
+  const user = userEvent.setup()
+  render(<AccountManager workspaceId={42} canCreate={false} />)
+  await screen.findByRole('list', { name: 'Accounts' })
+  expect(screen.queryByRole('button', { name: /^Delete / })).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'View Cash details' }))
+  await screen.findByLabelText('Display name')
+  expect(screen.queryByRole('button', { name: 'Delete account' })).not.toBeInTheDocument()
 })

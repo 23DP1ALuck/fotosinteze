@@ -5,9 +5,12 @@ import { pageText, pageError } from '@/i18n/pages'
 import { useTranslation } from 'react-i18next'
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ChevronRight, LogOut, Menu, Plus, X } from 'lucide-react'
 
+import { ChartTransactionsDialog } from '@/features/insights/ChartTransactionsDialog'
+import { chartTooltipStyle, dashboardChartRange, type ChartSelection } from '@/features/insights/chart-details'
+import { ChartAction } from '@/features/insights/chart-interactions'
 import { ExpenseExplorer } from '@/features/insights/ExpenseExplorer'
 import { MonthlyReview } from '@/features/insights/MonthlyReview'
 import { BrandMark } from '@/components/brand/BrandMark'
@@ -73,6 +76,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate,
   const [logoutError, setLogoutError] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   const [exploringExpenses, setExploringExpenses] = useState(false)
+  const [chartSelection, setChartSelection] = useState<ChartSelection | null>(null)
   const dialog = useRef<HTMLDialogElement>(null)
   const summary = finance.dashboard
   const currency = summary?.currency ?? 'EUR'
@@ -84,7 +88,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate,
   const initials = displayName.split(' ').map((word) => word[0]).slice(0, 2).join('').toUpperCase()
   const periodLabel = new Intl.DateTimeFormat(getLocale(), { month: 'long', year: 'numeric' }).format(summary ? new Date(`${summary.period_start}T12:00:00`) : new Date())
 
-  function navigate(next: string) { setExploringExpenses(false); if (next !== 'Transactions') setTransactionFilters({}); setView(next); setMobileMenu(false) }
+  function navigate(next: string) { setChartSelection(null); setExploringExpenses(false); if (next !== 'Transactions') setTransactionFilters({}); setView(next); setMobileMenu(false) }
   function connectBackendWorkspace() { setNotice('Use the workspace switcher to choose another accessible workspace.') }
   function openDialog(type: 'profile' | 'transaction', entry: 'income' | 'expense' = 'income') {
     if (type === 'transaction') { setTransactionAction({ type: entry }); return }
@@ -111,12 +115,16 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate,
       </table></div>{transactions.length === 0 && <p className="py-8 text-sm text-[#627168]">{t('noTransactionsYetAddIncomeOrAnExpenseToGetStarted')}</p>}
     </section>
   }
+  function openChartTransactions(type: 'INCOME' | 'EXPENSE') {
+    if (summary) setChartSelection({ type, range: dashboardChartRange(summary.period_start, summary.period_end), amount: type === 'INCOME' ? income : expenses, currency })
+  }
   function renderChart() {
     if (!active) return null
-    return <section className={cardClasses}><div className="flex items-center justify-between gap-4"><h2>{isBusiness ? t('revenueExpenses') : t('moneyInMoneyOut')}</h2><span className="text-xs text-[#627168]">{periodLabel}</span></div>
-      <div className="mt-6 h-[242px]" role="img" aria-label={t('chartDescription', { income: euro(income), expenses: euro(expenses), period: periodLabel })}>
-        <ResponsiveContainer width="100%" height="100%"><BarChart data={[{ name: t('income'), income }, { name: t('expenses'), expenses }]} margin={{ left: 4, right: 8 }}><CartesianGrid vertical={false} stroke="#e1e5df" /><XAxis dataKey="name" axisLine={false} tickLine={false} /><YAxis axisLine={false} tickLine={false} width={80} tickFormatter={(value: number) => euro(value)} /><Tooltip formatter={value => euro(Number(value))} /><Bar dataKey="income" name={t('income')} fill="#193f33" radius={[8, 8, 0, 0]} /><Bar dataKey="expenses" name={t('expenses')} fill="#98a56c" radius={[8, 8, 0, 0]} /></BarChart></ResponsiveContainer>
+    return <section className={`${cardClasses} flex flex-col`}><div className="flex shrink-0 items-center justify-between gap-4"><h2>{isBusiness ? t('revenueExpenses') : t('moneyInMoneyOut')}</h2><span className="text-xs text-[#627168]">{periodLabel}</span></div>
+      <div className="interactive-chart mt-6 h-[242px] min-h-[242px] flex-1" role="img" aria-label={t('chartDescription', { income: euro(income), expenses: euro(expenses), period: periodLabel })}>
+        <ResponsiveContainer width="100%" height="100%"><BarChart data={[{ name: t('income'), amount: income }, { name: t('expenses'), amount: expenses }]} margin={{ left: 4, right: 8 }} accessibilityLayer={false}><CartesianGrid vertical={false} stroke="#e1e5df" /><XAxis dataKey="name" axisLine={false} tickLine={false} /><YAxis axisLine={false} tickLine={false} width={80} tickFormatter={(value: number) => euro(value)} /><Tooltip cursor={false} shared={false} contentStyle={chartTooltipStyle} formatter={(value, _name, item) => [euro(Number(value)), String(item.payload.name)]} /><Bar dataKey="amount" cursor="pointer" activeBar={false} onClick={(_, index) => openChartTransactions(index === 0 ? 'INCOME' : 'EXPENSE')} radius={[8, 8, 0, 0]} maxBarSize={90} isAnimationActive={false}><Cell fill="#193f33" /><Cell fill="#98a56c" /></Bar></BarChart></ResponsiveContainer>
       </div>
+      <div className="mt-4 flex flex-wrap gap-2"><ChartAction label="View income transactions" onClick={() => openChartTransactions('INCOME')} /><ChartAction label="View expense transactions" onClick={() => openChartTransactions('EXPENSE')} /></div>
     </section>
   }
 
@@ -125,7 +133,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate,
       {mobileMenu && <button className="mb-[10px] flex shrink-0 self-end border-0 bg-transparent p-1 sm:hidden" aria-label={t('closeWorkspaceNavigation')} onClick={() => setMobileMenu(false)}><X size={20} /></button>}
       <div className="shrink-0">
       <Link to="/" className="flex items-center gap-2.5 px-[5px] text-[25px] font-semibold tracking-tight"><BrandMark className="size-5" />Fotosinteze</Link>
-      <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} onSwitch={(id) => { setExploringExpenses(false); setTransactionAction(null); setDeletingTransaction(null); setMobileMenu(false); onSwitch(id) }} onCreate={() => { setMobileMenu(false); onCreate() }} onSettings={() => { setMobileMenu(false); onSettings() }} />
+      <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} onSwitch={(id) => { setChartSelection(null); setExploringExpenses(false); setTransactionAction(null); setDeletingTransaction(null); setMobileMenu(false); onSwitch(id) }} onCreate={() => { setMobileMenu(false); onCreate() }} onSettings={() => { setMobileMenu(false); onSettings() }} />
       </div>
       <div className="mt-6 flex min-h-0 flex-1 flex-col">
         <p className="mx-[9px] mb-3 shrink-0 text-[10px] text-[#627168] uppercase">{t('workspace')}</p>
@@ -152,9 +160,9 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate,
       {notice && <p role="status" className="mb-[18px] flex items-center justify-between rounded-[10px] bg-[#eaf0e5] px-4 py-3 text-[13px] [&_button]:border-0 [&_button]:bg-transparent">{pageText(notice, t)}<button aria-label={t('dismissNotification')} onClick={() => setNotice('')}><X size={16} /></button></p>}
       {!isBusiness && view === 'Dashboard' && !finance.loading && !finance.error && <><section className="grid grid-cols-4 gap-[17px] max-[900px]:grid-cols-2 max-sm:gap-[10px]" aria-label={t('monthlyOverview')}>
         {(isBusiness ? [{ label: 'Revenue', value: income, note: 'Income across your business workspace' }, { label: 'Expenses', value: expenses, note: t('revenuePercent', { percent: percent(income ? expenses / income : 0) }) }, { label: 'Net profit', value: income - expenses, note: t('profitPercent', { percent: percent(income ? (income - expenses) / income : 0) }) }, { label: 'Current balance', value: balance, note: 'Across your business workspace' }] : [{ label: 'Current balance', value: balance, note: 'Opening balance + this month’s activity' }, { label: 'Income this month', value: income, note: 'Salary and other income' }, { label: 'Expenses this month', value: expenses, note: t('incomePercent', { percent: percent(income ? expenses / income : 0) }) }, { label: 'Saved this month', value: income - expenses, note: t('savingsPercent', { percent: percent(income ? (income - expenses) / income : 0) }) }]).map((item) => <article className={`min-w-0 rounded-2xl ${item.label === (isBusiness ? 'Net profit' : 'Saved this month') ? 'bg-[#d5f579]' : 'bg-white'} px-[23px] pt-5 pb-[23px] max-[1200px]:px-[15px] max-[1200px]:py-[18px] min-[1600px]:px-7 min-[1600px]:py-[25px]  [&_p]:text-sm [&_p]:text-[#526259] max-sm:[&_p]:text-xs [&_strong]:mt-3 [&_strong]:mb-[11px] [&_strong]:block [&_strong]:text-[clamp(24px,2.35vw,36px)] [&_strong]:leading-[1.3] [&_strong]:font-[650] [&_strong]:tracking-[-.035em] max-sm:[&_strong]:text-[25px] [&_span]:text-[11px] [&_span]:text-[#627168] max-sm:[&_span]:text-[10px] data-[highlight=true]:[&_p]:text-[#486c43] data-[highlight=true]:[&_span]:text-[#486c43]`} data-highlight={item.label === (isBusiness ? 'Net profit' : 'Saved this month')} key={item.label}><p>{pageText(item.label, t)}</p><strong>{item.label === 'Expenses this month' ? <button type="button" aria-label={t('exploreExpensesThisMonth')} onClick={()=>setExploringExpenses(true)} className="text-left underline decoration-[#dce4d8] underline-offset-8 hover:decoration-[#213d33]">{euro(item.value)}<span aria-hidden className="ml-2 !text-base">↗</span></button> : euro(item.value)}</strong><span>{pageText(item.note, t)}</span></article>)}
-      </section><div className="my-[25px] grid grid-cols-[minmax(0,1.92fr)_minmax(270px,1fr)] gap-6 max-[1200px]:grid-cols-[minmax(0,1.6fr)_minmax(235px,1fr)] max-[1200px]:gap-[18px] max-[900px]:grid-cols-1 min-[1600px]:my-[30px] min-[1600px]:gap-[30px]">{renderChart()}{active && <PersonalBudgetSummary workspaceId={backendWorkspaceId} onManage={() => navigate('Budgets')} />}</div></>}
+      </section><div className="my-[25px] grid items-stretch grid-cols-[minmax(0,1.92fr)_minmax(270px,1fr)] gap-6 max-[1200px]:grid-cols-[minmax(0,1.6fr)_minmax(235px,1fr)] max-[1200px]:gap-[18px] max-[900px]:grid-cols-1 min-[1600px]:my-[30px] min-[1600px]:gap-[30px]">{renderChart()}{active && <PersonalBudgetSummary workspaceId={backendWorkspaceId} onManage={() => navigate('Budgets')} />}</div></>}
       {!isBusiness && view === 'Dashboard' && !finance.loading && !finance.error && renderTransactions()}
-      {active && isBusiness && view === 'Dashboard' && <BusinessDashboard finance={finance} workspaceName={workspace.name} role={workspace.role ?? 'EMPLOYEE'} onExploreExpenses={()=>setExploringExpenses(true)} onViewTransactions={() => navigate('Transactions')} showRecent={view === 'Dashboard'} />}
+      {active && isBusiness && view === 'Dashboard' && <BusinessDashboard key={`${backendWorkspaceId}:${workspace.role}`} finance={finance} workspaceName={workspace.name} role={workspace.role ?? 'EMPLOYEE'} onExploreExpenses={()=>setExploringExpenses(true)} onViewTransactions={() => navigate('Transactions')} showRecent={view === 'Dashboard'} />}
       {active && view === 'Monthly review' && <MonthlyReview workspaceId={backendWorkspaceId} workspaceName={workspace.name} kind={workspace.kind} role={workspace.role} />}
       {active && view === 'Statistics' && <Statistics key={backendWorkspaceId} workspaceId={backendWorkspaceId} role={isBusiness ? workspace.role : undefined} />}
       {view === 'Transactions' && <TransactionsView transactions={transactions} income={income} expenses={expenses} workspaceName={workspace.name} workspaceKind={workspace.kind} currency={currency} onEdit={editTransaction} onDelete={id => { const transaction = finance.rows.find(item => item.transaction_id === id); if (transaction && transaction.expense_id === null && transaction.source !== 'BANK') setDeletingTransaction(transaction) }} loading={finance.transactionsLoading} error={finance.transactionsError} hasMore={finance.hasMore} filterOptions={{ categories: finance.options.categories, departments: projectCatalog.departments, projects: projectCatalog.projects }} onFilterChange={next => setTransactionFilters(previous => ({ ...previous, ...next }))} />}
@@ -170,6 +178,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate,
       {active && isBusiness && view === 'Departments' && <DepartmentManager key={`${backendWorkspaceId}-${workspace.role}`} workspaceId={backendWorkspaceId} workspaceName={workspace.name} canManage={workspace.role === 'OWNER'} />}
       {active && isBusiness && workspace.role === 'OWNER' && view === 'Employees' && <EmployeeManager key={backendWorkspaceId} workspaceId={backendWorkspaceId} workspaceName={workspace.name} canManage={workspace.role === 'OWNER'} />}
     </main>
+    {active && chartSelection && <ChartTransactionsDialog key={JSON.stringify(chartSelection)} workspaceId={backendWorkspaceId} selection={chartSelection} onClose={() => setChartSelection(null)} />}
     {active && exploringExpenses && summary && <ExpenseExplorer workspaceId={backendWorkspaceId} range={{from:summary.period_start,to:new Date(Date.parse(`${summary.period_end}T00:00:00Z`)-86400000).toISOString().slice(0,10)}} onClose={()=>setExploringExpenses(false)} />}
     <dialog onClick={dismissDialogOnBackdropClick} ref={dialog} className="m-auto max-h-[calc(100svh-40px)] w-[min(460px,calc(100%_-_32px))] overflow-y-auto rounded-[18px] border-0 bg-white p-7 text-[#193f33] shadow-[0_20px_80px_#193f3326] backdrop:bg-[#102c23]/35 backdrop:backdrop-blur-[3px] [&_h2]:m-0 [&_h2]:text-[23px] [&_h2]:font-semibold" aria-labelledby="dashboard-dialog-title">
     <div className="mb-4 flex justify-end"><LanguageSwitcher /></div>

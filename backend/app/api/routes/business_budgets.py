@@ -1,5 +1,6 @@
 """Business budgets are scoped through their required, single target relation."""
 from app.services.name_uniqueness import check_unique_name
+from app.services.budget_category_uniqueness import check_budget_category
 import calendar
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
@@ -16,7 +17,7 @@ from app.models import Budget, BudgetPeriod, Category, Department, Project, Tran
 from app.models.category import CategoryType
 from app.services.workspace_access import get_workspace_membership
 
-router = APIRouter(prefix='/business-budgets', tags=['Business budgets'])
+router = APIRouter(prefix='/business-budgets', tags=['Business budgets'], responses={409: {'description': 'Budget name or category already in use in this workspace'}})
 TARGETS = {'CATEGORY': (Category, 'category_id'), 'DEPARTMENT': (Department, 'department_id'), 'PROJECT': (Project, 'project_id')}
 
 
@@ -135,6 +136,7 @@ async def save_budget(payload, ctx, budget_id=None):
     target = await db.get(model, payload.target_id)
     if target is None or target.workspace_id != workspace.workspace_id or (payload.target_type == 'CATEGORY' and target.type != CategoryType.expense):
         raise HTTPException(400, 'Choose an expense category, department or project from this workspace')
+    await check_budget_category(workspace.workspace_id, payload.target_id if payload.target_type == 'CATEGORY' else None, db, budget_id)
     await check_unique_name(db, Budget.name, payload.name,
         Budget.workspace_id == workspace.workspace_id,
         Budget.budget_id != budget_id if budget_id is not None else True,

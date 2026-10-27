@@ -109,3 +109,44 @@ it('filters budget projects by department while keeping workspace-wide projects 
   expect(form.getByLabelText('Filter projects by department')).toHaveValue('')
   expect(form.getByRole('option', { name: 'Sales plan' })).toBeInTheDocument()
 })
+
+it.each([false, true])('prevents selecting an already budgeted category (personal=%s)', async personal => {
+  setup()
+  const original = vi.mocked(fetch).getMockImplementation()!
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (personal && String(input).endsWith('/categories')) return Response.json([{ category_id: 9, workspace_id: 42, name: 'Travel', type: 'EXPENSE' }])
+    if (personal && String(input).endsWith('/budgets')) return Response.json([{ budget_id: 1, workspace_id: 42, category_id: 9, name: 'Travel plan', limit_amount: '100', currency: 'EUR', current_spent: '85', period_start: '2026-10-01', period_length: 'MONTHLY', duration_days: null }])
+    return original(input, init)
+  })
+  render(<BusinessBudgets workspaceId={42} personal={personal} onConnect={() => {}} />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Create budget' }))
+  const form = within(screen.getByRole('form'))
+  expect(form.getByRole('option', { name: 'Travel — already budgeted' })).toBeDisabled()
+  expect(form.getByText(/All categories already have a budget/)).toBeInTheDocument()
+  expect(form.getByRole('button', { name: 'Save budget' })).toBeDisabled()
+  await userEvent.click(form.getByRole('button', { name: 'Cancel' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Edit Travel plan' }))
+  expect(screen.getByRole('option', { name: 'Travel' })).toBeEnabled()
+  expect(screen.getByLabelText('Category')).toHaveValue('9')
+  expect(screen.getByRole('button', { name: 'Save budget' })).toBeEnabled()
+})
+
+it('makes a category available again after its budget is deleted', async () => {
+  setup()
+  render(<BusinessBudgets workspaceId={42} onConnect={() => {}} />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Delete Travel plan' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Create budget' }))
+  expect(screen.getByRole('option', { name: 'Travel' })).toBeEnabled()
+})
+
+
+it('rejects a used category at save time even if selection is changed programmatically', async () => {
+  const fetcher = setup()
+  render(<BusinessBudgets workspaceId={42} onConnect={() => {}} />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Create budget' }))
+  fireEvent.change(screen.getByLabelText('Category'), { target: { value: '9' } })
+  fireEvent.submit(screen.getByRole('form'))
+  expect(await screen.findByRole('alert')).toHaveTextContent('This category already has a budget')
+  expect(fetcher.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+})

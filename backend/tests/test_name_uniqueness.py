@@ -24,7 +24,8 @@ class NameUniquenessTests(unittest.IsolatedAsyncioTestCase):
         elif kind in ('budgets', 'business-budgets'):
             payload.update(currency='EUR', limit_amount='100', period_start='2026-10-01', period_length='MONTHLY')
             if kind == 'budgets':
-                payload['category_id'] = 1 if workspace_id == 1 else 4
+                # Exercise name validation independently of category ownership.
+                payload['category_id'] = None
             else:
                 payload.update(target_type='DEPARTMENT', target_id=workspace_id)
         elif kind == 'workspaces':

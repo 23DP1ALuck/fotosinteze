@@ -34,7 +34,7 @@ it('translates stored keyboard-form hints without clearing a draft', async () =>
 })
 it('localizes export labels and values and preserves user identity and currency', async () => {
   await i18n.changeLanguage('ru')
-  const data = { month: 'октябрь 2026', workspaceName: 'My Studio', currency: 'USD', income: 100, expenses: 20.5, kind: 'personal' as const, showAmounts: true, showName: true }
+  const data = { month: 'октябрь 2026', workspaceName: 'My Studio', currency: 'USD', income: 100, expenses: 20.5, kind: 'personal' as const }
   const lines = reviewLines(data)
   expect(lines).toContain('My Studio')
   expect(lines).toContain(`Доходы: ${reviewMoney(100, 'USD')}`)

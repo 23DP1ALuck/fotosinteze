@@ -1,5 +1,6 @@
 export const finance = {
   "en": {
+    "categoryAlreadyBudgeted": "This category already has a budget. Edit the existing budget or choose another category.",
     "bankManagedBalance": "The bank manages this balance, even when the connection expires. You can change the display name.",
     "bankEditRestrictions": "Bank sync manages this amount, currency, account and direction. You can edit the description and choose a category with the same direction.",
     "bankDirectionUnavailable": "Bank transaction direction is unavailable. This transaction cannot be edited.",
@@ -423,6 +424,7 @@ export const finance = {
     "categoryId": "Category #{{id}}"
   },
   "lv": {
+    "categoryAlreadyBudgeted": "Šai kategorijai jau ir budžets. Rediģējiet esošo budžetu vai izvēlieties citu kategoriju.",
     "bankManagedBalance": "Banka pārvalda šo atlikumu arī pēc savienojuma termiņa beigām. Varat mainīt konta nosaukumu.",
     "bankEditRestrictions": "Bankas sinhronizācija pārvalda summu, valūtu, kontu un darījuma virzienu. Varat mainīt aprakstu un izvēlēties tā paša virziena kategoriju.",
     "bankDirectionUnavailable": "Bankas darījuma virziens nav pieejams. Šo darījumu nevar rediģēt.",
@@ -848,6 +850,7 @@ export const finance = {
     "categoryId": "Kategorija #{{id}}"
   },
   "ru": {
+    "categoryAlreadyBudgeted": "Для этой категории уже есть бюджет. Измените существующий бюджет или выберите другую категорию.",
     "bankManagedBalance": "Банк управляет этим балансом даже после истечения срока подключения. Вы можете изменить название счёта.",
     "bankEditRestrictions": "Синхронизация с банком управляет суммой, валютой, счётом и направлением операции. Можно изменить описание и выбрать категорию с тем же направлением.",
     "bankDirectionUnavailable": "Направление банковской операции недоступно. Эту операцию нельзя изменить.",
@@ -1277,6 +1280,7 @@ export const finance = {
 }
 
 export const financeSources: Record<string, string> = {
+  "This category already has a budget. Edit the existing budget or choose another category.": "categoryAlreadyBudgeted",
   "The bank manages this balance, even when the connection expires. You can change the display name.": "bankManagedBalance",
   "Bank sync manages this amount, currency, account and direction. You can edit the description and choose a category with the same direction.": "bankEditRestrictions",
   "Bank transaction direction is unavailable. This transaction cannot be edited.": "bankDirectionUnavailable",

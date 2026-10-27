@@ -1,7 +1,7 @@
 import i18n, { getLocale } from '@/i18n'
 import { insightMessage as im } from '@/i18n/insight-message'
 import type { DateRange } from '@/features/statistics/api'
-export type ReviewExport = { month: string; workspaceName: string; currency: string; income: number; expenses: number; kind: 'personal'|'business'; showAmounts: boolean; showName: boolean }
+export type ReviewExport = { month: string; workspaceName: string; currency: string; income: number; expenses: number; kind: 'personal'|'business'; details?: string[] }
 export function monthRange(month: string): DateRange|null {
   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)||Number(month.slice(0,4))<1000)return null
   const [year,index]=month.split('-').map(Number)
@@ -11,10 +11,13 @@ export const reviewMoney=(amount:number,currency:string)=>new Intl.NumberFormat(
 export function reviewLines(data: ReviewExport) {
   const net=(Math.round(data.income*100)-Math.round(data.expenses*100))/100
   const rate=data.income>0?new Intl.NumberFormat(getLocale(), { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(net / data.income):null
-  return ['Fotosinteze',data.month,...(data.showName?[data.workspaceName]:[]),
+  return ['Fotosinteze',data.month,data.workspaceName,
     data.kind==='personal'?im('Your month, in perspective.'):im('Your business, in perspective.'),
-    ...(data.showAmounts?[`${im('Income')}: ${reviewMoney(data.income,data.currency)}`,`${im('Expenses')}: ${reviewMoney(data.expenses,data.currency)}`,`${data.kind==='personal'?im('Saved / net change'):im('Net result')}: ${reviewMoney(net,data.currency)}`]:[]),
-    rate?`${data.kind==='personal'?im('Savings rate'):im('Net margin')}: ${rate}`:im('No income recorded for this month.'),
+    ...[`${im('Income')}: ${reviewMoney(data.income,data.currency)}`,`${im('Expenses')}: ${reviewMoney(data.expenses,data.currency)}`,`${data.kind==='personal'?im('Saved / net change'):im('Net result')}: ${reviewMoney(net,data.currency)}`],
+    ...(!data.income&&!data.expenses?[im('No financial activity recorded this month.')]:[]),
+    rate?`${data.kind==='personal'?im('Savings rate'):im('Net margin')}: ${rate}`:`${data.kind==='personal'?im('Savings rate'):im('Net margin')}: —`,
+    rate?im('Of income recorded this month.'):im('No income recorded this month.'),
+    ...(data.details??[]),
   ]
 }
 export function downloadBlob(blob:Blob,filename:string) {
