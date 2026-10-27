@@ -1,14 +1,16 @@
 """Browser-bound consent for the user's linked personal Revolut account."""
+import hashlib
 import hmac
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from cryptography.fernet import Fernet
 from fastapi import HTTPException
-from pydantic import BaseModel, Field, AwareDatetime
+from pydantic import BaseModel, Field, AwareDatetime, SecretStr
 from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -17,9 +19,31 @@ from app.database import AsyncSession
 from app.models import EnableBankingConnection as Connection, Workspace, WorkspaceUsers
 from app.models.workspace import WorkspaceTypeEnum
 from app.services import enable_banking_client as client
-from app.services.revolut_authorization_service import CallbackInput, ConnectionStatus, digest, encryption_cipher
 
 logger = logging.getLogger(__name__)
+
+
+def digest(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def encryption_cipher() -> Fernet:
+    try:
+        return Fernet(settings.revolut_token_encryption_key.get_secret_value().encode())
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(503, 'Configure REVOLUT_TOKEN_ENCRYPTION_KEY with a Fernet key') from None
+
+
+class ConnectionStatus(BaseModel):
+    status: Literal['not_connected', 'connected', 'pending', 'expired', 'failed']
+    expires_at: datetime | None = None
+    last_sync_at: datetime | None = None
+
+
+class CallbackInput(BaseModel):
+    state: str = Field(min_length=1, max_length=128)
+    code: SecretStr | None = Field(None, min_length=1, max_length=4096)
+    error: str | None = Field(None, max_length=200)
 
 
 def now_utc():

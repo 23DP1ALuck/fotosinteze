@@ -33,7 +33,6 @@ import { BusinessBudgets } from '@/features/budgets/BusinessBudgets'
 import { PersonalBudgetSummary } from '@/features/budgets/PersonalBudgetSummary'
 import { ExpenseRequests } from '@/features/expenses/ExpenseRequests'
 import { EnableBankingConnect } from '@/features/enable-banking/EnableBankingConnect'
-import { RevolutConnect } from '@/features/revolut/RevolutConnect'
 import { DeleteTransactionDialog } from '@/features/transactions/DeleteTransactionDialog'
 import { TransactionForm } from '@/features/transactions/TransactionForm'
 import { useWorkspaceFinance } from '@/features/transactions/use-workspace-finance'
@@ -172,7 +171,6 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate,
       {active && view === 'Accounts' && (!isBusiness || workspace.role === 'OWNER') && <AccountManager workspaceId={backendWorkspaceId} workspaceName={workspace.name} canCreate={!isBusiness || workspace.role === 'OWNER'} />}
       {active && view === 'Categories' && <CategoryManager canManage={!isBusiness || workspace.role === 'OWNER'} workspaceName={workspace.name} workspaceKind={workspace.kind} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} />}
       {active && !isBusiness && view === 'Accounts' && <EnableBankingConnect workspaceId={backendWorkspaceId} />}
-      {active && !isBusiness && view === 'Accounts' && <RevolutConnect key={backendWorkspaceId} workspaceId={backendWorkspaceId} />}
 
       {active && isBusiness && view === 'Projects' && <ProjectManager catalog={projectCatalog} workspaceName={workspace.name} canManage={canManageProjects} canCreate={canManageProjects || projectCatalog.departments.length > 0} />}
       {active && isBusiness && view === 'Departments' && <DepartmentManager key={`${backendWorkspaceId}-${workspace.role}`} workspaceId={backendWorkspaceId} workspaceName={workspace.name} canManage={workspace.role === 'OWNER'} />}
