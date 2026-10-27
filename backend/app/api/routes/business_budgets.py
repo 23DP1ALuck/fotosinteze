@@ -70,7 +70,7 @@ async def catalog(workspace_id, db):
         stmt = select(model).where(scope).order_by(model.name)
         if kind == 'CATEGORY':
             stmt = stmt.where(Category.type == CategoryType.expense)
-        result[kind] = [{'id': getattr(row, key), 'name': row.name} for row in (await db.scalars(stmt)).all()]
+        result[kind] = [{'id': getattr(row, key), 'name': row.name, **({'icon': row.icon} if kind == 'CATEGORY' else {})} for row in (await db.scalars(stmt)).all()]
     return result
 
 

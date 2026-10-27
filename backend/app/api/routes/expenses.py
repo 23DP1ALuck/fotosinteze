@@ -34,7 +34,7 @@ async def get_expense_categories(workspace: Workspace = Depends(get_current_work
         ((Category.workspace_id.is_(None)) | (Category.workspace_id == workspace.workspace_id)),
         Category.type == CategoryType.expense,
     ).order_by(Category.name))
-    return [CategoryResponseDTO(category_id=row.category_id, workspace_id=row.workspace_id, name=row.name, type=row.type) for row in rows]
+    return [CategoryResponseDTO(category_id=row.category_id, workspace_id=row.workspace_id, name=row.name, type=row.type, icon=row.icon) for row in rows]
 
 
 @router.get('/{expense_id}', response_model=ExpenseResponseDTO)

@@ -125,7 +125,7 @@ class CategoryEndpointTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(account.balance, Decimal("100"))
 
     async def test_global_categories_are_shared_but_read_only(self):
-        self.db.add(Category(category_id=4, name="Global", type=CategoryType.expense))
+        self.db.add(Category(category_id=4, name="Global", type=CategoryType.expense, icon="🛒"))
         await self.db.commit()
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             for workspace_id in (1, 2, 3):
@@ -135,13 +135,14 @@ class CategoryEndpointTests(unittest.IsolatedAsyncioTestCase):
                 response = await client.get("/categories/4", headers=headers)
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertIsNone(response.json()["workspace_id"])
+                self.assertEqual(response.json()["icon"], "🛒")
                 self.assertEqual((await client.put("/categories/4", headers=headers,
                     json={"name": "Changed", "type": "INCOME"})).status_code, 404)
                 self.assertEqual((await client.delete("/categories/4", headers=headers)).status_code, 404)
 
     async def test_shared_categories_work_in_financial_flows_without_leaking_other_workspaces(self):
         from datetime import date
-        self.db.add(Category(category_id=4, name="Global", type=CategoryType.expense))
+        self.db.add(Category(category_id=4, name="Global", type=CategoryType.expense, icon="🛒"))
         self.db.add_all([Account(account_id=wid, workspace_id=wid, name="Cash", currency="EUR", balance=100) for wid in (1, 2, 3)])
         await self.db.commit()
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:

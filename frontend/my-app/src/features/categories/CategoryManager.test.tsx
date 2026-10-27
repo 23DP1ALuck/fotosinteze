@@ -178,11 +178,12 @@ it('uses the selected type for new categories and follows a category when its ty
 
 it('shows shared categories without edit or delete actions', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json([
-    { category_id: 1, workspace_id: null, name: 'Groceries', type: 'EXPENSE' },
+    { category_id: 1, workspace_id: null, name: 'Groceries', type: 'EXPENSE', icon: '🛒' },
     { category_id: 2, workspace_id: 42, name: 'Custom', type: 'EXPENSE' },
   ])))
   render(<CategoryManager workspaceKind="personal" workspaceId={42} onConnect={() => {}} />)
   expect(await screen.findByText('Groceries')).toBeInTheDocument()
+  expect(screen.getByText('🛒')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Edit Groceries' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Delete Groceries' })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Edit Custom' })).toBeInTheDocument()
