@@ -12,7 +12,7 @@ const budgetSchema = z.object({
   period_length: z.enum(['MONTHLY', 'WEEKLY', 'CUSTOM']), duration_days: z.number().nullable(),
   spent: z.coerce.number(), remaining: z.coerce.number(), status: z.enum(['ON_TRACK', 'WARNING', 'EXCEEDED']),
 })
-const targetSchema = z.array(z.object({ id: z.number().int().positive(), name: z.string() }))
+const targetSchema = z.array(z.object({ id: z.number().int().positive(), name: z.string(), icon: z.string().nullable().optional() }))
 const catalogSchema = z.object({ workspace_id: z.number().int().positive(), can_manage: z.boolean(), progress_scope: z.enum(['WORKSPACE', 'ASSIGNED_DEPARTMENT']), budgets: z.array(budgetSchema), targets: z.object({ CATEGORY: targetSchema.optional(), DEPARTMENT: targetSchema.optional(), PROJECT: targetSchema.optional() }) })
 export type BusinessBudget = z.infer<typeof budgetSchema>
 export type BudgetCatalog = z.infer<typeof catalogSchema>
