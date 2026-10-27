@@ -27,6 +27,7 @@ async def get_categories(current_user: dict[str, str], active_workspace: Workspa
 
     return [CategoryResponseDTO(
         name=category.name,
+        icon=category.icon,
         type=category.type,
         workspace_id=category.workspace_id,
         category_id= category.category_id)
@@ -56,6 +57,7 @@ async def get_category_by_id(
 
     return CategoryResponseDTO(
         name=category.name,
+        icon=category.icon,
         type=category.type,
         workspace_id=category.workspace_id,
         category_id=category.category_id,
@@ -100,6 +102,7 @@ async def update_category(
 
     return CategoryResponseDTO(
         name=category.name,
+        icon=category.icon,
         type=category.type,
         workspace_id=category.workspace_id,
         category_id=category.category_id,
@@ -168,5 +171,6 @@ async def create_category(request: CreateCategoryRequest,
         category_id=category.category_id,
         workspace_id=category.workspace_id,
         name=category.name,
+        icon=category.icon,
         type=category.type,
     )
