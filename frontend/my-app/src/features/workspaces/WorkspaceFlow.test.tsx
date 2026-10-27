@@ -106,7 +106,7 @@ it('shows saved budget progress on the dashboard and reloads edited limits', asy
   expect(await summary.findByText('Groceries')).toBeInTheDocument()
   expect(summary.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('value', '28.54')
   expect(summary.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('max', '400')
-  expect(summary.getByText(/2026-10-01 to 2026-11-01/)).toBeInTheDocument()
+  expect(summary.getByText(/1 Oct 2026 to 1 Nov 2026/)).toBeInTheDocument()
   await userEvent.click(summary.getByRole('button', { name: 'Manage budgets' }))
   await userEvent.click(await screen.findByRole('button', { name: 'Edit Groceries' }))
   const form = within(screen.getByRole('form', { name: 'Edit personal budget' }))
