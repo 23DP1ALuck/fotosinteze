@@ -55,7 +55,7 @@ it('persists personal budget creation, edits and deletion across remounts and sc
   expect(screen.queryByRole('article')).not.toBeInTheDocument()
   view.unmount(); view = mount()
   expect(await screen.findByRole('article', { name: 'Budget QA Ceļojums' })).toHaveTextContent('€450.00')
-  expect(screen.getByRole('article')).toHaveTextContent('weekly')
+  expect(screen.getByRole('article')).toHaveTextContent('Weekly')
   await user.click(screen.getByRole('button', { name: 'Delete QA Ceļojums' }))
   await user.click(screen.getByRole('button', { name: 'Confirm delete' }))
   await screen.findByText('No budgets available for this workspace.')

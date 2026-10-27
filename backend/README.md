@@ -419,8 +419,8 @@ existing accounts and transaction references. Revision `b49d02e71a63` adds
 per workspace enforced by a unique index.
 
 Account routes require a bearer token and `Workspace-ID`. Personal workspace
-members can manage their accounts. Business members can read accounts and edit
-names or manual balances; creating accounts or changing `is_main` requires the owner. IDs are always scoped to the selected
+members can manage their accounts. Business members can read accounts;
+creating, updating or deleting accounts requires the owner. IDs are always scoped to the selected
 workspace; an account from another workspace returns `404`.
 
 - `GET /accounts` lists accounts in ID order.
@@ -431,6 +431,10 @@ workspace; an account from another workspace returns `404`.
   main; later accounts default to false and preserve the current main account.
 - `PUT /accounts/{account_id}` updates supplied `name`, `balance`, and/or `is_main` fields;
   omitted fields are preserved. Explicit null and unknown fields are rejected.
+- `DELETE /accounts/{account_id}` deletes an unused manual account and returns
+  `204` with no body. Accounts with transactions or a bank connection (including
+  expired connections) return `409`; transaction history and connections are
+  preserved. Deleting the main account does not automatically select a replacement.
 
 Names are trimmed, nonempty, at most 120 characters, and checked for duplicates
 in the workspace. Responses use the existing `balance` field for current balance

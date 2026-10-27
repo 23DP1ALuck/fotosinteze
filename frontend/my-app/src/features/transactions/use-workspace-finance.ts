@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+import { financeMessage as f } from '@/i18n/finance-message'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { listCategories } from '@/features/categories/api'
 import type { WorkspaceTransaction } from '@/features/workspaces/TransactionsView'
@@ -6,6 +8,7 @@ import { workspaceQueryKey } from '@/features/workspaces/workspace-state'
 import { listTransactionAccounts, listTransactions, loadTransactionDashboard, type TransactionFilters } from './api'
 
 export function useWorkspaceFinance(workspaceId: number, enabled: boolean, catalog: ProjectCatalog, filters: TransactionFilters = {}) {
+  const { t } = useTranslation('finance')
   const client = useQueryClient()
   const transactionKey = workspaceQueryKey('transactions', workspaceId)
   const transactionQuery = useInfiniteQuery({ queryKey: [...transactionKey, filters], initialPageParam: 0, queryFn: ({ signal, pageParam }) => listTransactions(workspaceId, pageParam, signal, filters), getNextPageParam: page => page.has_more ? page.offset + page.limit : undefined, enabled })
@@ -18,12 +21,12 @@ export function useWorkspaceFinance(workspaceId: number, enabled: boolean, catal
   const transactions: WorkspaceTransaction[] = rows.map(row => {
     const category = categories.find(item => item.id === row.category_id)
     return {
-      id: row.transaction_id, canModify: row.expense_id === null, name: row.description || (category?.type === 'income' ? 'Income' : 'Expense'),
-      category: category?.name ?? (row.category_id === null ? 'Uncategorised' : `Category #${row.category_id}`), type: category?.type ?? 'unknown', currency: row.currency,
+      id: row.transaction_id, canModify: row.expense_id === null, name: row.description || (category?.type === 'income' ? f('Income') : f('Expense')),
+      category: category?.name ?? (row.category_id === null ? f('Uncategorised') : t('categoryId', { id: row.category_id })), type: category?.type ?? 'unknown', currency: row.currency,
       amount: Number(row.amount) * (category?.type === 'expense' ? -1 : 1), source: row.source === 'MANUAL' ? 'Manual' : row.source === 'BANK' ? 'Revolut' : 'Expense',
       date: row.created_at.slice(0, 10), departmentId: row.department_id ?? undefined, projectId: row.project_id ?? undefined,
-      department: catalog.departments.find(item => item.id === row.department_id)?.name ?? (row.department_id === null ? undefined : `Department #${row.department_id}`),
-      project: catalog.projects.find(item => item.id === row.project_id)?.name ?? (row.project_id === null ? undefined : `Project #${row.project_id}`),
+      department: catalog.departments.find(item => item.id === row.department_id)?.name ?? (row.department_id === null ? undefined : t('departmentId', { id: row.department_id })),
+      project: catalog.projects.find(item => item.id === row.project_id)?.name ?? (row.project_id === null ? undefined : t('projectId', { id: row.project_id })),
     }
   })
   const error = transactionQuery.error || dashboardQuery.error || categoryQuery.error

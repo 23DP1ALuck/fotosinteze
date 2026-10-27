@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState, type ComponentProps } from 'react'
 
 import { Input } from '@/components/ui/input'
@@ -6,6 +7,7 @@ import { cn } from '@/lib/utils'
 type PasswordFieldProps = Omit<ComponentProps<'input'>, 'type'>
 
 function PasswordField({ className, disabled, ...props }: PasswordFieldProps) {
+  const { t } = useTranslation('pages')
   const [visible, setVisible] = useState(false)
 
   return (
@@ -24,9 +26,9 @@ function PasswordField({ className, disabled, ...props }: PasswordFieldProps) {
         )}
         onClick={() => setVisible((current) => !current)}
         tabIndex={-1}
-        aria-label={visible ? 'Hide password' : 'Show password'}
+        aria-label={visible ? t('hidePassword') : t('showPassword')}
       >
-        {visible ? 'Hide' : 'Show'}
+        {visible ? t('hide') : t('show')}
       </button>
     </div>
   )

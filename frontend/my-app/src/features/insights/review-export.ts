@@ -1,3 +1,5 @@
+import i18n, { getLocale } from '@/i18n'
+import { insightMessage as im } from '@/i18n/insight-message'
 import type { DateRange } from '@/features/statistics/api'
 export type ReviewExport = { month: string; workspaceName: string; currency: string; income: number; expenses: number; kind: 'personal'|'business'; showAmounts: boolean; showName: boolean }
 export function monthRange(month: string): DateRange|null {
@@ -5,14 +7,14 @@ export function monthRange(month: string): DateRange|null {
   const [year,index]=month.split('-').map(Number)
   return {from:`${month}-01`,to:`${month}-${new Date(year,index,0).getDate()}`}
 }
-export const reviewMoney=(amount:number,currency:string)=>new Intl.NumberFormat('en-IE',{style:'currency',currency}).format(amount)
+export const reviewMoney=(amount:number,currency:string)=>new Intl.NumberFormat(getLocale(),{style:'currency',currency}).format(amount)
 export function reviewLines(data: ReviewExport) {
   const net=(Math.round(data.income*100)-Math.round(data.expenses*100))/100
-  const rate=data.income>0?`${(net/data.income*100).toFixed(1)}%`:null
+  const rate=data.income>0?new Intl.NumberFormat(getLocale(), { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(net / data.income):null
   return ['Fotosinteze',data.month,...(data.showName?[data.workspaceName]:[]),
-    data.kind==='personal'?'Your month, in perspective.':'Your business, in perspective.',
-    ...(data.showAmounts?[`Income: ${reviewMoney(data.income,data.currency)}`,`Expenses: ${reviewMoney(data.expenses,data.currency)}`,`${data.kind==='personal'?'Saved / net change':'Net result'}: ${reviewMoney(net,data.currency)}`]:[]),
-    rate?`${data.kind==='personal'?'Savings rate':'Net margin'}: ${rate}`:'No income recorded for this month.',
+    data.kind==='personal'?im('Your month, in perspective.'):im('Your business, in perspective.'),
+    ...(data.showAmounts?[`${im('Income')}: ${reviewMoney(data.income,data.currency)}`,`${im('Expenses')}: ${reviewMoney(data.expenses,data.currency)}`,`${data.kind==='personal'?im('Saved / net change'):im('Net result')}: ${reviewMoney(net,data.currency)}`]:[]),
+    rate?`${data.kind==='personal'?im('Savings rate'):im('Net margin')}: ${rate}`:im('No income recorded for this month.'),
   ]
 }
 export function downloadBlob(blob:Blob,filename:string) {
@@ -35,7 +37,7 @@ export async function exportReviewPng(data:ReviewExport) {
     ctx.fillText(part,90,y,1080);y+=i<2?110:78
   }
   ctx.fillStyle='#d9f27a';ctx.fillRect(90,canvas.height-160,1100,8)
-  ctx.fillStyle='#627168';ctx.font='24px system-ui, sans-serif';ctx.fillText('A little clarity goes a long way.',90,canvas.height-70)
+  ctx.fillStyle='#627168';ctx.font='24px system-ui, sans-serif';ctx.fillText(im('A little clarity goes a long way.'),90,canvas.height-70)
   const blob=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,'image/png'))
   if(!blob)throw new Error('Could not create the image. Please try again.')
   downloadBlob(blob,'fotosinteze-monthly-review.png')
@@ -43,8 +45,8 @@ export async function exportReviewPng(data:ReviewExport) {
 function escapeHtml(text:string){return text.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!))}
 export function printReview(data:ReviewExport) {
   const frame=document.createElement('iframe')
-  frame.title='Monthly review print preview';frame.style.cssText='position:fixed;width:0;height:0;border:0;'
+  frame.title=im('Monthly review print preview');frame.style.cssText='position:fixed;width:0;height:0;border:0;'
   frame.onload=()=>{const win=frame.contentWindow;if(!win){frame.remove();return}win.onafterprint=()=>frame.remove();win.focus();win.print();setTimeout(()=>frame.remove(),60_000)}
-  frame.srcdoc=`<!doctype html><html><head><title>Fotosinteze monthly review</title><style>@page{size:A4;margin:24mm}body{font:18px/1.6 system-ui,sans-serif;color:#213d33;background:#f6f5ee}main{padding:32px}h1{font-size:42px;line-height:1.2}p{overflow-wrap:anywhere}footer{margin-top:64px;border-top:3px solid #213d33;padding-top:20px;color:#526259}</style></head><body><main>${reviewLines(data).map((line,i)=>i===1?`<h1>${escapeHtml(line)}</h1>`:`<p>${escapeHtml(line)}</p>`).join('')}<footer>A little clarity goes a long way.</footer></main></body></html>`
+  frame.srcdoc=`<!doctype html><html lang="${i18n.resolvedLanguage ?? 'en'}"><head><title>${escapeHtml(im('Fotosinteze monthly review'))}</title><style>@page{size:A4;margin:24mm}body{font:18px/1.6 system-ui,sans-serif;color:#213d33;background:#f6f5ee}main{padding:32px}h1{font-size:42px;line-height:1.2}p{overflow-wrap:anywhere}footer{margin-top:64px;border-top:3px solid #213d33;padding-top:20px;color:#526259}</style></head><body><main>${reviewLines(data).map((line,i)=>i===1?`<h1>${escapeHtml(line)}</h1>`:`<p>${escapeHtml(line)}</p>`).join('')}<footer>${escapeHtml(im('A little clarity goes a long way.'))}</footer></main></body></html>`
   document.body.append(frame)
 }
