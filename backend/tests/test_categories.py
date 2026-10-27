@@ -124,6 +124,56 @@ class CategoryEndpointTests(unittest.IsolatedAsyncioTestCase):
             await self.db.refresh(account)
             self.assertEqual(account.balance, Decimal("100"))
 
+    async def test_global_categories_are_shared_but_read_only(self):
+        self.db.add(Category(category_id=4, name="Global", type=CategoryType.expense))
+        await self.db.commit()
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            for workspace_id in (1, 2, 3):
+                headers = {"Workspace-ID": str(workspace_id)}
+                rows = (await client.get("/categories", headers=headers)).json()
+                self.assertIn(4, [row["category_id"] for row in rows])
+                response = await client.get("/categories/4", headers=headers)
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertIsNone(response.json()["workspace_id"])
+                self.assertEqual((await client.put("/categories/4", headers=headers,
+                    json={"name": "Changed", "type": "INCOME"})).status_code, 404)
+                self.assertEqual((await client.delete("/categories/4", headers=headers)).status_code, 404)
+
+    async def test_shared_categories_work_in_financial_flows_without_leaking_other_workspaces(self):
+        from datetime import date
+        self.db.add(Category(category_id=4, name="Global", type=CategoryType.expense))
+        self.db.add_all([Account(account_id=wid, workspace_id=wid, name="Cash", currency="EUR", balance=100) for wid in (1, 2, 3)])
+        await self.db.commit()
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            for wid in (1, 3):
+                headers = {"Workspace-ID": str(wid)}
+                payload = dict(category_id=4, account_id=wid, amount=10, currency="EUR", description="Shared expense")
+                response = await client.post("/transactions", headers=headers, json=payload)
+                self.assertEqual(response.status_code, 201, response.text)
+                response = await client.put(f"/transactions/{response.json()['transaction_id']}", headers=headers, json=payload)
+                self.assertEqual(response.status_code, 200, response.text)
+                response = await client.post("/budgets", headers=headers, json=dict(category_id=4, name="Shared", limit_amount=100, currency="EUR", period_length="MONTHLY"))
+                self.assertEqual(response.status_code, 201, response.text)
+                response = await client.get("/dashboard", headers=headers)
+                self.assertEqual(Decimal(str(response.json()["expenses"])), Decimal("10"))
+                response = await client.get("/statistics/summary", headers=headers, params={"date_from": date.today().isoformat(), "date_to": date.today().isoformat()})
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(Decimal(str(response.json()["expenses"])), Decimal("10"))
+                foreign = {**payload, "category_id": 2}
+                self.assertEqual((await client.post("/transactions", headers=headers, json=foreign)).status_code, 400)
+                rows = (await client.get("/categories", headers=headers)).json()
+                self.assertEqual({row["category_id"] for row in rows}, {4, 1 if wid == 1 else 3})
+            payload = dict(name="Shared business plan", target_type="CATEGORY", target_id=4, period_start=date.today().isoformat(), limit_amount="100", currency="EUR", period_length="MONTHLY")
+            response = await client.post("/business-budgets", headers={"Workspace-ID": "2"}, json=payload)
+            self.assertEqual(response.status_code, 201, response.text)
+            response = await client.get("/business-budgets", headers={"Workspace-ID": "2"})
+            self.assertEqual({row["id"] for row in response.json()["targets"]["CATEGORY"]}, {4})
+            self.assertEqual([row["name"] for row in response.json()["budgets"]], ["Shared business plan"])
+            response = await client.get("/expenses/categories", headers={"Workspace-ID": "1"})
+            self.assertEqual({row["category_id"] for row in response.json()}, {1, 4})
+            response = await client.post("/expenses", headers={"Workspace-ID": "1"}, json=dict(category_id=4, amount=5, currency="EUR", description="Shared request"))
+            self.assertEqual(response.status_code, 201, response.text)
+
     async def test_create_category_uses_active_workspace(self):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"

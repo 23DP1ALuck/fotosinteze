@@ -18,10 +18,9 @@ async def get_categories(current_user: dict[str, str], active_workspace: Workspa
         membership = await get_workspace_membership(
             current_user, active_workspace.workspace_id, db
         )
-    categories_stmt: Select = (select(Category)
-                               .where(
-        Category.workspace_id == membership.workspace_id
-        if membership else Category.workspace_id == active_workspace.workspace_id)
+    workspace_id = membership.workspace_id if membership else active_workspace.workspace_id
+    categories_stmt: Select = select(Category).where(
+        or_(Category.workspace_id.is_(None), Category.workspace_id == workspace_id)
     )
     categories_result = await db.execute(categories_stmt)
     categories = categories_result.scalars().all()
@@ -49,7 +48,7 @@ async def get_category_by_id(
     category = await db.scalar(
         select(Category).where(
             Category.category_id == category_id,
-            Category.workspace_id == workspace_id,
+            or_(Category.workspace_id.is_(None), Category.workspace_id == workspace_id),
         )
     )
     if category is None:
