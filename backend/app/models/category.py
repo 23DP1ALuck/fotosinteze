@@ -21,8 +21,8 @@ class Category(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     type: Mapped[CategoryType] = mapped_column(Enum(CategoryType), nullable=False)
 
-    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.workspace_id"))
-    workspace: Mapped["Workspace"] = relationship(back_populates="categories")
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.workspace_id"), nullable=True)
+    workspace: Mapped["Workspace | None"] = relationship(back_populates="categories")
     expenses: Mapped[List["Expense"]] = relationship(back_populates="category")
 
     transactions: Mapped[List["Transaction"]] = relationship(back_populates="category")

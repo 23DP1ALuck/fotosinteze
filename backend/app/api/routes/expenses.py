@@ -31,7 +31,7 @@ async def get_expense_categories(workspace: Workspace = Depends(get_current_work
     # Expense submission needs a read-only category catalog for employees too.
     await get_workspace_membership(current_user, workspace.workspace_id, db)
     rows = await db.scalars(select(Category).where(
-        Category.workspace_id == workspace.workspace_id,
+        ((Category.workspace_id.is_(None)) | (Category.workspace_id == workspace.workspace_id)),
         Category.type == CategoryType.expense,
     ).order_by(Category.name))
     return [CategoryResponseDTO(category_id=row.category_id, workspace_id=row.workspace_id, name=row.name, type=row.type) for row in rows]
