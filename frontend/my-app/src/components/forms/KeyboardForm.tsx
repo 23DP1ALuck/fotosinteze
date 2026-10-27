@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+import { commonMessage as cm } from '@/i18n/common'
 import { useRef, useState, type ComponentPropsWithoutRef, type KeyboardEvent } from 'react'
 import type { FieldPath, FieldValues, UseFormTrigger } from 'react-hook-form'
 import { cn } from '@/lib/utils'
@@ -24,6 +26,7 @@ function busy(form: HTMLFormElement) { return Boolean(form.closest('[aria-busy="
 
 /** Enter confirms fields; Ctrl/Command arrows navigate; only the save shortcut submits. */
 export function KeyboardForm<T extends FieldValues = FieldValues>({ validateField, children, className, onKeyDown, onFocusCapture, ...props }: ComponentPropsWithoutRef<'form'> & { validateField?: UseFormTrigger<T> }) {
+  useTranslation('common')
   const visited = useRef(new Set<Field>())
   const pending = useRef(false)
   const [hint, setHint] = useState('Enter to continue · Ctrl/⌘+↑/↓ to switch fields · Ctrl/⌘+Enter to save')
@@ -132,5 +135,5 @@ export function KeyboardForm<T extends FieldValues = FieldValues>({ validateFiel
       setHint(hintFor(event.currentTarget, field))
       if (field instanceof HTMLInputElement) field.enterKeyHint = 'next'
     }
-  }}>{children}<p className="keyboard-form-hint col-span-full mt-4 w-full text-xs leading-relaxed text-[#526259]" role="status" aria-live="polite">{hint}</p></form>
+  }}>{children}<p className="keyboard-form-hint col-span-full mt-4 w-full text-xs leading-relaxed text-[#526259]" role="status" aria-live="polite">{cm(hint)}</p></form>
 }

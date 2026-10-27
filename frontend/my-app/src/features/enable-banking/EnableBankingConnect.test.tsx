@@ -1,3 +1,4 @@
+import i18n from '@/i18n'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -208,4 +209,21 @@ it('blocks duplicate syncs while pending and allows retry after malformed sync d
   expect(await screen.findByRole('alert')).toHaveTextContent('unexpected sync data')
   expect(screen.getByRole('button', { name: 'Sync accounts and transactions' })).toBeEnabled()
   expect(screen.queryByText(/Last sync:/)).not.toBeInTheDocument()
+})
+
+it('retranslates sync results and controls without reloading the connection', async () => {
+  const transport = vi.fn((url: RequestInfo | URL) => Promise.resolve(String(url).endsWith('/connection')
+    ? Response.json({ ...disconnected, status: 'connected' })
+    : Response.json({ accounts_count: 2, imported_count: 5, last_sync_at: '2026-10-26T10:00:00Z' })))
+  vi.stubGlobal('fetch', transport)
+  render(<EnableBankingConnect workspaceId={7} />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Sync accounts and transactions' }))
+  expect(await screen.findByText('Synced 2 accounts and imported 5 transactions.')).toBeInTheDocument()
+  const calls = transport.mock.calls.length
+  await act(async () => { await i18n.changeLanguage('lv') })
+  expect(screen.getByText('Sinhronizēti 2 konti, importēti 5 darījumi.')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Sinhronizēt kontus un darījumus' })).toBeInTheDocument()
+  await act(async () => { await i18n.changeLanguage('ru') })
+  expect(screen.getByText('Синхронизация: 2 счёта; импорт: 5 операций.')).toBeInTheDocument()
+  expect(transport).toHaveBeenCalledTimes(calls)
 })

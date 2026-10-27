@@ -1,3 +1,6 @@
+import { useTranslation } from 'react-i18next'
+import { getLocale } from '@/i18n'
+import { financeMessage as f } from '@/i18n/finance-message'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
@@ -30,13 +33,14 @@ export function EnableBankingConnect({ workspaceId }: { workspaceId: number }) {
 }
 
 function Connection({ workspaceId, ownerId }: { workspaceId: number; ownerId: number | null }) {
+  const { t } = useTranslation('finance')
   const client = useQueryClient()
   const operation = useRef<AbortController | null>(null)
   const [busy, setBusy] = useState<'authorize' | 'sync' | null>(null)
   const [connection, setConnection] = useState<z.infer<typeof connectionSchema> | null>(null)
   const [statusError, setStatusError] = useState('')
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
+  const [notice, setNotice] = useState<{ accounts: number; transactions: number } | null>(null)
 
   useEffect(() => {
     let controller: AbortController | undefined
@@ -72,7 +76,7 @@ function Connection({ workspaceId, ownerId }: { workspaceId: number; ownerId: nu
     operation.current = request
     setBusy(action)
     setError('')
-    setNotice('')
+    setNotice(null)
     try {
       const response = await authenticatedFetch(`/enable-banking/${action}`, {
         method: 'POST', credentials: 'include', signal: request.signal,
@@ -92,7 +96,7 @@ function Connection({ workspaceId, ownerId }: { workspaceId: number; ownerId: nu
         const result = syncSchema.safeParse(data)
         if (!result.success) throw new Error('The server returned unexpected sync data. Please retry.')
         setConnection(current => current && { ...current, last_sync_at: result.data.last_sync_at })
-        setNotice(`Synced ${result.data.accounts_count} accounts and imported ${result.data.imported_count} transactions.`)
+        setNotice({ accounts: result.data.accounts_count, transactions: result.data.imported_count })
         await Promise.all(['accounts', 'account-details', 'transactions', 'dashboard', 'statistics', 'categories', 'budgets']
           .map(feature => client.invalidateQueries({ queryKey: [feature, ownerId, workspaceId] })))
       }
@@ -106,21 +110,21 @@ function Connection({ workspaceId, ownerId }: { workspaceId: number; ownerId: nu
     }
   }
 
-  return <section aria-label="Real Revolut connection" className="mt-6 rounded-2xl bg-[#eaf0e5] p-6">
+  return <section aria-label={t('realRevolutConnection')} className="mt-6 rounded-2xl bg-[#eaf0e5] p-6">
     <div className="flex flex-wrap items-center justify-between gap-4">
-      <div><h2 className="text-base font-semibold">Real Revolut · Enable Banking</h2>
-        <p role="status" className="mt-1 text-sm">{connection ? statusLabels[connection.status] : statusError ? 'Connection status unavailable' : 'Checking connection…'}</p>
-        <p className="mt-1 text-xs text-[#68796e]">Connect your real Personal Revolut account to sync balances and booked transactions.</p>
-        {connection?.expires_at && <p className="mt-1 text-xs text-[#68796e]">Access expires: {new Date(connection.expires_at).toLocaleString()}</p>}
-        {connection?.last_sync_at && <p className="mt-1 text-xs text-[#68796e]">Last sync: {new Date(connection.last_sync_at).toLocaleString()}</p>}
+      <div><h2 className="text-base font-semibold">{t('realRevolutHeading')}</h2>
+        <p role="status" className="mt-1 text-sm">{connection ? f(statusLabels[connection.status]) : statusError ? t('bankStatusUnavailable') : t('bankChecking')}</p>
+        <p className="mt-1 text-xs text-[#68796e]">{t('realRevolutDescription')}</p>
+        {connection?.expires_at && <p className="mt-1 text-xs text-[#68796e]">{f('Access expires:')} {new Date(connection.expires_at).toLocaleString(getLocale())}</p>}
+        {connection?.last_sync_at && <p className="mt-1 text-xs text-[#68796e]">{t('bankLastSync')} {new Date(connection.last_sync_at).toLocaleString(getLocale())}</p>}
       </div>
       <div className="flex flex-wrap gap-3">
-        {connection?.status === 'connected' && <button type="button" disabled={busy !== null || ownerId === null} onClick={() => void perform('sync')} className="rounded-xl bg-white px-4 py-3 text-sm disabled:opacity-50">{busy === 'sync' ? 'Syncing…' : 'Sync accounts and transactions'}</button>}
-        <button type="button" disabled={busy !== null || ownerId === null} onClick={() => void perform('authorize')} className="rounded-xl bg-[#193f33] px-4 py-3 text-sm text-white disabled:opacity-50">{busy === 'authorize' ? 'Opening bank…' : connection && connection.status !== 'not_connected' ? 'Reconnect real Revolut' : 'Connect real Revolut'}</button>
+        {connection?.status === 'connected' && <button type="button" disabled={busy !== null || ownerId === null} onClick={() => void perform('sync')} className="rounded-xl bg-white px-4 py-3 text-sm disabled:opacity-50">{busy === 'sync' ? f('Syncing…') : t('bankSyncAction')}</button>}
+        <button type="button" disabled={busy !== null || ownerId === null} onClick={() => void perform('authorize')} className="rounded-xl bg-[#193f33] px-4 py-3 text-sm text-white disabled:opacity-50">{busy === 'authorize' ? t('bankOpening') : connection && connection.status !== 'not_connected' ? t('bankReconnect') : t('bankConnect')}</button>
       </div>
     </div>
-    {notice && <p role="status" className="mt-3 text-sm">{notice}</p>}
-    {error && <p role="alert" className="mt-3 text-sm text-red-800">{error}</p>}
-    {statusError && <p role="alert" className="mt-3 text-sm text-red-800">{statusError}</p>}
+    {notice && <p role="status" className="mt-3 text-sm">{t('bankSyncSummary', { accounts: t('bankAccounts', { count: notice.accounts }), transactions: t('bankTransactions', { count: notice.transactions }) })}</p>}
+    {error && <p role="alert" className="mt-3 text-sm text-red-800">{f(error, true)}</p>}
+    {statusError && <p role="alert" className="mt-3 text-sm text-red-800">{f(statusError, true)}</p>}
   </section>
 }

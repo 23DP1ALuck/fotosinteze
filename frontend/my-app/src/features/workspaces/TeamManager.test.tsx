@@ -54,7 +54,7 @@ describe('business team management', () => {
     await user.clear(dialog.getByLabelText('Department name'))
     await user.type(dialog.getByLabelText('Department name'), 'Engineering')
     await user.click(dialog.getByRole('button', { name: 'Save changes' }))
-    expect(screen.getByRole('list', { name: 'Departments' })).toHaveTextContent('1 employees · 1 projects')
+    expect(screen.getByRole('list', { name: 'Departments' })).toHaveTextContent('1 employee · 1 project')
 
     await user.click(navigate('Employees'))
     expect(screen.getByRole('list', { name: 'Employees' })).toHaveTextContent('Engineering')

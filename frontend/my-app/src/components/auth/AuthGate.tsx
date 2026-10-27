@@ -1,11 +1,13 @@
+import { useTranslation } from 'react-i18next'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 
 import { useAuth } from '@/features/auth/use-auth'
 
 function AuthLoadingScreen() {
+  const { t } = useTranslation('pages')
   return (
     <div className="flex min-h-svh items-center justify-center bg-[#f9f9f6] text-[#526259]">
-      Loading…
+      {t('loading')}
     </div>
   )
 }

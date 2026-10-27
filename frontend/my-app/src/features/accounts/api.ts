@@ -1,3 +1,4 @@
+import { getLocale } from '@/i18n'
 import { z } from 'zod'
 import { authenticatedFetch } from '@/features/auth/authenticated-fetch'
 import { readApiErrorMessage } from '@/features/auth/api-error'
@@ -52,7 +53,7 @@ export async function updateAccount(workspaceId: number, accountId: number, inpu
   return parseAccount(await (await request(workspaceId, `/accounts/${accountId}`, { method: 'PUT', body: JSON.stringify(input), signal })).json(), workspaceId, accountId)
 }
 export function formatAccountBalance(account: ApiAccount) {
-  return new Intl.NumberFormat('en-IE', { style: 'currency', currency: account.currency }).format(Number(account.balance))
+  return new Intl.NumberFormat(getLocale(), { style: 'currency', currency: account.currency }).format(Number(account.balance))
 }
 
 export async function deleteAccount(workspaceId: number, accountId: number, signal?: AbortSignal) {
