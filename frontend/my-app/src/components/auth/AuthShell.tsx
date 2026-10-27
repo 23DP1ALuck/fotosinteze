@@ -1,3 +1,5 @@
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
 import { BrandMark } from '@/components/brand/BrandMark'
@@ -10,6 +12,7 @@ type AuthShellProps = {
 }
 
 function AuthShell({ headline, children, className }: AuthShellProps) {
+  const { t } = useTranslation('pages')
   return (
     <div className={cn('flex min-h-svh w-full', className)}>
       <aside className="hidden w-1/2 flex-col justify-between bg-[#1a3c34] p-10 text-white lg:flex">
@@ -22,15 +25,16 @@ function AuthShell({ headline, children, className }: AuthShellProps) {
             {headline}
           </h1>
           <p className="text-base text-white/85">
-            Your personal goals and business ambitions, with space for both.
+            {t('yourPersonalGoalsAndBusinessAmbitionsWithSpaceForBoth')}
           </p>
         </div>
         <p className="text-xs tracking-[0.2em] text-white/75 uppercase">
-          Personal clarity. Business control.
+          {t('personalClarityBusinessControl')}
         </p>
       </aside>
 
       <main className="flex w-full flex-col bg-[#f9f9f6] lg:w-1/2">
+        <div className="flex justify-end p-4"><LanguageSwitcher /></div>
         <div className="flex items-center gap-2.5 p-6 text-[22px] font-semibold tracking-tight text-[#1a3c34] lg:hidden">
           <BrandMark className="size-5" />
           <span>Fotosinteze</span>
@@ -44,12 +48,13 @@ function AuthShell({ headline, children, className }: AuthShellProps) {
 }
 
 function AuthBackLink() {
+  const { t } = useTranslation('pages')
   return (
     <Link
       to="/"
       className="mb-8 inline-flex items-center gap-1 text-sm text-[#526259] transition-colors hover:text-[#1a3c34]"
     >
-      ← Back to home
+      {t('backToHome')}
     </Link>
   )
 }

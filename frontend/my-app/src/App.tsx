@@ -1,3 +1,4 @@
+import '@/i18n'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import { NavigationShortcuts } from '@/components/navigation/NavigationShortcuts'

@@ -1,3 +1,4 @@
+import { getLocale } from '@/i18n'
 import { z } from 'zod'
 import { authenticatedFetch } from '@/features/auth/authenticated-fetch'
 import { readApiErrorMessage } from '@/features/auth/api-error'
@@ -14,10 +15,7 @@ export type AccountUpdate = { name?: string; balance?: string; is_main?: boolean
 
 export class AccountRequestError extends Error {
   readonly status: number
-  constructor(message: string, status: number) {
-    super(message)
-    this.status = status
-  }
+  constructor(message: string, status: number) { super(message); this.name = 'AccountRequestError'; this.status = status }
 }
 
 async function request(workspaceId: number, path: string, init: RequestInit = {}) {
@@ -54,9 +52,10 @@ export async function getAccount(workspaceId: number, accountId: number, signal?
 export async function updateAccount(workspaceId: number, accountId: number, input: AccountUpdate, signal?: AbortSignal) {
   return parseAccount(await (await request(workspaceId, `/accounts/${accountId}`, { method: 'PUT', body: JSON.stringify(input), signal })).json(), workspaceId, accountId)
 }
+export function formatAccountBalance(account: ApiAccount) {
+  return new Intl.NumberFormat(getLocale(), { style: 'currency', currency: account.currency }).format(Number(account.balance))
+}
+
 export async function deleteAccount(workspaceId: number, accountId: number, signal?: AbortSignal) {
   await request(workspaceId, `/accounts/${accountId}`, { method: 'DELETE', signal })
-}
-export function formatAccountBalance(account: ApiAccount) {
-  return new Intl.NumberFormat('en-IE', { style: 'currency', currency: account.currency }).format(Number(account.balance))
 }

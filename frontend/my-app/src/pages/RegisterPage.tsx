@@ -1,3 +1,5 @@
+import { pageText } from '@/i18n/pages'
+import { useTranslation } from 'react-i18next'
 import { KeyboardForm } from '@/components/forms/KeyboardForm'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowRight } from 'lucide-react'
@@ -19,6 +21,7 @@ import {
 import { cn } from '@/lib/utils'
 
 function RegisterPage() {
+  const { t } = useTranslation('pages')
   const navigate = useNavigate()
   const { register: registerUserSession } = useAuth()
   const [serverError, setServerError] = useState<string | null>(null)
@@ -55,14 +58,14 @@ function RegisterPage() {
   })
 
   return (
-    <AuthShell headline="Be careful on the road!">
+    <AuthShell headline={t('beCarefulOnTheRoad')}>
       <AuthBackLink />
       <div className="space-y-2 text-left">
         <h2 className="text-3xl font-semibold tracking-tight text-[#1a2e2a]">
-          A clearer start.
+          {t('aClearerStart')}
         </h2>
         <p className="text-[#526259]">
-          Create one account. Make room for every goal.
+          {t('createOneAccountMakeRoomForEveryGoal')}
         </p>
       </div>
 
@@ -70,58 +73,57 @@ function RegisterPage() {
         {serverError ? <FormAlert message={serverError} /> : null}
 
         <div className="space-y-2">
-          <Label htmlFor="displayName">Full name</Label>
+          <Label htmlFor="displayName">{t('fullName')}</Label>
           <Input
             id="displayName"
             autoComplete="name"
-            placeholder="Your full name"
+            placeholder={t('yourFullName')}
             aria-invalid={Boolean(errors.displayName)}
             disabled={isSubmitting}
             {...register('displayName')}
           />
           {errors.displayName ? (
-            <p className="text-sm text-red-600">{errors.displayName.message}</p>
+            <p className="text-sm text-red-600">{pageText(errors.displayName.message, t)}</p>
           ) : null}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="email">Email address</Label>
+          <Label htmlFor="email">{t('emailAddress')}</Label>
           <Input
             id="email"
             type="email"
             autoComplete="email"
-            placeholder="you@example.com"
+            placeholder={t('emailPlaceholder')}
             aria-invalid={Boolean(errors.email)}
             disabled={isSubmitting}
             {...register('email')}
           />
           {errors.email ? (
-            <p className="text-sm text-red-600">{errors.email.message}</p>
+            <p className="text-sm text-red-600">{pageText(errors.email.message, t)}</p>
           ) : null}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t('password')}</Label>
           <PasswordField
             id="password"
             autoComplete="new-password"
-            placeholder="Create a password"
+            placeholder={t('createAPassword')}
             aria-invalid={Boolean(errors.password)}
             disabled={isSubmitting}
             {...register('password')}
           />
           {errors.password ? (
-            <p className="text-sm text-red-600">{errors.password.message}</p>
+            <p className="text-sm text-red-600">{pageText(errors.password.message, t)}</p>
           ) : (
             <p className="text-sm text-[#526259]">
-              Use at least 8 characters. A longer phrase works well.
+              {t('useAtLeast8CharactersALongerPhraseWorksWell')}
             </p>
           )}
         </div>
 
         <p className="text-sm text-[#526259]">
-          By creating an account, you agree to the Terms of Service and Privacy
-          Policy.
+          {t('byCreatingAnAccountYouAgreeToTheTermsOfServiceAndPrivacyPolicy')}
         </p>
 
         <button
@@ -131,15 +133,15 @@ function RegisterPage() {
             'inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#1a3c34] text-sm font-medium text-white transition-opacity hover:bg-[#163329] disabled:cursor-not-allowed disabled:opacity-60',
           )}
         >
-          {isSubmitting ? 'Creating account…' : 'Create account'}
+          {isSubmitting ? t('creatingAccount') : t('createAccount')}
           {!isSubmitting ? <ArrowRight className="size-4" aria-hidden /> : null}
         </button>
       </KeyboardForm>
 
       <p className="mt-6 text-center text-sm text-[#526259]">
-        Already have an account?{' '}
+        {t('alreadyHaveAnAccount')}{' '}
         <Link className="font-medium text-[#1a3c34] hover:underline" to="/login">
-          Log in
+          {t('logIn')}
         </Link>
       </p>
     </AuthShell>

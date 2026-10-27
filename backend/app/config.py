@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     oauth_token_secret: str = "my_dev_secret"
     log_level: str = "DEBUG"
     client_url: str
-    # Optional until the sandbox integration is used; credentials stay outside Git.
+    # Deprecated sandbox fields accept existing .env files; no direct Revolut integration remains.
     revolut_api_client_id: str | None = None
     revolut_transport_cert_path: Path | None = None
     revolut_private_key_path: Path | None = None
@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     revolut_signing_cert_path: Path | None = None
     revolut_signing_kid: str = "fotosinteze-sandbox"
     revolut_redirect_uri: HttpUrl | None = None
+    # Keep the existing key: Enable Banking sessions are encrypted with it.
     revolut_token_encryption_key: SecretStr | None = None
     enable_banking_app_id: str | None = None
     enable_banking_private_key_path: Path | None = None

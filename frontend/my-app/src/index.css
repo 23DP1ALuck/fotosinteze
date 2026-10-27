@@ -345,3 +345,19 @@ code {
 @media (prefers-reduced-motion: reduce) {
   .calendar-popup, .calendar-popup *, .date-input-trigger { transition: none !important; animation: none !important; }
 }
+
+/* Chart hover feedback follows the selected data shape, never the plot band. */
+.interactive-chart .recharts-bar-rectangle,
+.interactive-chart .recharts-pie-sector { cursor: pointer; }
+.interactive-chart .recharts-bar-rectangle:hover,
+.interactive-chart .recharts-pie-sector:hover { filter: brightness(1.12); }
+.chart-spending-point:hover circle:last-child,
+.chart-spending-point:focus-within circle:last-child { r: 6; stroke: #d5f579; stroke-width: 3; }
+
+/* A consistent budget meter instead of the browser's green/gray progress theme. */
+.budget-progress { appearance: none; --budget-fill: #60815b; background: #e2e8db; color: var(--budget-fill); }
+.budget-progress[data-status="WARNING"] { --budget-fill: #bf9332; }
+.budget-progress[data-status="EXCEEDED"] { --budget-fill: #a43b32; }
+.budget-progress::-webkit-progress-bar { background: #e2e8db; border-radius: 999px; }
+.budget-progress::-webkit-progress-value { background: var(--budget-fill); border-radius: 999px; }
+.budget-progress::-moz-progress-bar { background: var(--budget-fill); border-radius: 999px; }

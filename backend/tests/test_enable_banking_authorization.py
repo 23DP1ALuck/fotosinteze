@@ -1,25 +1,16 @@
 import json
-import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from sqlalchemy import select
 from app.models import EnableBankingConnection, WorkspaceUsers
 from app.services import enable_banking_service as service
-from app.services import revolut_authorization_service as authorization
-from tests import test_revolut_authorization as base
+from tests.bank_test_case import BankTestCase
 
 
-class EnableBankingAuthorizationTests(unittest.IsolatedAsyncioTestCase):
-    setUpClass = classmethod(base.RevolutConnectionTests.setUpClass.__func__)
-    asyncTearDown = base.RevolutConnectionTests.asyncTearDown
-    provider = base.RevolutConnectionTests.provider
-
+class EnableBankingAuthorizationTests(BankTestCase):
     async def asyncSetUp(self):
-        await base.RevolutConnectionTests.asyncSetUp(self)
+        await super().asyncSetUp()
         self.config.enable_banking_redirect_uri = 'https://backend.test/enable-banking/callback'
-        config_patch = patch.object(service, 'settings', self.config)
-        config_patch.start()
-        self.addCleanup(config_patch.stop)
         bank_patch = patch.object(service.client, 'request', side_effect=self.bank_response)
         self.bank = bank_patch.start()
         self.addCleanup(bank_patch.stop)
@@ -65,7 +56,7 @@ class EnableBankingAuthorizationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         row = await self.db.scalar(select(EnableBankingConnection))
         self.assertNotIn('stable-bank-hash', row.session_encrypted)
-        stored = json.loads(authorization.encryption_cipher().decrypt(row.session_encrypted.encode()))
+        stored = json.loads(service.encryption_cipher().decrypt(row.session_encrypted.encode()))
         self.assertNotIn('private-iban', json.dumps(stored))
         self.assertEqual(stored['accounts'][0]['identification_hash'], 'stable-bank-hash')
         self.assertEqual((await self.finish()).status_code, 400)
@@ -140,7 +131,7 @@ class EnableBankingAuthorizationTests(unittest.IsolatedAsyncioTestCase):
         self.payload['accounts'].append({'uid': None, 'identification_hash': 'closed-account'})
         self.assertEqual((await self.finish()).status_code, 200)
         row = await self.db.scalar(select(EnableBankingConnection))
-        stored = json.loads(authorization.encryption_cipher().decrypt(row.session_encrypted.encode()))
+        stored = json.loads(service.encryption_cipher().decrypt(row.session_encrypted.encode()))
         self.assertEqual(len(stored['accounts']), 1)
 
     async def test_missing_session_fields_and_denial_consume_attempt_safely(self):

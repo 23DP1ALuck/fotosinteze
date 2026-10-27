@@ -8,6 +8,7 @@ from app.models import Workspace
 from app.services import budget_service
 
 router = APIRouter(tags=["budgets"], responses={
+    409: {"description": "Budget name or category already in use in this workspace"},
     401: {"description": "Missing, invalid or expired access token, invalid session, or user not found"},
     403: {"description": "No workspace access or business workspace owner required"},
     422: {"description": "Missing or invalid Workspace-ID header, path parameter or request fields"},

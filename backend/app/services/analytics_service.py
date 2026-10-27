@@ -24,7 +24,7 @@ async def _transaction_query(workspace: Workspace, current_user: dict, db: Async
         Category, Transaction.category_id == Category.category_id
     ).where(
         Transaction.workspace_id == workspace.workspace_id,
-        Category.workspace_id == workspace.workspace_id,
+        ((Category.workspace_id.is_(None)) | (Category.workspace_id == workspace.workspace_id)),
         Transaction.currency == workspace.base_currency,
         Transaction.created_at >= datetime.combine(date_from, time.min),
         Transaction.created_at <= datetime.combine(date_to, time.max),
