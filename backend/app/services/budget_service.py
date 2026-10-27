@@ -77,7 +77,7 @@ async def validate_budget_fields(request: CreateBudgetRequest, current_user: dic
         category = await db.get(Category, request.category_id)
         if category is None:
             raise HTTPException(status_code=404, detail="Category not found")
-        if category.workspace_id != workspace.workspace_id:
+        if category.workspace_id not in (None, workspace.workspace_id):
             raise HTTPException(status_code=400, detail="Category does not belong to this workspace")
         if category.type != CategoryType.expense:
             raise HTTPException(status_code=400, detail="Budgets require an expense category")

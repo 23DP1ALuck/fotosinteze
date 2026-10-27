@@ -276,3 +276,14 @@ it('keeps an open form and validation in sync when language changes, and submits
   const [, init] = vi.mocked(fetch).mock.calls[0]
   expect(JSON.parse(String(init?.body))).toMatchObject({ amount: '19.95', currency: 'USD', description: 'User-owned apraksts' })
 })
+
+it('can select and save a shared category', async () => {
+  const saved = vi.fn()
+  render(<TransactionForm workspaceId={7} type="expense" options={{ ...options, categories: [{ id: 4, name: 'Groceries', type: 'expense', workspaceId: null }] }} onClose={() => {}} onSaved={saved} />)
+  await userEvent.selectOptions(screen.getByLabelText('Account'), '12')
+  await userEvent.selectOptions(screen.getByLabelText('Category'), '4')
+  await userEvent.type(screen.getByLabelText('Amount (EUR)'), '10')
+  await userEvent.click(screen.getByRole('button', { name: 'Save expense' }))
+  await waitFor(() => expect(saved).toHaveBeenCalledTimes(1))
+  expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body)).category_id).toBe(4)
+})

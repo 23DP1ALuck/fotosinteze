@@ -35,7 +35,7 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
   const dialog = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const bank = transaction?.source === 'BANK'
-  const originalCategory = options.categories.find(item => item.id === transaction?.category_id && item.workspaceId === workspaceId)
+  const originalCategory = options.categories.find(item => item.id === transaction?.category_id && (item.workspaceId === null || item.workspaceId === workspaceId))
   const needsType = Boolean(transaction && !bank && !originalCategory)
   const accounts = options.accounts.filter(item => item.workspace_id === workspaceId)
   const mainAccountId = accounts.find(item => item.is_main)?.account_id
@@ -46,7 +46,7 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
     if (!accounts.some(item => String(item.account_id) === value.account_id)) ctx.addIssue({ code: 'custom', path: ['account_id'], message: 'Choose an available account' })
     const categoryType = bank ? originalCategory?.type : needsType ? value.transaction_type : type
     if (!categoryType) ctx.addIssue({ code: 'custom', path: ['transaction_type'], message: 'Choose income or expense' })
-    if (!options.categories.some(item => String(item.id) === value.category_id && item.workspaceId === workspaceId && item.type === categoryType)) ctx.addIssue({ code: 'custom', path: ['category_id'], message: 'Choose a category for this transaction type' })
+    if (!options.categories.some(item => String(item.id) === value.category_id && (item.workspaceId === null || item.workspaceId === workspaceId) && item.type === categoryType)) ctx.addIssue({ code: 'custom', path: ['category_id'], message: 'Choose a category for this transaction type' })
     if (requiresDepartment && !value.department_id) ctx.addIssue({ code: 'custom', path: ['department_id'], message: 'An assigned department is required' })
     if (value.department_id && !departments.some(item => String(item.id) === value.department_id)) ctx.addIssue({ code: 'custom', path: ['department_id'], message: 'Choose an available department' })
     const project = catalog?.projects.find(item => String(item.id) === value.project_id)
@@ -71,7 +71,7 @@ export function TransactionForm({ workspaceId, type, transaction, options, catal
     if (getValues('project_id') && (!project || (next && !project.department_ids.includes(Number(next))))) setValue('project_id', '')
   }, [catalog, departments, departmentId, requiresDepartment, getValues, setValue])
   const effectiveType = bank ? originalCategory?.type ?? type : needsType ? selectedType || type : type
-  const matchingCategories = options.categories.filter(item => item.type === effectiveType && item.workspaceId === workspaceId)
+  const matchingCategories = options.categories.filter(item => item.type === effectiveType && (item.workspaceId === null || item.workspaceId === workspaceId))
   const account = accounts.find(item => String(item.account_id) === accountId)
   const availableProjects = catalog?.projects.filter(item => !departmentId || item.department_ids.includes(Number(departmentId))) ?? []
   const mutation = useMutation({ mutationFn: (value: Values) => saveTransaction(workspaceId, {

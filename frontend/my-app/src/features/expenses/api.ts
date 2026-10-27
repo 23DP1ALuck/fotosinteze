@@ -61,8 +61,8 @@ export async function decideExpenseRequest(workspaceId: number, id: number, deci
 }
 
 export async function listExpenseCategories(workspaceId: number, signal?: AbortSignal): Promise<Category[]> {
-  const schema = z.array(z.object({ category_id: z.number().int().positive(), workspace_id: z.number().int().positive(), name: z.string(), type: z.literal('EXPENSE') }))
+  const schema = z.array(z.object({ category_id: z.number().int().positive(), workspace_id: z.number().int().positive().nullable(), name: z.string(), type: z.literal('EXPENSE') }))
   const result = schema.safeParse(await (await request(workspaceId, '/expenses/categories', { signal })).json())
-  if (!result.success || result.data.some(row => row.workspace_id !== workspaceId)) throw new Error('The server returned unexpected expense categories. Please retry.')
+  if (!result.success || result.data.some(row => row.workspace_id !== null && row.workspace_id !== workspaceId)) throw new Error('The server returned unexpected expense categories. Please retry.')
   return result.data.map(row => ({ id: row.category_id, workspaceId: row.workspace_id, name: row.name, type: 'expense' }))
 }
