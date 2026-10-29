@@ -1,5 +1,19 @@
 export const finance = {
   "en": {
+    "bankAutoRefresh": "Automatically refresh while I use this workspace",
+    "bankProviderConfirmation": "Automatic refresh is unavailable for this connection. You can sync manually.",
+    "bankFullSync": "Reconcile full transaction history",
+    "bankNextSync": "Next refresh available: {{time}}",
+    "bankDeleteTitle": "Delete bank connection?",
+    "bankDeleteAction": "Delete bank connection",
+    "bankDeleteWarning": "This permanently deletes this connection, all its linked accounts and every transaction on those accounts, including manually added entries, plus pending transactions. Other manual accounts, categories and budgets remain. This cannot be undone.",
+    "bankPendingTransactions": "Pending bank transactions",
+    "bankPendingExcluded": "Pending transactions are excluded from balances and booked totals. They may change before booking.",
+    "bankPendingLoading": "Loading pending transactions…",
+    "bankPendingEmpty": "No pending transactions.",
+    "bankPendingError": "Could not load pending transactions.",
+    "bankPendingDateUnknown": "Date pending",
+
     "categoryAlreadyBudgeted": "This category already has a budget. Edit the existing budget or choose another category.",
     "bankManagedBalance": "The bank manages this balance, even when the connection expires. You can change the display name.",
     "bankEditRestrictions": "Bank sync manages this amount, currency, account and direction. You can edit the description and choose a category with the same direction.",
@@ -417,6 +431,20 @@ export const finance = {
     "categoryId": "Category #{{id}}"
   },
   "lv": {
+    "bankAutoRefresh": "Automātiski atjaunināt, kamēr lietoju šo darbvietu",
+    "bankProviderConfirmation": "Šim savienojumam automātiskā atjaunināšana nav pieejama. Varat sinhronizēt manuāli.",
+    "bankFullSync": "Sinhronizēt visu darījumu vēsturi",
+    "bankNextSync": "Nākamā atjaunināšana pieejama: {{time}}",
+    "bankDeleteTitle": "Dzēst bankas savienojumu?",
+    "bankDeleteAction": "Dzēst bankas savienojumu",
+    "bankDeleteWarning": "Tas neatgriezeniski dzēsīs šo savienojumu, visus saistītos kontus un visus šo kontu darījumus, arī manuāli pievienotos ierakstus, kā arī neapstiprinātos darījumus. Citi manuālie konti, kategorijas un budžeti paliks. Darbību nevar atsaukt.",
+    "bankPendingTransactions": "Neapstiprināti bankas darījumi",
+    "bankPendingExcluded": "Neapstiprinātie darījumi nav iekļauti atlikumos un iegrāmatoto darījumu kopsummās. Pirms iegrāmatošanas tie var mainīties.",
+    "bankPendingLoading": "Ielādē neapstiprinātos darījumus…",
+    "bankPendingEmpty": "Nav neapstiprinātu darījumu.",
+    "bankPendingError": "Neizdevās ielādēt neapstiprinātos darījumus.",
+    "bankPendingDateUnknown": "Datums vēl nav zināms",
+
     "categoryAlreadyBudgeted": "Šai kategorijai jau ir budžets. Rediģējiet esošo budžetu vai izvēlieties citu kategoriju.",
     "bankManagedBalance": "Banka pārvalda šo atlikumu arī pēc savienojuma termiņa beigām. Varat mainīt konta nosaukumu.",
     "bankEditRestrictions": "Bankas sinhronizācija pārvalda summu, valūtu, kontu un darījuma virzienu. Varat mainīt aprakstu un izvēlēties tā paša virziena kategoriju.",
@@ -836,6 +864,20 @@ export const finance = {
     "categoryId": "Kategorija #{{id}}"
   },
   "ru": {
+    "bankAutoRefresh": "Автоматически обновлять, пока я использую это пространство",
+    "bankProviderConfirmation": "Автоматическое обновление для этого подключения недоступно. Можно синхронизировать вручную.",
+    "bankFullSync": "Сверить всю историю операций",
+    "bankNextSync": "Следующее обновление доступно: {{time}}",
+    "bankDeleteTitle": "Удалить подключение банка?",
+    "bankDeleteAction": "Удалить подключение банка",
+    "bankDeleteWarning": "Это навсегда удалит подключение, все связанные счета и все операции по ним, включая добавленные вручную, а также ожидающие операции. Другие ручные счета, категории и бюджеты сохранятся. Отменить это действие нельзя.",
+    "bankPendingTransactions": "Ожидающие банковские операции",
+    "bankPendingExcluded": "Ожидающие операции не включены в остатки и итоги проведённых операций. До проведения они могут измениться.",
+    "bankPendingLoading": "Загрузка ожидающих операций…",
+    "bankPendingEmpty": "Нет ожидающих операций.",
+    "bankPendingError": "Не удалось загрузить ожидающие операции.",
+    "bankPendingDateUnknown": "Дата уточняется",
+
     "categoryAlreadyBudgeted": "Для этой категории уже есть бюджет. Измените существующий бюджет или выберите другую категорию.",
     "bankManagedBalance": "Банк управляет этим балансом даже после истечения срока подключения. Вы можете изменить название счёта.",
     "bankEditRestrictions": "Синхронизация с банком управляет суммой, валютой, счётом и направлением операции. Можно изменить описание и выбрать категорию с тем же направлением.",

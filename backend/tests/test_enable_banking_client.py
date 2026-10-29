@@ -76,7 +76,7 @@ class EnableBankingClientTests(unittest.IsolatedAsyncioTestCase):
                 ('GET', 'https://evil.test/application', {}), ('GET', '//evil.test/application', {}),
                 ('GET', '/application?x=1', {}), ('GET', '/accounts/../balances', {}),
                 ('GET', f'/accounts/{UID}%2f../balances', {}), ('GET', '/accounts/no-uuid/balances', {}),
-                ('POST', '/application', {}), ('DELETE', f'/sessions/{UID}', {}),
+                ('POST', '/application', {}), ('DELETE', '/application', {}),
                 ('GET', '/application', {'follow_redirects': True}),
                 ('GET', '/application', {'auth': ('user', 'password')}),
                 ('GET', '/application', {'headers': {'authorization': 'secret'}}),
@@ -141,3 +141,21 @@ class EnableBankingClientTests(unittest.IsolatedAsyncioTestCase):
                 await enable_banking_client.request('GET', '/application')
             self.assertEqual(error.exception.status_code, 502)
             self.assertNotIn('sensitive-network-details', str(error.exception))
+
+    async def test_delete_session_is_pinned_and_idempotent_and_429_keeps_safe_delay(self):
+        for status in (200,204,404):
+            def handler(request):
+                self.assertEqual(request.method,'DELETE')
+                self.assertEqual(str(request.url),'https://api.enablebanking.com/sessions/'+UID)
+                return httpx.Response(status,json={'message':'OK'}) if status==200 else httpx.Response(status)
+            with self.subTest(status=status), patch.object(enable_banking_client.httpx,'AsyncClient',self.client_factory(handler)):
+                result=await enable_banking_client.request('DELETE','/sessions/'+UID)
+                self.assertIsInstance(result,dict)
+        for retry,expected in [('5','60'),('120','120'),('9999999','86400'),('secret-provider-message','60')]:
+            with self.subTest(retry=retry), patch.object(enable_banking_client.httpx,'AsyncClient',
+                    self.client_factory(lambda request:httpx.Response(429,headers={'Retry-After':retry},json={'secret':'never-echo'}))):
+                with self.assertRaises(HTTPException) as error:
+                    await enable_banking_client.request('GET','/aspsps')
+                self.assertEqual(error.exception.status_code,429)
+                self.assertEqual(error.exception.headers['Retry-After'],expected)
+                self.assertNotIn('never-echo',error.exception.detail)

@@ -1,6 +1,7 @@
 """Browser-bound consent for the user's linked personal Revolut account."""
 import hashlib
 import hmac
+import json
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -8,7 +9,7 @@ from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, AwareDatetime, SecretStr
 from sqlalchemy import or_, select, update
@@ -77,7 +78,9 @@ async def connection_status(workspace: Workspace, db: AsyncSession):
     if connection is None:
         return ConnectionStatus(status='not_connected')
     now = now_utc()
-    if connection.session_encrypted and connection.expires_at and connection.expires_at > now:
+    if connection.pending_status == 'deleting':
+        state = 'failed'
+    elif connection.session_encrypted and connection.expires_at and connection.expires_at > now:
         state = 'connected'
     elif connection.pending_status in ('pending', 'exchanging'):
         state = 'pending' if connection.pending_expires_at and connection.pending_expires_at > now else 'expired'
@@ -99,6 +102,8 @@ async def start_authorization(current_user: dict, workspace: Workspace, db: Asyn
     encryption_cipher()
     connection = await db.scalar(select(Connection).where(Connection.workspace_id == workspace.workspace_id))
     now = now_utc()
+    if connection and connection.pending_status == 'deleting':
+        raise HTTPException(409, 'Bank connection deletion is in progress; retry deletion first')
     if (connection and connection.pending_status == 'exchanging'
             and connection.pending_expires_at and connection.pending_expires_at > now):
         raise HTTPException(409, 'Bank authorization exchange is already in progress')
@@ -131,7 +136,8 @@ async def start_authorization(current_user: dict, workspace: Workspace, db: Asyn
     else:
         result = await db.execute(update(Connection).where(Connection.connection_id == connection_id,
             or_(Connection.pending_status.is_(None), Connection.pending_status != 'exchanging',
-                Connection.pending_expires_at <= now)).values(**pending))
+                Connection.pending_expires_at <= now),
+            or_(Connection.pending_status.is_(None), Connection.pending_status != 'deleting')).values(**pending))
         if result.rowcount != 1:
             await db.rollback()
             raise HTTPException(409, 'Bank authorization exchange is already in progress')
@@ -157,6 +163,13 @@ async def finish_authorization(data: CallbackInput, browser: str | None, db: Asy
     if accessible is None:
         raise HTTPException(403, 'No access to this Personal Workspace')
     cipher = encryption_cipher()
+    previous_session_id = None
+    if flow.session_encrypted:
+        try:
+            previous_session_id = UUID(json.loads(cipher.decrypt(flow.session_encrypted.encode()))['session_id'])
+        except (InvalidToken, ValueError, TypeError, KeyError, AttributeError):
+            pass
+    issued_session_id = None
     workspace_id, user_id = flow.workspace_id, flow.pending_user_id
     claimed = await db.execute(update(Connection).where(Connection.state_hash == state_hash,
         Connection.pending_status == 'pending', Connection.pending_expires_at > now).values(pending_status='exchanging'))
@@ -167,6 +180,7 @@ async def finish_authorization(data: CallbackInput, browser: str | None, db: Asy
         if data.error or data.code is None:
             raise HTTPException(400, 'Bank authorization was denied or incomplete')
         payload = await client.request('POST', '/sessions', json={'code': data.code.get_secret_value()})
+        issued_session_id = UUID(payload['session_id'])
         bank = payload.get('aspsp', {})
         if bank.get('name') != 'Revolut' or bank.get('country') != 'LV' or payload.get('psu_type') != 'personal':
             raise ValueError()
@@ -197,6 +211,12 @@ async def finish_authorization(data: CallbackInput, browser: str | None, db: Asy
     except (ValueError, TypeError, KeyError, AttributeError, HTTPException) as exc:
         await db.rollback()
         logger.warning('Enable Banking callback failed (%s)', type(exc).__name__)
+        # A consent can finish after deletion; close that newly issued, unpersisted session.
+        if issued_session_id is not None and issued_session_id != previous_session_id:
+            try:
+                await client.request('DELETE', '/sessions/' + str(issued_session_id))
+            except HTTPException:
+                logger.warning('Enable Banking could not revoke an unpersisted session')
         await db.execute(update(Connection).where(Connection.state_hash == state_hash,
             Connection.pending_status == 'exchanging').values(pending_status='failed', browser_hash=None))
         await db.commit()

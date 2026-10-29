@@ -30,6 +30,7 @@ class EnableBankingMigrationTests(unittest.TestCase):
                     self.assertEqual(db.execute(text('SELECT account_id,balance,is_main,banking_connection_id FROM accounts')).one(), (1,42,1,None))
                     self.assertEqual(db.execute(text('SELECT account_id,amount FROM transactions')).one(), (1,2))
                     self.assertEqual(db.execute(text('PRAGMA foreign_key_check')).all(), [])
+                    self.assertEqual(db.execute(text('SELECT pending_transactions_encrypted,sync_started_at,sync_retry_at,sync_lease_until FROM enable_banking_connections')).all(), [])
                     db.execute(text("INSERT INTO enable_banking_connections(connection_id,workspace_id,connected_by_id) VALUES(1,1,1)"))
                     db.execute(text("INSERT INTO accounts(account_id,name,currency,balance,workspace_id,banking_connection_id,external_account_id,is_main) VALUES(2,'Bank','EUR',12,1,1,'stable',0)"))
                     db.execute(text("INSERT INTO transactions(amount,currency,description,source,account_id,workspace_id,external_transaction_id,created_at,updated_at) VALUES(2,'EUR','Imported','BANK',2,1,'entry',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"))

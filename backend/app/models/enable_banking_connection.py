@@ -17,3 +17,7 @@ class EnableBankingConnection(Base):
     pending_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     pending_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     pending_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.user_id'), nullable=True)
+    pending_transactions_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sync_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sync_retry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sync_lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

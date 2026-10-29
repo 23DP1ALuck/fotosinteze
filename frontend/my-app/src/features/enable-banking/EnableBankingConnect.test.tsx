@@ -134,7 +134,7 @@ it('syncs transactions and invalidates only the selected workspace finance cache
     expect(queryClient.getQueryState([feature, 1, 8, 'detail'])?.isInvalidated).toBe(false)
     expect(queryClient.getQueryState([feature, 2, 7, 'detail'])?.isInvalidated).toBe(false)
   }
-  const call = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/enable-banking/sync'))
+  const call = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes('/enable-banking/sync'))
   expect(call?.[1]?.method).toBe('POST')
   expect(new Headers(call?.[1]?.headers).get('Workspace-ID')).toBe('7')
 })
@@ -187,7 +187,7 @@ it('ignores a sync response after the authenticated account changes', async () =
     : new Promise<Response>(resolve => { finish = resolve })))
   render(<EnableBankingConnect workspaceId={7} />)
   await userEvent.click(await screen.findByRole('button', { name: 'Sync accounts and transactions' }))
-  const signal = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/sync'))?.[1]?.signal
+  const signal = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes('/sync'))?.[1]?.signal
   act(() => setAccessToken(`h.${btoa(JSON.stringify({ sub: '2', exp: Date.now() / 1000 + 3600 }))}.s`))
   expect(signal?.aborted).toBe(true)
   await act(async () => finish(Response.json({ accounts_count: 1, imported_count: 5, last_sync_at: '2026-10-25T20:00:00Z' })))
@@ -213,7 +213,7 @@ it('blocks duplicate syncs while pending and allows retry after malformed sync d
   await userEvent.dblClick(await screen.findByRole('button', { name: 'Sync accounts and transactions' }))
   expect(screen.getByRole('button', { name: 'Syncing…' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Reconnect Revolut' })).toBeDisabled()
-  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/sync'))).toHaveLength(1)
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/sync'))).toHaveLength(1)
   await act(async () => finish(Response.json({ accounts_count: -1, imported_count: 3, last_sync_at: 'bad' })))
   expect(await screen.findByRole('alert')).toHaveTextContent('unexpected sync data')
   expect(screen.getByRole('button', { name: 'Sync accounts and transactions' })).toBeEnabled()
