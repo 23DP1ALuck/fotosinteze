@@ -27,6 +27,15 @@ function stubTransport(postResponse: Response) {
   return transport
 }
 
+it('uses the reference wording for the Revolut connection card', async () => {
+  stubTransport(Response.json({}))
+  render(<EnableBankingConnect workspaceId={7} />)
+  expect(await screen.findByText('Not connected')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Revolut' })).toBeInTheDocument()
+  expect(screen.getByText('Connect your Revolut account to sync balances and transactions.')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Connect Revolut' })).toBeEnabled()
+})
+
 it('starts consent with the selected workspace, bearer token and browser cookie, then redirects', async () => {
   const token = `h.${btoa(JSON.stringify({ sub: '1', exp: Date.now() / 1000 + 3600 }))}.s`
   setAccessToken(token)
@@ -36,7 +45,7 @@ it('starts consent with the selected workspace, bearer token and browser cookie,
   vi.stubGlobal('fetch', fetchMock)
   vi.stubGlobal('location', { assign })
   render(<EnableBankingConnect workspaceId={7} />)
-  await userEvent.click(screen.getByRole('button', { name: 'Connect real Revolut' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Connect Revolut' }))
   expect(fetchMock).toHaveBeenCalledWith(`${API_URL}/enable-banking/authorize`, expect.objectContaining({ method: 'POST', credentials: 'include' }))
   const headers = new Headers(vi.mocked(fetch).mock.calls.find(([path]) => String(path).endsWith('/enable-banking/authorize'))?.[1]?.headers)
   expect(headers.get('Workspace-ID')).toBe('7')
@@ -47,9 +56,9 @@ it('starts consent with the selected workspace, bearer token and browser cookie,
 it('shows a failed authorization and allows retry', async () => {
   stubTransport(Response.json({ detail: 'No access to this workspace' }, { status: 403 }))
   render(<EnableBankingConnect workspaceId={7} />)
-  await userEvent.click(screen.getByRole('button', { name: 'Connect real Revolut' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Connect Revolut' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('No access to this workspace')
-  expect(screen.getByRole('button', { name: 'Connect real Revolut' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Connect Revolut' })).toBeEnabled()
 })
 
 it.each(['https://evil.example/steal', 'javascript:alert(1)', 'http://auth.enablebanking.com/x', 'https://auth.enablebanking.com.evil.example/x', 'https://user:password@auth.enablebanking.com/x', 'https://auth.enablebanking.com:444/x', null])('rejects an unexpected authorization URL: %s', async url => {
@@ -57,7 +66,7 @@ it.each(['https://evil.example/steal', 'javascript:alert(1)', 'http://auth.enabl
   vi.stubGlobal('location', { assign })
   stubTransport(Response.json({ authorization_url: url }))
   render(<EnableBankingConnect workspaceId={7} />)
-  await userEvent.click(screen.getByRole('button', { name: 'Connect real Revolut' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Connect Revolut' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('unexpected authorization URL')
   expect(assign).not.toHaveBeenCalled()
 })
@@ -68,7 +77,7 @@ it('shows saved connection status with a reconnect action and refreshes it on re
   vi.stubGlobal('fetch', fetchMock)
   render(<EnableBankingConnect workspaceId={7} />)
   expect(await screen.findByText('Connected')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Reconnect real Revolut' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Reconnect Revolut' })).toBeEnabled()
   expect(screen.getByText(/Access expires/)).toBeInTheDocument()
   window.dispatchEvent(new Event('focus'))
   expect(await screen.findByText('Authorization expired. Reconnect to continue.')).toBeInTheDocument()
@@ -84,7 +93,7 @@ it.each([
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ ...disconnected, status })))
   render(<EnableBankingConnect workspaceId={7} />)
   expect(await screen.findByText(message)).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Reconnect real Revolut' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Reconnect Revolut' })).toBeEnabled()
 })
 
 it('shows status errors and recovers when checking again', async () => {
@@ -146,7 +155,7 @@ it('accepts the second Enable Banking consent origin', async () => {
   vi.stubGlobal('location', { assign })
   stubTransport(Response.json({ authorization_url: 'https://tilisy.enablebanking.com/authorize?id=1' }))
   render(<EnableBankingConnect workspaceId={7} />)
-  await userEvent.click(screen.getByRole('button', { name: 'Connect real Revolut' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Connect Revolut' }))
   expect(assign).toHaveBeenCalledWith('https://tilisy.enablebanking.com/authorize?id=1')
 })
 
@@ -159,7 +168,7 @@ it('aborts authorization when the workspace changes and ignores its late redirec
     : new Promise<Response>(resolve => { finish = resolve }))
   vi.stubGlobal('fetch', transport)
   const { rerender } = render(<EnableBankingConnect workspaceId={7} />)
-  await userEvent.click(screen.getByRole('button', { name: 'Connect real Revolut' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Connect Revolut' }))
   const consent = transport.mock.calls.find(([url]) => String(url).endsWith('/authorize'))
   const signal = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/authorize'))?.[1]?.signal
   expect(consent).toBeDefined()
@@ -167,7 +176,7 @@ it('aborts authorization when the workspace changes and ignores its late redirec
   expect(signal?.aborted).toBe(true)
   await act(async () => finish(Response.json({ authorization_url: 'https://auth.enablebanking.com/authorize' })))
   expect(assign).not.toHaveBeenCalled()
-  expect(screen.getByRole('button', { name: 'Connect real Revolut' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Connect Revolut' })).toBeEnabled()
 })
 
 it('ignores a sync response after the authenticated account changes', async () => {
@@ -203,8 +212,8 @@ it('blocks duplicate syncs while pending and allows retry after malformed sync d
   render(<EnableBankingConnect workspaceId={7} />)
   await userEvent.dblClick(await screen.findByRole('button', { name: 'Sync accounts and transactions' }))
   expect(screen.getByRole('button', { name: 'Syncing…' })).toBeDisabled()
-  expect(screen.getByRole('button', { name: 'Reconnect real Revolut' })).toBeDisabled()
-  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/sync'))).toHaveLength(1)
+  expect(screen.getByRole('button', { name: 'Reconnect Revolut' })).toBeDisabled()
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/sync'))).toHaveLength(1)
   await act(async () => finish(Response.json({ accounts_count: -1, imported_count: 3, last_sync_at: 'bad' })))
   expect(await screen.findByRole('alert')).toHaveTextContent('unexpected sync data')
   expect(screen.getByRole('button', { name: 'Sync accounts and transactions' })).toBeEnabled()
