@@ -1,5 +1,8 @@
 from decimal import Decimal
-from app.models import Account, RevolutConnection, Transaction
+from app.models import Account, Category, Department, Expense, RevolutConnection, Transaction
+from app.models.expenses import ExpenseStatusEnum
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 import unittest
 from tests import test_transaction_routes
 
@@ -32,12 +35,53 @@ class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.delete('/accounts/1')).status_code, 401)
         self.assertIsNotNone(await self.db.get(Account, 1))
 
-    async def test_delete_rejects_accounts_with_transactions_without_losing_history(self):
+    async def test_delete_removes_transactions_and_linked_expenses_only(self):
+        await self.db.execute(text('PRAGMA foreign_keys=ON'))
+        for expense_id in (1, 2):
+            self.db.add(Expense(expense_id=expense_id, workspace_id=1, submitted_by=1,
+                category_id=1, amount=20, currency='EUR', description='Expense',
+                status=ExpenseStatusEnum.APPROVED if expense_id == 1 else ExpenseStatusEnum.PENDING))
+        self.db.add(Account(account_id=2, name='Other', workspace_id=1, currency='EUR', balance=50))
+        await self.db.flush()
+        transaction = await self.db.get(Transaction, 1)
+        transaction.expense_id = 1
+        self.db.add(Transaction(transaction_id=2, workspace_id=1, account_id=2,
+            amount=10, currency='EUR', description='Keep', source=transaction.source))
+        await self.db.commit()
+
         response = await self.client.delete('/accounts/1')
-        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.status_code, 204, response.text)
+        self.assertIsNone(await self.db.get(Account, 1))
+        self.assertIsNone(await self.db.get(Transaction, 1))
+        self.assertIsNone(await self.db.get(Expense, 1))
+        self.assertIsNotNone(await self.db.get(Expense, 2))
+        self.assertIsNotNone(await self.db.get(Transaction, 2))
+        self.assertEqual((await self.db.get(Account, 2)).balance, Decimal('50'))
+        self.assertIsNotNone(await self.db.get(Category, 1))
+        self.assertIsNotNone(await self.db.get(Department, 1))
+
+    async def test_delete_personal_account_with_transactions(self):
+        self.db.add(Account(account_id=2, name='Personal', workspace_id=2, currency='EUR', balance=50))
+        await self.db.flush()
+        original = await self.db.get(Transaction, 1)
+        self.db.add(Transaction(transaction_id=2, workspace_id=2, account_id=2,
+            amount=10, currency='EUR', description='Personal', source=original.source))
+        await self.db.commit()
+        response = await self.client.delete('/accounts/2', headers={'Workspace-ID': '2'})
+        self.assertEqual(response.status_code, 204, response.text)
+        self.assertIsNone(await self.db.get(Account, 2))
+        self.assertIsNone(await self.db.get(Transaction, 2))
+        self.assertIsNotNone(await self.db.get(Transaction, 1))
+
+    async def test_failed_account_deletion_rolls_back_transaction_removal(self):
+        await self.db.execute(text("CREATE TRIGGER prevent_account_delete BEFORE DELETE ON accounts "
+                                   "BEGIN SELECT RAISE(ABORT, 'Deletion failed'); END"))
+        await self.db.commit()
+        with self.assertRaises(IntegrityError):
+            await self.client.delete('/accounts/1')
+        await self.db.rollback()
         self.assertIsNotNone(await self.db.get(Account, 1))
         self.assertIsNotNone(await self.db.get(Transaction, 1))
-        self.assertEqual((await self.client.get('/accounts/1')).json()['balance'], '80.00')
 
     async def test_delete_rejects_bank_linked_accounts_without_deleting_connection(self):
         self.db.add(RevolutConnection(revolut_connection_id=1, external_consent_id='consent', status='active', connected_by_id=1))
