@@ -76,6 +76,89 @@ class EnableBankingSyncTests(unittest.IsolatedAsyncioTestCase):
     async def sync(self):
         return await service.sync(self.workspace, self.db)
 
+    async def test_mcc_reuses_shared_categories_without_duplicates(self):
+        names = {'5411': 'Groceries', '5812': 'Restaurants', '4111': 'Transportation',
+                 '7011': 'Travel', '5912': 'Health', '5311': 'Shopping',
+                 '7832': 'Entertainment', '4900': 'Utilities', '6300': 'Insurance',
+                 '8398': 'Donations', '7230': 'Services', '6011': 'Cash'}
+        for name in names.values():
+            self.db.add(Category(workspace_id=None, name=name, type=CategoryType.expense))
+        self.db.add(Category(workspace_id=1, name='Groceries', type=CategoryType.expense))
+        await self.db.commit()
+        self.pages = {None: {'transactions': [transaction(code, merchant_category_code=code) for code in names]}}
+        self.assertEqual((await self.sync())['imported_count'], len(names))
+        rows = (await self.db.execute(select(Transaction, Category).join(Category))).all()
+        self.assertEqual(len(rows), len(names))
+        for tx, category in rows:
+            self.assertEqual(category.name, names[tx.external_transaction_id])
+            self.assertIsNone(category.workspace_id)
+        self.assertEqual((await self.sync())['imported_count'], 0)
+        self.assertEqual(len((await self.db.scalars(select(Category))).all()), len(names) + 1)
+
+    async def test_missing_mapped_category_is_created_once_in_current_workspace(self):
+        self.db.add_all([Category(workspace_id=2, name='Restaurants', type=CategoryType.expense),
+                         Category(workspace_id=None, name='Restaurants', type=CategoryType.income)])
+        await self.db.commit()
+        self.pages = {None: {'transactions': [transaction('a', merchant_category_code='5812'),
+                                              transaction('b', merchant_category_code='5814')]}}
+        await self.sync()
+        await self.sync()
+        categories = list((await self.db.scalars(select(Category).where(Category.workspace_id == 1))).all())
+        self.assertEqual([(c.name, c.type) for c in categories], [('Restaurants', CategoryType.expense)])
+        self.assertEqual(len((await self.db.scalars(select(Transaction))).all()), 2)
+
+    async def test_mcc_upgrades_fallback_only_and_preserves_transaction_ids_and_user_choices(self):
+        await self.sync()
+        original = list((await self.db.scalars(select(Transaction).order_by(Transaction.transaction_id))).all())
+        ids = [tx.transaction_id for tx in original]
+        shared = Category(workspace_id=None, name='Groceries', type=CategoryType.expense)
+        chosen = Category(workspace_id=1, name='User choice', type=CategoryType.expense)
+        self.db.add_all([shared, chosen])
+        await self.db.commit()
+        self.pages[None]['transactions'][0]['merchant_category_code'] = '5411'
+        # MCC describes the merchant, not whether a credit is salary, cashback or a refund.
+        self.pages[None]['transactions'][1]['merchant_category_code'] = '5411'
+        self.assertEqual((await self.sync())['imported_count'], 0)
+        self.assertEqual(original[0].category_id, shared.category_id)
+        credit_category = await self.db.get(Category, original[1].category_id)
+        self.assertEqual(credit_category.type, CategoryType.income)
+        original[0].category_id = chosen.category_id
+        await self.db.commit()
+        await self.sync()
+        self.assertEqual(original[0].category_id, chosen.category_id)
+        self.assertEqual([tx.transaction_id for tx in (await self.db.scalars(
+            select(Transaction).order_by(Transaction.transaction_id))).all()], ids)
+
+    async def test_unusable_mcc_keeps_direction_fallback_without_inventing_categories(self):
+        values = [None, '9999', '', '54x1', '５４１１', 5411, {'code': '5411'}]
+        self.pages = {None: {'transactions': [transaction(str(i), merchant_category_code=value)
+                                              for i, value in enumerate(values)]}}
+        self.assertEqual((await self.sync())['imported_count'], len(values))
+        categories = list((await self.db.scalars(select(Category))).all())
+        self.assertEqual([c.name for c in categories], ['Bank expense'])
+
+    async def test_existing_workspace_category_is_reused_when_shared_category_is_absent(self):
+        category = Category(workspace_id=1, name='Groceries', type=CategoryType.expense)
+        self.db.add(category)
+        await self.db.commit()
+        self.pages = {None: {'transactions': [transaction(merchant_category_code='5411')]}}
+        await self.sync()
+        self.assertEqual((await self.db.scalar(select(Transaction))).category_id, category.category_id)
+        self.assertEqual(len((await self.db.scalars(select(Category))).all()), 1)
+
+    async def test_invalid_later_page_does_not_reclassify_existing_transactions(self):
+        await self.sync()
+        original = await self.db.scalar(select(Transaction).where(Transaction.external_transaction_id == 'stable-1'))
+        category_id = original.category_id
+        self.pages[None]['transactions'][0]['merchant_category_code'] = '5411'
+        self.pages[None]['continuation_key'] = 'bad-page'
+        self.pages['bad-page'] = {'transactions': [transaction('bad', booking_date='invalid')]}
+        with self.assertRaises(HTTPException):
+            await self.sync()
+        await self.db.refresh(original)
+        self.assertEqual(original.category_id, category_id)
+        self.assertIsNone(await self.db.scalar(select(Category).where(Category.name == 'Groceries')))
+
     async def test_idempotent_import_preserves_categories_names_and_provider_balance(self):
         self.db.add(Category(workspace_id=2, name='Bank expense', type=CategoryType.expense))
         await self.db.commit()
