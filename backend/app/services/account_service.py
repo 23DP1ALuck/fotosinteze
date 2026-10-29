@@ -1,6 +1,6 @@
 from fastapi import HTTPException
 from sqlalchemy import delete, select, update
-from app.models import Account, Workspace
+from app.models import Account, Expense, Transaction, Workspace
 from app.models.workspace import WorkspaceTypeEnum
 from app.dto import CreateAccountRequest, CreateAccountResponse
 from app.dto.update_account_request import UpdateAccountRequest
@@ -80,16 +80,21 @@ async def update_account(account_id: int, request: UpdateAccountRequest, current
 
 async def delete_account(account_id: int, current_user: dict, workspace: Workspace, db: AsyncSession) -> None:
     await authorize_accounts(current_user, workspace, db, owner=True)
-    await get_account(account_id, current_user, workspace, db)
-    # Delete conditionally without the ORM's transaction delete-orphan cascade.
-    result = await db.execute(delete(Account).where(
-        Account.account_id == account_id,
-        Account.workspace_id == workspace.workspace_id,
-        Account.connection_id.is_(None),
-        ~Account.transactions.any(),
-    ))
-    if result.rowcount == 0:
-        raise HTTPException(status_code=409, detail='Account has transactions or is bank-linked and cannot be deleted')
+    account = await db.scalar(select(Account).where(
+        Account.account_id == account_id, Account.workspace_id == workspace.workspace_id
+    ).with_for_update())
+    if account is None:
+        raise HTTPException(status_code=404, detail='Account not found')
+    if account.bank_managed:
+        raise HTTPException(status_code=409, detail='Bank-linked accounts cannot be deleted')
+    # Delete dependent transactions before their expenses, keeping the removal atomic.
+    expense_ids = (await db.scalars(delete(Transaction).where(
+        Transaction.account_id == account_id
+    ).returning(Transaction.expense_id))).all()
+    expense_ids = [expense_id for expense_id in expense_ids if expense_id is not None]
+    if expense_ids:
+        await db.execute(delete(Expense).where(Expense.expense_id.in_(expense_ids)))
+    await db.execute(delete(Account).where(Account.account_id == account_id))
     await db.commit()
 
 

@@ -313,6 +313,7 @@ it('confirms deletion from account details without losing an edit when cancelled
   const confirmation = within(screen.getByRole('dialog', { name: 'Delete account?' }))
   expect(confirmation.getByText('Cash')).toBeInTheDocument()
   expect(confirmation.getByText('€1,234.56')).toBeInTheDocument()
+  expect(confirmation.getByText(/all its transactions and linked expense requests will be permanently deleted/)).toBeInTheDocument()
   expect(confirmation.getByRole('button', { name: 'Keep account' })).toHaveFocus()
   expect(fetcher.mock.calls.some(([, init]) => init.method === 'DELETE')).toBe(false)
   await user.click(confirmation.getByRole('button', { name: 'Keep account' }))
@@ -338,10 +339,10 @@ it('deletes an account directly from its card and keeps it deleted after reopeni
   expect(screen.queryByRole('button', { name: 'View Cash details' })).not.toBeInTheDocument()
 })
 
-it('explains protected transaction history when the API rejects deletion', async () => {
+it('explains bank protection when the API rejects deletion', async () => {
   const base = transport()
   vi.stubGlobal('fetch', vi.fn(async (url, init: RequestInit) => init.method === 'DELETE'
-    ? Response.json({ detail: 'Account has transactions or is bank-linked and cannot be deleted' }, { status: 409 }) : base(url, init)))
+    ? Response.json({ detail: 'Bank-linked accounts cannot be deleted' }, { status: 409 }) : base(url, init)))
   const user = userEvent.setup()
   render(<Harness />)
   await user.click(await screen.findByRole('button', { name: 'Delete Cash' }))

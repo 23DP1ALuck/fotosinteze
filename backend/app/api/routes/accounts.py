@@ -39,7 +39,7 @@ async def update_account(account_id: int, request: UpdateAccountRequest,
     return await account_service.update_account(account_id, request, current_user, workspace, db)
 
 
-@router.delete('/accounts/{account_id}', status_code=204, responses={404: {'description': 'Account not found'}, 409: {'description': 'Account has transactions or is bank-linked'}})
+@router.delete('/accounts/{account_id}', status_code=204, responses={404: {'description': 'Account not found'}, 409: {'description': 'Account is bank-linked'}})
 async def delete_account(account_id: int, current_user: dict = Depends(get_current_user),
                          workspace: Workspace = Depends(get_current_workspace),
                          db: AsyncSession = Depends(get_db_session)):
