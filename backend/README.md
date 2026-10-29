@@ -692,7 +692,9 @@ minimum 5 seconds, maximum 3600; use sub-30-second values only after verifying t
 always take precedence. Each user must also enable automatic refresh. The browser
 only refreshes while visible and recently interacted with, pauses after 60 seconds
 of inactivity, cancels stale workspace requests, and prevents overlapping requests.
-Returning to a visible active workspace can trigger a recent sync. No server-side
+Loading or reloading a visible connected Personal workspace requests one recent
+sync, even when periodic polling is off. Returning to the tab can also trigger
+a recent sync. Both triggers respect the persisted cooldown and rate-limit backoff. No server-side
 background scheduler is added, and no 0–5-second bank publication guarantee is made.
 
 The backend derives PSU headers from the actual request's public client IP and User

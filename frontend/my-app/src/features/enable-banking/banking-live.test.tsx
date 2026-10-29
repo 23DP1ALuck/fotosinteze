@@ -8,7 +8,7 @@ import { BankPendingTransactions } from './BankPendingTransactions'
 import { BankAutoRefresh } from './BankAutoRefresh'
 import { connectionSchema } from './banking'
 
-const connected = { status: 'connected', expires_at: null, last_sync_at: null, auto_sync_interval_seconds: 15 as number | null, next_sync_at: null }
+const connected = { status: 'connected', expires_at: null, last_sync_at: null, auto_sync_interval_seconds: 15 as number | null, next_sync_at: null as string | null }
 const synced = { accounts_count: 1, imported_count: 0, last_sync_at: '2026-10-29T12:00:00Z' }
 let client: QueryClient
 beforeEach(() => {
@@ -78,7 +78,7 @@ it('refreshes after opt-in and interaction then stops while idle', async () => {
   expect(screen.getByText('Connected')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('checkbox'))
   fireEvent.pointerDown(window)
-  await act(async () => { await vi.advanceTimersByTimeAsync(14_000) })
+  await act(async () => { await vi.advanceTimersByTimeAsync(16_000) })
   expect(fetcher.mock.calls.filter(([url]) => String(url).includes('automatic=true'))).toHaveLength(1)
   await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
   const before = fetcher.mock.calls.filter(([url]) => String(url).includes('/sync')).length
@@ -149,4 +149,35 @@ it('keeps a rate-limited deletion open with an error, preserves cached data and 
 
 it('accepts a five-second interval when configured by the backend', () => {
   expect(connectionSchema.parse({ ...connected, auto_sync_interval_seconds: 5 }).auto_sync_interval_seconds).toBe(5)
+})
+
+it('syncs recent bank data once after page load without enabling automatic polling', async () => {
+  const fetcher = transport()
+  mount(<BankAutoRefresh workspaceId={7} />)
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => String(url).includes('/sync'))).toHaveLength(1))
+  expect(String(fetcher.mock.calls.find(([url]) => String(url).includes('/sync'))?.[0])).toContain('recent=true&automatic=false')
+  expect(localStorage.getItem('bank-auto:1:7')).toBeNull()
+  client.setQueryData(['bank-connection', 1, 7], { ...connected, last_sync_at: synced.last_sync_at })
+  await act(async () => {})
+  expect(fetcher.mock.calls.filter(([url]) => String(url).includes('/sync'))).toHaveLength(1)
+})
+
+it('respects a server cooldown when a connected workspace loads', async () => {
+  const fetcher = transport({ ...connected, next_sync_at: new Date(Date.now() + 60_000).toISOString() })
+  mount(<><BankAutoRefresh workspaceId={7} /><EnableBankingConnect workspaceId={7} /></>)
+  await screen.findByText('Connected')
+  expect(fetcher.mock.calls.filter(([url]) => String(url).includes('/sync'))).toHaveLength(0)
+})
+
+it('waits until a background page becomes visible before its first bank sync', async () => {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+  const fetcher = transport()
+  mount(<><BankAutoRefresh workspaceId={7} /><EnableBankingConnect workspaceId={7} /></>)
+  await screen.findByText('Connected')
+  expect(fetcher.mock.calls.filter(([url]) => String(url).includes('/sync'))).toHaveLength(0)
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+  fireEvent(document, new Event('visibilitychange'))
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => String(url).includes('/sync'))).toHaveLength(1))
+  await act(async () => {})
+  expect(fetcher.mock.calls.filter(([url]) => String(url).includes('/sync'))).toHaveLength(1)
 })
