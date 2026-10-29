@@ -1,7 +1,7 @@
 export const finance = {
   "en": {
     "bankAutoRefresh": "Automatically refresh while I use this workspace",
-    "bankProviderConfirmation": "Automatic refresh requires confirmation of the provider’s allowed interval. Manual refresh is available.",
+    "bankProviderConfirmation": "Automatic refresh is unavailable for this connection. You can sync manually.",
     "bankFullSync": "Reconcile full transaction history",
     "bankNextSync": "Next refresh available: {{time}}",
     "bankDeleteTitle": "Delete bank connection?",
@@ -432,7 +432,7 @@ export const finance = {
   },
   "lv": {
     "bankAutoRefresh": "Automātiski atjaunināt, kamēr lietoju šo darbvietu",
-    "bankProviderConfirmation": "Automātiskai atjaunināšanai jāapstiprina pakalpojuma sniedzēja atļautais intervāls. Pieejama manuāla atjaunināšana.",
+    "bankProviderConfirmation": "Šim savienojumam automātiskā atjaunināšana nav pieejama. Varat sinhronizēt manuāli.",
     "bankFullSync": "Sinhronizēt visu darījumu vēsturi",
     "bankNextSync": "Nākamā atjaunināšana pieejama: {{time}}",
     "bankDeleteTitle": "Dzēst bankas savienojumu?",
@@ -865,7 +865,7 @@ export const finance = {
   },
   "ru": {
     "bankAutoRefresh": "Автоматически обновлять, пока я использую это пространство",
-    "bankProviderConfirmation": "Для автоматического обновления нужно подтвердить разрешённый провайдером интервал. Доступно ручное обновление.",
+    "bankProviderConfirmation": "Автоматическое обновление для этого подключения недоступно. Можно синхронизировать вручную.",
     "bankFullSync": "Сверить всю историю операций",
     "bankNextSync": "Следующее обновление доступно: {{time}}",
     "bankDeleteTitle": "Удалить подключение банка?",

@@ -685,10 +685,11 @@ need no invented permanent ID or booking date; booked records continue to requir
 stable entry references. A failed refresh preserves the prior ledger, balances,
 pending snapshot and last successful sync time.
 
-Short-interval auto refresh is disabled by default because this integration has
-no confirmed Revolut-specific refresh allowance. After confirming it with Enable
-Banking, set `ENABLE_BANKING_AUTO_SYNC_INTERVAL_SECONDS` (15–3600 seconds; effective
-minimum 30 seconds). Each user must also enable automatic refresh. The browser
+Foreground auto refresh defaults to 30 seconds and still requires user opt-in.
+This is an application default, not a confirmed Revolut allowance or latency SLA.
+`ENABLE_BANKING_AUTO_SYNC_INTERVAL_SECONDS` can adjust the interval (effective
+minimum 5 seconds, maximum 3600; use sub-30-second values only after verifying the provider allowance); set 0 to disable it. Bank limits and Retry-After
+always take precedence. Each user must also enable automatic refresh. The browser
 only refreshes while visible and recently interacted with, pauses after 60 seconds
 of inactivity, cancels stale workspace requests, and prevents overlapping requests.
 Returning to a visible active workspace can trigger a recent sync. No server-side

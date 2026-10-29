@@ -15,11 +15,13 @@
 - Atomic sync/deletion, workspace isolation, post-deletion races and expired credentials must be tested.
 - Delete all transactions on the removed linked accounts, including locally added entries; explicitly say this in confirmation. Preserve unrelated categories used by budgets/manual records.
 - Backend enforces auto-sync cooldown and retries; browser timer alone is insufficient across tabs.
-- Fast polling is configurable and disabled by default until provider allowance is verified; user-triggered incremental sync and on-return refresh still available. Active-user automatic mode must be explicitly enabled.
+- Foreground refresh defaults to 30 seconds with explicit user opt-in, genuine PSU attribution and rate-limit backoff; this default is not a confirmed Revolut allowance. Configure 0 to disable. User-triggered incremental sync and on-return refresh remain available.
 
 ## Work
-- [ ] Implement recent history, encrypted pending snapshot, safe polling/cooldown/PSU headers and tests; map to RSYNC-01 and REV-04.
-- [ ] Implement confirmation UI, auto-refresh and pending display with localized text, scoped cancellation/cache invalidation and tests; map to RSYNC-02/REV-05.
-- [ ] Implement DELETE connection provider revocation plus atomic local purge, all-data confirmation, stale-sync/callback prevention and tests; map to REV-05/REV-03.
-- [ ] Verify full backend/frontend suites, lint/build, migrations and independent review. Separate fix commits with exact matching Trello card names.
-- [ ] Open PR artjom/dev -> dev with fix-prefixed matching task name, no GitHub comments; comment only PR URL on related Trello cards. No deployment or real bank data deletion.
+- [x] Implement recent history, encrypted pending snapshot, safe polling/cooldown/PSU headers and tests; map to RSYNC-01 and REV-04.
+- [x] Implement confirmation UI, auto-refresh and pending display with localized text, scoped cancellation/cache invalidation and tests; map to RSYNC-02/REV-05.
+- [x] Implement DELETE connection provider revocation plus atomic local purge, all-data confirmation, stale-sync/callback prevention and tests; map to REV-05/REV-03.
+- [x] Verify full backend/frontend suites, lint/build, migrations and independent review. Separate fix commits with exact matching Trello card names.
+- [x] Open PR artjom/dev -> dev with fix-prefixed matching task name, no GitHub comments; comment only PR URL on related Trello cards. No deployment or real bank data deletion.
+
+Final validation: 257 backend tests plus 201 subtests; 324 frontend tests; lint/build and migration preservation passed. Production exact proxy and 30-second opt-in interval are provisioned for next deployment; no live bank sync or deletion performed.

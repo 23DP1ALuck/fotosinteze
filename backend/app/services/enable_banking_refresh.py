@@ -30,7 +30,7 @@ def aware(value):
 
 
 def next_sync_at(connection, headers) -> datetime | None:
-    cooldown = max(30, authorization.settings.enable_banking_auto_sync_interval_seconds or 0) if headers else 21600
+    cooldown = max(5, authorization.settings.enable_banking_auto_sync_interval_seconds or 30) if headers else 21600
     deadlines = [aware(connection.sync_retry_at), aware(connection.sync_lease_until)]
     if connection.sync_started_at is not None:
         deadlines.append(aware(connection.sync_started_at) + timedelta(seconds=cooldown))
@@ -62,7 +62,7 @@ def provider_retry(exc, now, headers):
 async def refresh(workspace, db, *, request: Request, recent=False, automatic=False):
     authorization.personal(workspace)
     headers = psu_headers(request)
-    if automatic and (authorization.settings.enable_banking_auto_sync_interval_seconds is None or not headers):
+    if automatic and (not authorization.settings.enable_banking_auto_sync_interval_seconds or not headers):
         raise HTTPException(503, 'Automatic bank refresh requires configuration and an active user request')
     workspace_id = workspace.workspace_id
     connection = await db.scalar(select(Connection).where(Connection.workspace_id == workspace_id))

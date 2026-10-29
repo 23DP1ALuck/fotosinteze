@@ -10,7 +10,7 @@ export const connectionSchema = z.object({
   status: z.enum(['not_connected', 'connected', 'pending', 'expired', 'failed']),
   expires_at: z.string().datetime({ offset: true }).nullable(),
   last_sync_at: z.string().datetime({ offset: true }).nullable(),
-  auto_sync_interval_seconds: z.number().min(15).nullable().default(null),
+  auto_sync_interval_seconds: z.number().min(5).nullable().default(null),
   next_sync_at: z.string().datetime({ offset: true }).nullable().default(null),
 })
 export const disconnected = connectionSchema.parse({ status: 'not_connected', expires_at: null, last_sync_at: null })

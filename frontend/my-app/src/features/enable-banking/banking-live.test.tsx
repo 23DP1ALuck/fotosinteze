@@ -6,6 +6,7 @@ import { setWorkspace } from '@/features/workspaces/workspace-state'
 import { EnableBankingConnect } from './EnableBankingConnect'
 import { BankPendingTransactions } from './BankPendingTransactions'
 import { BankAutoRefresh } from './BankAutoRefresh'
+import { connectionSchema } from './banking'
 
 const connected = { status: 'connected', expires_at: null, last_sync_at: null, auto_sync_interval_seconds: 15 as number | null, next_sync_at: null }
 const synced = { accounts_count: 1, imported_count: 0, last_sync_at: '2026-10-29T12:00:00Z' }
@@ -52,11 +53,11 @@ it('shows pending transactions separately with their exclusion warning', async (
   expect(screen.getByText(/excluded from balances and booked totals/)).toBeInTheDocument()
   expect(screen.getByText('−12.50 EUR')).toBeInTheDocument()
 })
-it('keeps automatic refresh disabled until the provider interval is configured', async () => {
+it('keeps automatic refresh disabled when unavailable for this connection', async () => {
   transport({ ...connected, auto_sync_interval_seconds: null })
   mount(<EnableBankingConnect workspaceId={7} />)
   expect(await screen.findByRole('checkbox', { name: 'Automatically refresh while I use this workspace' })).toBeDisabled()
-  expect(screen.getByText(/requires confirmation/)).toBeInTheDocument()
+  expect(screen.getByText(/unavailable for this connection/)).toBeInTheDocument()
 })
 it('honors Retry-After and prevents another manual sync before cooldown', async () => {
   const fetcher = transport()
@@ -144,4 +145,8 @@ it('keeps a rate-limited deletion open with an error, preserves cached data and 
   expect(attempts).toBe(2)
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(client.getQueryData(['account-details', 1, 7, 3])).toBeUndefined()
+})
+
+it('accepts a five-second interval when configured by the backend', () => {
+  expect(connectionSchema.parse({ ...connected, auto_sync_interval_seconds: 5 }).auto_sync_interval_seconds).toBe(5)
 })

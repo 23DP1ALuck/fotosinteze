@@ -28,7 +28,7 @@ async def connection_status(request: Request, response: Response, workspace: Wor
         EnableBankingConnection.workspace_id == workspace.workspace_id))
     headers = enable_banking_refresh.psu_headers(request)
     interval = service.settings.enable_banking_auto_sync_interval_seconds
-    return {**status.model_dump(), 'auto_sync_interval_seconds': max(30, interval) if interval and headers else None,
+    return {**status.model_dump(), 'auto_sync_interval_seconds': max(5, interval) if interval and headers else None,
             'next_sync_at': enable_banking_refresh.next_sync_at(connection, headers) if connection else None}
 
 

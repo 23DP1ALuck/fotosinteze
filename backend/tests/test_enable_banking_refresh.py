@@ -91,11 +91,13 @@ class EnableBankingRefreshTests(BankTestCase):
         self.assertEqual(error.exception.status_code, 429)
         self.assertEqual(self.sync.await_count, 1)
 
-    async def test_automatic_requires_explicit_configuration_and_real_psu(self):
-        for ip in ('8.8.8.8', '127.0.0.1'):
-            with self.assertRaises(HTTPException) as error:
-                await service.refresh(self.workspace, self.db, request=request(ip), automatic=True)
-            self.assertEqual(error.exception.status_code, 503)
+    async def test_automatic_can_be_disabled_and_requires_real_psu(self):
+        for interval in (None, 0):
+            self.config.enable_banking_auto_sync_interval_seconds = interval
+            for ip in ('8.8.8.8', '127.0.0.1'):
+                with self.assertRaises(HTTPException) as error:
+                    await service.refresh(self.workspace, self.db, request=request(ip), automatic=True)
+                self.assertEqual(error.exception.status_code, 503)
         self.config.enable_banking_auto_sync_interval_seconds = 30
         with self.assertRaises(HTTPException):
             await service.refresh(self.workspace, self.db, request=request('127.0.0.1'), automatic=True)
@@ -138,3 +140,10 @@ class EnableBankingRefreshTests(BankTestCase):
                              timedelta(seconds=expected))
         self.assertEqual(service.provider_retry(HTTPException(429, 'Unavailable'), now, None) - now,
                          timedelta(hours=6))
+
+    async def test_provider_configured_five_second_interval_is_respected(self):
+        self.config.enable_banking_auto_sync_interval_seconds=5
+        await service.refresh(self.workspace,self.db,request=request(),automatic=True)
+        await self.db.refresh(self.connection)
+        deadline=service.next_sync_at(self.connection,{'Psu-Ip-Address':'8.8.8.8'})
+        self.assertEqual(deadline.replace(tzinfo=None)-self.connection.sync_started_at,timedelta(seconds=5))
