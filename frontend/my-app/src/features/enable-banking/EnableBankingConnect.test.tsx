@@ -213,7 +213,7 @@ it('blocks duplicate syncs while pending and allows retry after malformed sync d
   await userEvent.dblClick(await screen.findByRole('button', { name: 'Sync accounts and transactions' }))
   expect(screen.getByRole('button', { name: 'Syncing…' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Reconnect Revolut' })).toBeDisabled()
-  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/sync'))).toHaveLength(1)
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/sync'))).toHaveLength(1)
   await act(async () => finish(Response.json({ accounts_count: -1, imported_count: 3, last_sync_at: 'bad' })))
   expect(await screen.findByRole('alert')).toHaveTextContent('unexpected sync data')
   expect(screen.getByRole('button', { name: 'Sync accounts and transactions' })).toBeEnabled()
