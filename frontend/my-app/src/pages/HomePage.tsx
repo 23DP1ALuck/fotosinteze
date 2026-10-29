@@ -1,3 +1,5 @@
+import { BankAutoRefresh } from '@/features/enable-banking/BankAutoRefresh'
+import { BankPendingTransactions } from '@/features/enable-banking/BankPendingTransactions'
 import { dismissDialogOnBackdropClick } from '@/lib/dialog-backdrop'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { getLocale } from '@/i18n'
@@ -164,6 +166,8 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate,
       {active && isBusiness && view === 'Dashboard' && <BusinessDashboard key={`${backendWorkspaceId}:${workspace.role}`} finance={finance} workspaceName={workspace.name} role={workspace.role ?? 'EMPLOYEE'} onExploreExpenses={()=>setExploringExpenses(true)} onViewTransactions={() => navigate('Transactions')} showRecent={view === 'Dashboard'} />}
       {active && view === 'Monthly review' && <MonthlyReview workspaceId={backendWorkspaceId} workspaceName={workspace.name} kind={workspace.kind} role={workspace.role} />}
       {active && view === 'Statistics' && <Statistics key={backendWorkspaceId} workspaceId={backendWorkspaceId} role={isBusiness ? workspace.role : undefined} />}
+      {active && !isBusiness && <BankAutoRefresh workspaceId={backendWorkspaceId} />}
+      {active && !isBusiness && view === 'Transactions' && <BankPendingTransactions workspaceId={backendWorkspaceId} />}
       {view === 'Transactions' && <TransactionsView transactions={transactions} income={income} expenses={expenses} workspaceName={workspace.name} workspaceKind={workspace.kind} currency={currency} onEdit={editTransaction} onDelete={id => { const transaction = finance.rows.find(item => item.transaction_id === id); if (transaction && transaction.expense_id === null && transaction.source !== 'BANK') setDeletingTransaction(transaction) }} loading={finance.transactionsLoading} error={finance.transactionsError} hasMore={finance.hasMore} filterOptions={{ categories: finance.options.categories, departments: projectCatalog.departments, projects: projectCatalog.projects }} onFilterChange={next => setTransactionFilters(previous => ({ ...previous, ...next }))} />}
       {view === 'Transactions' && finance.hasMore && <button type="button" disabled={finance.loadingMore} onClick={finance.loadMore} className="mt-5 rounded-xl bg-[#eaf0e6] px-5 py-3 text-sm disabled:opacity-50">{finance.loadingMore ? t('loading') : t('loadMoreTransactions')}</button>}
       {isBusiness && view === 'Expense requests' && <ExpenseRequests key={backendWorkspaceId} workspaceId={backendWorkspaceId} onConnect={connectBackendWorkspace} catalog={projectCatalog} onApproved={() => finance.refresh()} />}

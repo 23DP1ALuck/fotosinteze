@@ -35,6 +35,20 @@ it('keeps canonical navigation identifiers when translating labels', async () =>
   expect(select).toHaveBeenCalledWith('Departments')
 })
 
+it('translates Monthly review navigation while preserving the selected page', async () => {
+  const select = vi.fn()
+  render(<WorkspaceNavigation items={['Dashboard', 'Monthly review']} activeItem="Monthly review" onSelect={select} />)
+  expect(screen.getByRole('button', { name: 'Monthly review' })).toHaveAttribute('aria-current', 'page')
+  for (const [language, label] of [['lv', 'Mēneša pārskats'], ['ru', 'Обзор месяца'], ['en', 'Monthly review']] as const) {
+    await act(() => setLanguage(language))
+    const review = screen.getByRole('button', { name: label })
+    expect(review).toHaveAttribute('aria-current', 'page')
+    if (language !== 'en') expect(screen.queryByRole('button', { name: 'Monthly review' })).not.toBeInTheDocument()
+    await userEvent.click(review)
+    expect(select).toHaveBeenLastCalledWith('Monthly review')
+  }
+})
+
 it('translates transaction filters while preserving canonical API enum values and user data', async () => {
   const change = vi.fn()
   render(<TransactionsView transactions={[{ id: 1, name: 'Income', category: 'Travel', source: 'Manual', date: '2026-10-01', amount: 20, currency: 'EUR', type: 'income' }]} income={20} expenses={0} workspaceName="Acme" onFilterChange={change} />)

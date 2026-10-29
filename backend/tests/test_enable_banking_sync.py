@@ -68,11 +68,96 @@ class EnableBankingSyncTests(unittest.IsolatedAsyncioTestCase):
         if path.endswith('/balances'):
             return {'balances': [{'balance_type': 'CLBD', 'balance_amount': {'amount': '999', 'currency': 'EUR'}},
                                  {'balance_type': 'ITAV', 'balance_amount': {'amount': self.balance, 'currency': 'EUR'}}]}
+        if kwargs['params']['transaction_status'] == 'PDNG':
+            return {'transactions': []}
         self.assertEqual(kwargs['params']['transaction_status'], 'BOOK')
         return copy.deepcopy(self.pages[kwargs['params'].get('continuation_key')])
 
     async def sync(self):
         return await service.sync(self.workspace, self.db)
+
+    async def test_mcc_reuses_shared_categories_without_duplicates(self):
+        names = {'5411': 'Groceries', '5812': 'Restaurants', '4111': 'Transportation',
+                 '7011': 'Travel', '5912': 'Health', '5311': 'Shopping',
+                 '7832': 'Entertainment', '4900': 'Utilities', '6300': 'Insurance',
+                 '8398': 'Donations', '7230': 'Services', '6011': 'Cash'}
+        for name in names.values():
+            self.db.add(Category(workspace_id=None, name=name, type=CategoryType.expense))
+        self.db.add(Category(workspace_id=1, name='Groceries', type=CategoryType.expense))
+        await self.db.commit()
+        self.pages = {None: {'transactions': [transaction(code, merchant_category_code=code) for code in names]}}
+        self.assertEqual((await self.sync())['imported_count'], len(names))
+        rows = (await self.db.execute(select(Transaction, Category).join(Category))).all()
+        self.assertEqual(len(rows), len(names))
+        for tx, category in rows:
+            self.assertEqual(category.name, names[tx.external_transaction_id])
+            self.assertIsNone(category.workspace_id)
+        self.assertEqual((await self.sync())['imported_count'], 0)
+        self.assertEqual(len((await self.db.scalars(select(Category))).all()), len(names) + 1)
+
+    async def test_missing_mapped_category_is_created_once_in_current_workspace(self):
+        self.db.add_all([Category(workspace_id=2, name='Restaurants', type=CategoryType.expense),
+                         Category(workspace_id=None, name='Restaurants', type=CategoryType.income)])
+        await self.db.commit()
+        self.pages = {None: {'transactions': [transaction('a', merchant_category_code='5812'),
+                                              transaction('b', merchant_category_code='5814')]}}
+        await self.sync()
+        await self.sync()
+        categories = list((await self.db.scalars(select(Category).where(Category.workspace_id == 1))).all())
+        self.assertEqual([(c.name, c.type) for c in categories], [('Restaurants', CategoryType.expense)])
+        self.assertEqual(len((await self.db.scalars(select(Transaction))).all()), 2)
+
+    async def test_mcc_upgrades_fallback_only_and_preserves_transaction_ids_and_user_choices(self):
+        await self.sync()
+        original = list((await self.db.scalars(select(Transaction).order_by(Transaction.transaction_id))).all())
+        ids = [tx.transaction_id for tx in original]
+        shared = Category(workspace_id=None, name='Groceries', type=CategoryType.expense)
+        chosen = Category(workspace_id=1, name='User choice', type=CategoryType.expense)
+        self.db.add_all([shared, chosen])
+        await self.db.commit()
+        self.pages[None]['transactions'][0]['merchant_category_code'] = '5411'
+        # MCC describes the merchant, not whether a credit is salary, cashback or a refund.
+        self.pages[None]['transactions'][1]['merchant_category_code'] = '5411'
+        self.assertEqual((await self.sync())['imported_count'], 0)
+        self.assertEqual(original[0].category_id, shared.category_id)
+        credit_category = await self.db.get(Category, original[1].category_id)
+        self.assertEqual(credit_category.type, CategoryType.income)
+        original[0].category_id = chosen.category_id
+        await self.db.commit()
+        await self.sync()
+        self.assertEqual(original[0].category_id, chosen.category_id)
+        self.assertEqual([tx.transaction_id for tx in (await self.db.scalars(
+            select(Transaction).order_by(Transaction.transaction_id))).all()], ids)
+
+    async def test_unusable_mcc_keeps_direction_fallback_without_inventing_categories(self):
+        values = [None, '9999', '', '54x1', '５４１１', 5411, {'code': '5411'}]
+        self.pages = {None: {'transactions': [transaction(str(i), merchant_category_code=value)
+                                              for i, value in enumerate(values)]}}
+        self.assertEqual((await self.sync())['imported_count'], len(values))
+        categories = list((await self.db.scalars(select(Category))).all())
+        self.assertEqual([c.name for c in categories], ['Bank expense'])
+
+    async def test_existing_workspace_category_is_reused_when_shared_category_is_absent(self):
+        category = Category(workspace_id=1, name='Groceries', type=CategoryType.expense)
+        self.db.add(category)
+        await self.db.commit()
+        self.pages = {None: {'transactions': [transaction(merchant_category_code='5411')]}}
+        await self.sync()
+        self.assertEqual((await self.db.scalar(select(Transaction))).category_id, category.category_id)
+        self.assertEqual(len((await self.db.scalars(select(Category))).all()), 1)
+
+    async def test_invalid_later_page_does_not_reclassify_existing_transactions(self):
+        await self.sync()
+        original = await self.db.scalar(select(Transaction).where(Transaction.external_transaction_id == 'stable-1'))
+        category_id = original.category_id
+        self.pages[None]['transactions'][0]['merchant_category_code'] = '5411'
+        self.pages[None]['continuation_key'] = 'bad-page'
+        self.pages['bad-page'] = {'transactions': [transaction('bad', booking_date='invalid')]}
+        with self.assertRaises(HTTPException):
+            await self.sync()
+        await self.db.refresh(original)
+        self.assertEqual(original.category_id, category_id)
+        self.assertIsNone(await self.db.scalar(select(Category).where(Category.name == 'Groceries')))
 
     async def test_idempotent_import_preserves_categories_names_and_provider_balance(self):
         self.db.add(Category(workspace_id=2, name='Bank expense', type=CategoryType.expense))
@@ -261,3 +346,167 @@ class EnableBankingSyncTests(unittest.IsolatedAsyncioTestCase):
                 await self.sync()
             self.assertEqual(error.exception.status_code, 502)
             self.assertEqual((await self.db.scalars(select(Account))).all(), [])
+
+    async def use_pending(self, items):
+        self.pending_pages = {None: {'transactions': items}}
+        original = self.provider
+        async def provider(method, path, **kwargs):
+            if kwargs.get('params', {}).get('transaction_status') == 'PDNG':
+                return copy.deepcopy(self.pending_pages[kwargs['params'].get('continuation_key')])
+            return await original(method, path, **kwargs)
+        self.outbound.side_effect = provider
+
+    async def snapshot(self):
+        await self.db.refresh(self.connection)
+        return json.loads(self.cipher.decrypt(self.connection.pending_transactions_encrypted.encode()))
+
+    async def test_recent_pending_without_identifiers_or_dates_stays_outside_ledger(self):
+        pending = transaction(status='PDNG')
+        for key in ('entry_reference', 'transaction_id', 'booking_date'):
+            pending.pop(key)
+        await self.use_pending([pending, pending])
+        await service.sync(self.workspace, self.db, recent=True)
+        snapshot = await self.snapshot()
+        self.assertEqual(len(snapshot), 2)
+        account = await self.db.scalar(select(Account))
+        self.assertEqual(snapshot[0], {'account_id': account.account_id, 'amount': '12.34',
+            'currency': 'EUR', 'description': 'Shop Purchase', 'direction': 'expense', 'date': None})
+        self.assertEqual(len((await self.db.scalars(select(Transaction))).all()), 2)
+
+    async def test_pending_pagination_deduplication_and_transition_to_booked(self):
+        await self.use_pending([])
+        pending = transaction('pending-1', status='PDNG', transaction_date='2026-10-21')
+        self.pending_pages = {None: {'transactions': [pending], 'continuation_key': 'next'},
+                              'next': {'transactions': [pending, transaction(status='PDNG')]}}
+        await service.sync(self.workspace, self.db, recent=True)
+        self.assertEqual(len(await self.snapshot()), 1)
+        self.assertEqual((await self.snapshot())[0]['date'], '2026-10-21')
+        self.pages[None]['transactions'].append(transaction('pending-1'))
+        await service.sync(self.workspace, self.db, recent=True)
+        self.assertEqual(await self.snapshot(), [])
+        self.assertEqual(len((await self.db.scalars(select(Transaction))).all()), 3)
+
+    async def test_pending_failure_preserves_snapshot_balance_and_booked_ledger(self):
+        await self.use_pending([transaction('pending-1', status='PDNG')])
+        await service.sync(self.workspace, self.db, recent=True)
+        before = await self.snapshot()
+        self.balance = '500'
+        self.pages[None]['transactions'].append(transaction('new-booked'))
+        self.pending_pages = {None: {'transactions': [], 'continuation_key': 'next'},
+            'next': {'transactions': [transaction('bad', status='PDNG',
+                transaction_amount={'amount': '-1', 'currency': 'EUR'})]}}
+        with self.assertRaises(HTTPException) as error:
+            await service.sync(self.workspace, self.db, recent=True)
+        self.assertEqual(error.exception.status_code, 502)
+        self.assertEqual(await self.snapshot(), before)
+        self.assertEqual((await self.db.scalar(select(Account))).balance, Decimal('-50.25'))
+        self.assertEqual(len((await self.db.scalars(select(Transaction))).all()), 2)
+
+    async def test_recent_window_and_psu_headers_forward_to_all_account_reads(self):
+        await self.use_pending([])
+        await service.sync(self.workspace, self.db, recent=True)
+        for call in self.outbound.await_args_list:
+            self.assertNotIn('headers', call.kwargs)
+            self.assertNotIn('date_from', call.kwargs.get('params', {}))
+        self.connection.last_sync_at = datetime(2026, 10, 20, 23, 59)
+        await self.db.commit()
+        self.outbound.reset_mock()
+        headers = {'PSU-IP-Address': '192.0.2.5'}
+        await service.sync(self.workspace, self.db, recent=True, psu_headers=headers)
+        for call in self.outbound.await_args_list:
+            self.assertEqual(call.kwargs['headers'], headers)
+            if call.kwargs.get('params', {}).get('transaction_status') == 'BOOK':
+                self.assertEqual(call.kwargs['params']['date_from'], '2026-10-13')
+        self.outbound.reset_mock()
+        await self.sync()
+        self.assertTrue(all('date_from' not in call.kwargs.get('params', {})
+                            for call in self.outbound.await_args_list))
+
+    async def test_deletion_started_during_fetch_rejects_stale_results(self):
+        original = self.provider
+        async def deleting(method, path, **kwargs):
+            response = await original(method, path, **kwargs)
+            self.connection.pending_status = 'deleting'
+            await self.db.commit()
+            return response
+        self.outbound.side_effect = deleting
+        with self.assertRaises(HTTPException) as error:
+            await self.sync()
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual((await self.db.scalars(select(Account))).all(), [])
+
+    async def test_invalid_pending_data_and_repeated_pages_keep_previous_snapshot(self):
+        await self.use_pending([transaction('pending-1', status='PDNG')])
+        await service.sync(self.workspace, self.db, recent=True)
+        before = await self.snapshot()
+        defects = [
+            {'transaction_amount': {'amount': '0', 'currency': 'EUR'}},
+            {'transaction_amount': {'amount': 'NaN', 'currency': 'EUR'}},
+            {'transaction_amount': {'amount': '1', 'currency': 'USD'}},
+            {'transaction_amount': {'amount': '1.234', 'currency': 'EUR'}},
+            {'credit_debit_indicator': 'UNKNOWN'}, {'transaction_date': '2026-10-22T12:00:00Z'},
+            {'booking_date': 'not-a-date'}, {'remittance_information': ['x' * 4097]},
+            {'remittance_information': 'not-a-list'}, {'status': 'UNKNOWN'},
+        ]
+        for defect in defects:
+            self.pending_pages = {None: {'transactions': [transaction('pending-2', **{'status': 'PDNG', **defect})]}}
+            with self.subTest(defect=defect), self.assertRaises(HTTPException) as error:
+                await service.sync(self.workspace, self.db, recent=True)
+            self.assertEqual(error.exception.status_code, 502)
+            self.assertEqual(await self.snapshot(), before)
+        self.pending_pages = {None: {'transactions': [], 'continuation_key': 'loop'},
+                              'loop': {'transactions': [], 'continuation_key': 'loop'}}
+        with self.assertRaises(HTTPException) as error:
+            await service.sync(self.workspace, self.db, recent=True)
+        self.assertEqual(error.exception.status_code, 502)
+        self.assertEqual(await self.snapshot(), before)
+
+    async def test_pending_provider_failure_keeps_previous_snapshot(self):
+        await self.use_pending([transaction('pending-1', status='PDNG')])
+        await service.sync(self.workspace, self.db, recent=True)
+        before = await self.snapshot()
+        original = self.outbound.side_effect
+        async def unavailable(method, path, **kwargs):
+            if kwargs.get('params', {}).get('transaction_status') == 'PDNG':
+                raise HTTPException(429, 'Bank temporarily rate limited')
+            return await original(method, path, **kwargs)
+        self.outbound.side_effect = unavailable
+        self.pages[None]['transactions'].append(transaction('unpublished'))
+        with self.assertRaises(HTTPException) as error:
+            await service.sync(self.workspace, self.db, recent=True)
+        self.assertEqual(error.exception.status_code, 429)
+        self.assertEqual(await self.snapshot(), before)
+        self.assertEqual(len((await self.db.scalars(select(Transaction))).all()), 2)
+
+    async def test_deleting_connection_never_calls_provider(self):
+        self.connection.pending_status = 'deleting'
+        await self.db.commit()
+        with self.assertRaises(HTTPException) as error:
+            await self.sync()
+        self.assertEqual(error.exception.status_code, 409)
+        self.outbound.assert_not_awaited()
+
+    async def test_new_refresh_claim_during_fetch_rejects_old_claim(self):
+        self.connection.sync_started_at = datetime(2026, 10, 20)
+        await self.db.commit()
+        original = self.provider
+        async def newer_claim(method, path, **kwargs):
+            response = await original(method, path, **kwargs)
+            self.connection.sync_started_at = datetime(2026, 10, 21)
+            await self.db.commit()
+            return response
+        self.outbound.side_effect = newer_claim
+        with self.assertRaises(HTTPException) as error:
+            await service.sync(self.workspace, self.db, claim_started_at=datetime(2026, 10, 20))
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual((await self.db.scalars(select(Account))).all(), [])
+
+
+    async def test_full_sync_replaces_pending_snapshot_when_purchase_becomes_booked(self):
+        await self.use_pending([transaction('pending-to-book', status='PDNG')])
+        await service.sync(self.workspace, self.db, recent=True)
+        self.assertEqual(len(await self.snapshot()), 1)
+        self.pages[None]['transactions'].append(transaction('pending-to-book'))
+        await self.sync()
+        self.assertEqual(await self.snapshot(), [])
+        self.assertEqual(len((await self.db.scalars(select(Transaction))).all()), 3)
