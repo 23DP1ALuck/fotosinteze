@@ -17,6 +17,7 @@ from app.models.transaction import TransactionSourceEnum
 from app.models.workspace import WorkspaceTypeEnum
 from app.services import enable_banking_client as client, enable_banking_service as authorization
 from app.services.account_service import lock_main_accounts
+from app.services.bank_categories import MCC_CATEGORIES
 from app.services.enable_banking_service import BankSession
 
 
@@ -40,6 +41,13 @@ class BookedTransaction(BaseModel):
     credit_debit_indicator: Literal['CRDT', 'DBIT']
     booking_date: date
     remittance_information: list[str] = Field(default_factory=list)
+    merchant_category_code: str | None = None
+
+    @field_validator('merchant_category_code', mode='before')
+    @classmethod
+    def optional_mcc(cls, value):
+        # Optional categorization metadata must not prevent importing valid financial data.
+        return value if isinstance(value, str) and len(value) == 4 and value.isascii() and value.isdecimal() else None
 
     @field_validator('booking_date', mode='before')
     @classmethod
@@ -207,6 +215,9 @@ async def sync(workspace: Workspace, db: AsyncSession, *, psu_headers: dict | No
         existing = list((await db.scalars(select(Account).where(Account.workspace_id == workspace_id))).all())
         by_external = {a.external_account_id: a for a in existing if a.banking_connection_id == connection_id}
         names = {a.name.casefold() for a in existing}
+        available_categories = list((await db.scalars(select(Category).where(or_(
+            Category.workspace_id.is_(None), Category.workspace_id == workspace_id
+        )).order_by(Category.category_id))).all())
         categories = {}
         pending_snapshot = []
         for bank, external_id, amount, transactions, pending in fetched:
@@ -232,25 +243,40 @@ async def sync(workspace: Workspace, db: AsyncSession, *, psu_headers: dict | No
                 'direction': 'income' if tx.credit_debit_indicator == 'CRDT' else 'expense',
                 'date': (tx.transaction_date or tx.booking_date).isoformat()
                     if tx.transaction_date or tx.booking_date else None} for tx in pending)
-            known = set((await db.scalars(select(Transaction.external_transaction_id).where(
-                Transaction.account_id == account.account_id, Transaction.external_transaction_id.is_not(None)))).all())
+            known = {tx.external_transaction_id: tx for tx in (await db.scalars(select(Transaction).where(
+                Transaction.account_id == account.account_id, Transaction.workspace_id == workspace_id,
+                Transaction.external_transaction_id.is_not(None)))).all()}
             for tx in transactions:
-                if tx.entry_reference in known:
-                    continue
                 direction = CategoryType.income if tx.credit_debit_indicator == 'CRDT' else CategoryType.expense
-                if direction not in categories:
-                    name = 'Bank income' if direction == CategoryType.income else 'Bank expense'
-                    category = await db.scalar(select(Category).where(Category.workspace_id == workspace_id,
-                        Category.name == name, Category.type == direction).order_by(Category.category_id).limit(1))
+                mapped_name = MCC_CATEGORIES.get(tx.merchant_category_code) if direction == CategoryType.expense else None
+                fallback = 'Bank income' if direction == CategoryType.income else 'Bank expense'
+                previous = known.get(tx.entry_reference)
+                if previous is not None:
+                    old_category = next((c for c in available_categories if c.category_id == previous.category_id), None)
+                    if (not mapped_name or previous.source != TransactionSourceEnum.BANK or old_category is None
+                            or old_category.name != fallback or old_category.type != direction
+                            or old_category.workspace_id != workspace_id):
+                        continue
+                name = mapped_name or fallback
+                key = (name, direction)
+                if key not in categories:
+                    matches = [c for c in available_categories if c.name == name and c.type == direction]
+                    category = next((c for c in matches if c.workspace_id is None), None)
+                    category = category or next(iter(matches), None)
                     if category is None:
                         category = Category(workspace_id=workspace_id, name=name, type=direction)
                         db.add(category)
                         await db.flush()
-                    categories[direction] = category.category_id
+                        available_categories.append(category)
+                    categories[key] = category.category_id
+                if previous is not None:
+                    previous.category_id = categories[key]
+                    previous.updated_at = stamp
+                    continue
                 db.add(Transaction(account_id=account.account_id, workspace_id=workspace_id,
                     external_transaction_id=tx.entry_reference, amount=tx.transaction_amount.amount,
                     currency=bank.currency, description=(' '.join(tx.remittance_information).strip() or 'Revolut transaction')[:255],
-                    source=TransactionSourceEnum.BANK, category_id=categories[direction],
+                    source=TransactionSourceEnum.BANK, category_id=categories[key],
                     created_at=datetime.combine(tx.booking_date, time.min)))
                 imported_count += 1
         connection.pending_transactions_encrypted = authorization.encryption_cipher().encrypt(

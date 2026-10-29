@@ -658,7 +658,19 @@ and zero-value entries are skipped. Stable
 `entry_reference` identifies transactions per account. Missing stable references
 or booking dates fail safely instead of inventing IDs or dates. Repeating sync does
 not duplicate entries and preserves user categories, account names and main account.
-Imported records use BANK source and workspace-specific income/expense categories.
+Imported records use BANK source. Recognized optional `merchant_category_code` (MCC)
+values map expenses to existing shared default categories (same name and direction).
+If no shared category matches, sync reuses the current workspace's matching category
+or creates it there; it never creates global categories or uses another workspace's
+categories. The mapping covers common merchants, not Revolut's custom app categories.
+Missing, malformed or unmapped MCCs retain the Bank expense/Bank income fallback.
+MCC alone does not establish the purpose of an income payment, so credits keep their
+income fallback rather than being guessed as salary, cashback or refunds.
+Repeated sync upgrades existing Bank expense assignments when a recognized MCC is
+available, without duplicating transactions or replacing user-selected categories.
+Use **Reconcile full history** to apply this to older records outside the recent-sync
+window. No MCC is inferred from merchant names or descriptions. Mapping reference:
+https://usa.visa.com/content/dam/VCOM/download/merchants/visa-merchant-data-standards-manual.pdf
 Bank transaction financial fields and deletion are protected; descriptions and
 categories of the same income/expense direction remain editable.
 Provider balances are authoritative; importing or editing local entries does not
