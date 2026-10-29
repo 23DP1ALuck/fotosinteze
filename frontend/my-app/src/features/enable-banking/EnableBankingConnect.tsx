@@ -2,23 +2,13 @@ import { useTranslation } from 'react-i18next'
 import { getLocale } from '@/i18n'
 import { financeMessage as f } from '@/i18n/finance-message'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
 import { authenticatedFetch } from '@/features/auth/authenticated-fetch'
 import { readApiErrorMessage } from '@/features/auth/api-error'
 import { subscribeAccessToken } from '@/features/auth/storage'
 import { authAccountId } from '@/features/workspaces/workspace-state'
+import { useBanking, useBankAutoPreference } from './banking'
 
-const connectionSchema = z.object({
-  status: z.enum(['not_connected', 'connected', 'pending', 'expired', 'failed']),
-  expires_at: z.string().datetime({ offset: true }).nullable(),
-  last_sync_at: z.string().datetime({ offset: true }).nullable(),
-})
-const syncSchema = z.object({
-  accounts_count: z.number().int().nonnegative(),
-  imported_count: z.number().int().nonnegative(),
-  last_sync_at: z.string().datetime({ offset: true }),
-})
 const statusLabels = {
   not_connected: 'Not connected',
   connected: 'Connected',
@@ -34,44 +24,24 @@ export function EnableBankingConnect({ workspaceId }: { workspaceId: number }) {
 
 function Connection({ workspaceId, ownerId }: { workspaceId: number; ownerId: number | null }) {
   const { t } = useTranslation('finance')
-  const client = useQueryClient()
+  const bank = useBanking(workspaceId)
+  const preference = useBankAutoPreference(ownerId, workspaceId)
   const operation = useRef<AbortController | null>(null)
-  const [busy, setBusy] = useState<'authorize' | 'sync' | null>(null)
-  const [connection, setConnection] = useState<z.infer<typeof connectionSchema> | null>(null)
-  const [statusError, setStatusError] = useState('')
+  const [busy, setBusy] = useState<'authorize' | null>(null)
+  const connection = bank.data
+  const statusError = bank.isError ? 'Could not check Enable Banking connection. Return to this tab to retry.' : ''
   const [error, setError] = useState('')
   const [notice, setNotice] = useState<{ accounts: number; transactions: number } | null>(null)
 
-  useEffect(() => {
-    let controller: AbortController | undefined
-    async function load() {
-      controller?.abort()
-      const request = new AbortController()
-      controller = request
-      try {
-        const response = await authenticatedFetch('/enable-banking/connection', { signal: request.signal }, { workspaceId })
-        if (!response.ok) throw new Error()
-        const data = connectionSchema.parse(await response.json())
-        if (request.signal.aborted || authAccountId() !== ownerId) return
-        setConnection(data)
-        setStatusError('')
-      } catch {
-        if (request.signal.aborted || authAccountId() !== ownerId) return
-        setConnection(null)
-        setStatusError('Could not check Enable Banking connection. Return to this tab to retry.')
-      }
-    }
-    void load()
-    window.addEventListener('focus', load)
-    return () => {
-      controller?.abort()
-      operation.current?.abort()
-      window.removeEventListener('focus', load)
-    }
-  }, [workspaceId, ownerId])
+  useEffect(() => () => { operation.current?.abort() }, [])
 
   async function perform(action: 'authorize' | 'sync') {
-    if (operation.current && !operation.current.signal.aborted) return
+    if (bank.busy || operation.current && !operation.current.signal.aborted) return
+    if (action === 'sync') {
+      setNotice(null)
+      bank.mutation.mutate('sync', { onSuccess: result => { if (result) setNotice({ accounts: result.accounts_count, transactions: result.imported_count }) } })
+      return
+    }
     const request = new AbortController()
     operation.current = request
     setBusy(action)
@@ -92,13 +62,6 @@ function Connection({ workspaceId, ownerId }: { workspaceId: number; ownerId: nu
           throw new Error('The server returned an unexpected authorization URL. Please retry.')
         }
         location.assign(url.href)
-      } else {
-        const result = syncSchema.safeParse(data)
-        if (!result.success) throw new Error('The server returned unexpected sync data. Please retry.')
-        setConnection(current => current && { ...current, last_sync_at: result.data.last_sync_at })
-        setNotice({ accounts: result.data.accounts_count, transactions: result.data.imported_count })
-        await Promise.all(['accounts', 'account-details', 'transactions', 'dashboard', 'statistics', 'categories', 'budgets']
-          .map(feature => client.invalidateQueries({ queryKey: [feature, ownerId, workspaceId] })))
       }
     } catch (cause) {
       if (!request.signal.aborted && authAccountId() === ownerId) {
@@ -119,10 +82,13 @@ function Connection({ workspaceId, ownerId }: { workspaceId: number; ownerId: nu
         {connection?.last_sync_at && <p className="mt-1 text-xs text-[#68796e]">{t('bankLastSync')} {new Date(connection.last_sync_at).toLocaleString(getLocale())}</p>}
       </div>
       <div className="flex flex-wrap gap-3">
-        {connection?.status === 'connected' && <button type="button" disabled={busy !== null || ownerId === null} onClick={() => void perform('sync')} className="rounded-xl bg-white px-4 py-3 text-sm disabled:opacity-50">{busy === 'sync' ? f('Syncing…') : t('bankSyncAction')}</button>}
-        <button type="button" disabled={busy !== null || ownerId === null} onClick={() => void perform('authorize')} className="rounded-xl bg-[#193f33] px-4 py-3 text-sm text-white disabled:opacity-50">{busy === 'authorize' ? t('bankOpening') : connection && connection.status !== 'not_connected' ? t('bankReconnect') : t('bankConnect')}</button>
+        {connection?.status === 'connected' && <button type="button" disabled={busy !== null || bank.busy || ownerId === null} onClick={() => void perform('sync')} className="rounded-xl bg-white px-4 py-3 text-sm disabled:opacity-50">{bank.busy ? f('Syncing…') : t('bankSyncAction')}</button>}
+        <button type="button" disabled={busy !== null || bank.busy || ownerId === null} onClick={() => void perform('authorize')} className="rounded-xl bg-[#193f33] px-4 py-3 text-sm text-white disabled:opacity-50">{busy === 'authorize' ? t('bankOpening') : connection && connection.status !== 'not_connected' ? t('bankReconnect') : t('bankConnect')}</button>
       </div>
     </div>
+    {connection?.status === 'connected' && <div className="mt-4 text-sm"><label className="flex items-center gap-2"><input type="checkbox" checked={preference.enabled} disabled={!connection.auto_sync_interval_seconds} onChange={event => preference.setEnabled(event.target.checked)} />{t('bankAutoRefresh')}</label>{!connection.auto_sync_interval_seconds && <p className="mt-1 text-xs">{t('bankProviderConfirmation')}</p>}<button type="button" disabled={bank.busy || busy !== null} onClick={() => bank.mutation.mutate('full')} className="mt-3 underline disabled:opacity-50">{t('bankFullSync')}</button></div>}
+    {connection?.next_sync_at && <p role="status" className="mt-3 text-sm">{t('bankNextSync', { time: new Date(connection.next_sync_at).toLocaleString(getLocale()) })}</p>}
+    {bank.mutation.error && <p role="alert" className="mt-3 text-sm text-red-800">{f(bank.mutation.error.message, true)}</p>}
     {notice && <p role="status" className="mt-3 text-sm">{t('bankSyncSummary', { accounts: t('bankAccounts', { count: notice.accounts }), transactions: t('bankTransactions', { count: notice.transactions }) })}</p>}
     {error && <p role="alert" className="mt-3 text-sm text-red-800">{f(error, true)}</p>}
     {statusError && <p role="alert" className="mt-3 text-sm text-red-800">{f(statusError, true)}</p>}

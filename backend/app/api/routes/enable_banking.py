@@ -2,7 +2,7 @@ import json
 import secrets
 from html import escape
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, Query
 from fastapi.responses import HTMLResponse
 from pydantic import HttpUrl
 
@@ -10,25 +10,41 @@ from app.database import AsyncSession, get_db_session
 from app.dependencies.auth import get_current_user
 from app.dependencies.workspace import get_current_workspace
 from app.models import Workspace
-from app.services import enable_banking_sync
+from app.services import enable_banking_refresh, enable_banking_pending
+from app.models import EnableBankingConnection
+from sqlalchemy import select
 from app.services import enable_banking_service as service
 
 router = APIRouter(tags=['enable-banking'])
 COOKIE = 'enable_banking_browser'
 
 
-@router.get('/enable-banking/connection', response_model=service.ConnectionStatus)
-async def connection_status(response: Response, workspace: Workspace = Depends(get_current_workspace),
+@router.get('/enable-banking/connection')
+async def connection_status(request: Request, response: Response, workspace: Workspace = Depends(get_current_workspace),
                             db: AsyncSession = Depends(get_db_session)):
     response.headers['Cache-Control'] = 'no-store'
-    return await service.connection_status(workspace, db)
+    status = await service.connection_status(workspace, db)
+    connection = await db.scalar(select(EnableBankingConnection).where(
+        EnableBankingConnection.workspace_id == workspace.workspace_id))
+    headers = enable_banking_refresh.psu_headers(request)
+    interval = service.settings.enable_banking_auto_sync_interval_seconds
+    return {**status.model_dump(), 'auto_sync_interval_seconds': max(30, interval) if interval and headers else None,
+            'next_sync_at': enable_banking_refresh.next_sync_at(connection, headers) if connection else None}
 
 
 @router.post('/enable-banking/sync')
-async def import_accounts(response: Response, workspace: Workspace = Depends(get_current_workspace),
+async def import_accounts(request: Request, response: Response, recent: bool = Query(False),
+                          automatic: bool = Query(False), workspace: Workspace = Depends(get_current_workspace),
                           db: AsyncSession = Depends(get_db_session)):
     response.headers['Cache-Control'] = 'no-store'
-    return await enable_banking_sync.sync(workspace, db)
+    return await enable_banking_refresh.refresh(workspace, db, request=request, recent=recent, automatic=automatic)
+
+
+@router.get('/enable-banking/pending')
+async def pending_transactions(response: Response, workspace: Workspace = Depends(get_current_workspace),
+                               db: AsyncSession = Depends(get_db_session)):
+    response.headers['Cache-Control'] = 'no-store'
+    return await enable_banking_pending.pending(workspace, db)
 
 
 @router.post('/enable-banking/authorize')

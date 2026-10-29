@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import HttpUrl, SecretStr
+from pydantic import HttpUrl, SecretStr, Field
 
 class Settings(BaseSettings):
     database_url: str
@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     enable_banking_app_id: str | None = None
     enable_banking_private_key_path: Path | None = None
     enable_banking_redirect_uri: HttpUrl | None = None
+    # Enable only after confirming the provider's allowed foreground refresh rate.
+    enable_banking_auto_sync_interval_seconds: int | None = Field(default=None, ge=15, le=3600)
+    enable_banking_trusted_proxy_cidrs: str = ''
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

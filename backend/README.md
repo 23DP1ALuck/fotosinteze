@@ -670,3 +670,61 @@ must fit the application's existing Decimal(10,2) currency model; unsupported
 precision/ranges and more than 1000 pages per account fail without partial writes.
 Mocked integration checks run with `.venv/bin/python -m pytest tests/test_enable_banking* -q`.
 A real end-to-end test requires deployment and the account holder's bank approval.
+
+### Recent refresh, pending payments and deletion
+
+After applying migration `e72b19c4d610`, the existing Sync action uses
+`POST /enable-banking/sync?recent=true`. After the initial load, booked reads overlap
+seven days before the previous successful sync; all pending pages are fetched on
+every sync. **Reconcile full history** omits the recent filter and also refreshes
+pending entries. Both paths fetch and validate all pages before atomic writes.
+An encrypted, replaceable pending snapshot is returned by
+`GET /enable-banking/pending` and shown separately above Personal transaction history.
+Pending entries do not become ledger rows or affect dashboard/budget totals. They
+need no invented permanent ID or booking date; booked records continue to require
+stable entry references. A failed refresh preserves the prior ledger, balances,
+pending snapshot and last successful sync time.
+
+Short-interval auto refresh is disabled by default because this integration has
+no confirmed Revolut-specific refresh allowance. After confirming it with Enable
+Banking, set `ENABLE_BANKING_AUTO_SYNC_INTERVAL_SECONDS` (15–3600 seconds; effective
+minimum 30 seconds). Each user must also enable automatic refresh. The browser
+only refreshes while visible and recently interacted with, pauses after 60 seconds
+of inactivity, cancels stale workspace requests, and prevents overlapping requests.
+Returning to a visible active workspace can trigger a recent sync. No server-side
+background scheduler is added, and no 0–5-second bank publication guarantee is made.
+
+The backend derives PSU headers from the actual request's public client IP and User
+Agent. Behind Cloudflare/tunnel proxies, configure
+`ENABLE_BANKING_TRUSTED_PROXY_CIDRS` with the exact immediate peer CIDR(s), and ensure
+that trusted proxy overwrites `CF-Connecting-IP`. Never configure a broad catch-all
+CIDR or trust user-supplied forwarded IPs. If no genuine public client IP can be
+established, no PSU headers are sent, automatic mode is unavailable, and a six-hour
+background cooldown applies. Bank metadata did not specify required PSU headers
+for Revolut Latvia when checked; this does not establish a polling allowance.
+
+Cooldown and a five-minute in-flight lease are claimed in the database before
+provider requests, shared across tabs/processes and counted even on failure.
+429 responses preserve `Retry-After` (exposed through CORS), stop repeated polling,
+and retain all previously imported data. Configure/prove the proxy attribution
+before expecting manual refreshes more often than the background quota permits.
+
+**Delete connection** calls `DELETE /enable-banking/connection` only after an
+explicit, cancel-focused confirmation. It revokes the Enable Banking session first
+(bank consent is closed by the provider where possible), invalidates pending
+callbacks, then atomically deletes that connection's stored session/pending data,
+linked accounts and **all transactions on those accounts, including local manual
+entries**. Unrelated manual accounts, categories and budgets remain. This does not
+delete a real Revolut bank account or transactions held by the bank. If provider
+revocation fails, local data remains and the UI keeps the dialog open for retry;
+sync/reconnect are blocked until deletion is retried. Session DELETE 404 is treated
+as already revoked. In-flight sync cannot restore deleted data, and callbacks that
+finish during deletion attempt to close any newly issued unpersisted session.
+Unreadable encrypted sessions require administrator/provider revocation rather
+than silently discarding the only stored session handle.
+
+The account-delete endpoint also protects Enable Banking-linked accounts, including
+accounts with no booked transactions; remove the connection to delete those records.
+The browser cancels pending reads and invalidates only the affected user's workspace
+finance caches after successful deletion. Actual bank data deletion and aggressive
+refresh frequencies are not exercised by the mocked test suite.

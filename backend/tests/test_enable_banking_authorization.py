@@ -22,6 +22,8 @@ class EnableBankingAuthorizationTests(BankTestCase):
                 'identification_hash': 'stable-bank-hash', 'currency': 'EUR', 'account_id': {'iban': 'private-iban'}}]}
 
     async def bank_response(self, method, path, **kwargs):
+        if method == 'DELETE':
+            return {}
         if path == '/aspsps':
             return {'aspsps': [{'name': 'Revolut', 'country': 'LV', 'maximum_consent_validity': 86400}]}
         if path == '/auth':
@@ -177,6 +179,14 @@ class EnableBankingAuthorizationTests(BankTestCase):
         self.assertEqual((await self.client.put(f'/transactions/{local_id}', headers=headers, json=local)).status_code, 200)
         self.assertEqual((await self.client.delete(f'/transactions/{local_id}', headers=headers)).status_code, 204)
         self.assertEqual((await self.client.get(f'/accounts/{account_id}', headers=headers)).json()['balance'], '100.00')
+        throttled = await self.client.post('/enable-banking/sync', headers=headers)
+        self.assertEqual(throttled.status_code, 429)
+        self.assertIn('Retry-After', throttled.headers)
+        cors = await self.client.post('/enable-banking/sync', headers={**headers, 'Origin': self.config.client_url})
+        self.assertIn('retry-after', cors.headers.get('access-control-expose-headers', '').lower())
+        row = await self.db.scalar(select(EnableBankingConnection))
+        row.sync_started_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=7)
+        await self.db.commit()
         self.assertEqual((await self.client.post('/enable-banking/sync', headers=headers)).json()['imported_count'], 0)
 
     async def test_imported_financial_fields_and_deletion_are_protected(self):

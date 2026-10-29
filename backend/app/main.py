@@ -43,6 +43,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.client_url],
     allow_credentials=True,
+    expose_headers=["Retry-After"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

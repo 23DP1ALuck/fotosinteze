@@ -16,7 +16,8 @@ async def request(method: str, path: str, **kwargs) -> dict:
     if not ((method == 'GET' and (path in ('/application', '/aspsps')
             or re.fullmatch(rf'/accounts/{uuid}/(?:balances|transactions)', path)
             or re.fullmatch(rf'/sessions/{uuid}', path)))
-            or (method == 'POST' and path in ('/auth', '/sessions'))):
+            or (method == 'POST' and path in ('/auth', '/sessions'))
+            or (method == 'DELETE' and re.fullmatch(rf'/sessions/{uuid}', path))):
         raise HTTPException(400, 'Unsupported Enable Banking endpoint')
     if kwargs.keys() - {'json', 'params', 'headers'}:
         raise HTTPException(400, 'Unsupported Enable Banking request options')
@@ -47,6 +48,14 @@ async def request(method: str, path: str, **kwargs) -> dict:
                                             headers=headers, **kwargs)
     except httpx.RequestError:
         raise HTTPException(502, 'Enable Banking could not be reached securely') from None
+    if response.status_code == 429:
+        try:
+            retry = min(86400, max(60, int(response.headers.get('Retry-After', '60'))))
+        except ValueError:
+            retry = 60
+        raise HTTPException(429, 'Bank refresh limit reached; try again later', headers={'Retry-After': str(retry)})
+    if method == 'DELETE' and response.status_code in (204, 404):
+        return {}
     if response.status_code not in (200, 201):
         raise HTTPException(502, 'Enable Banking request failed')
     try:
