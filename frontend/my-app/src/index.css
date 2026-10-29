@@ -361,3 +361,23 @@ code {
 .budget-progress::-webkit-progress-bar { background: #e2e8db; border-radius: 999px; }
 .budget-progress::-webkit-progress-value { background: var(--budget-fill); border-radius: 999px; }
 .budget-progress::-moz-progress-bar { background: var(--budget-fill); border-radius: 999px; }
+
+/* Give single-choice menus a consistent arrow with room for the label. */
+select:not([multiple]):is(:not([size]), [size="1"]) {
+  appearance: none;
+  color-scheme: light;
+  padding-inline-end: 2.5rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23627168' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  background-size: 1rem 1rem;
+}
+select:not([multiple]):is(:not([size]), [size="1"]):dir(rtl) {
+  background-position: left 0.875rem center;
+}
+@media (forced-colors: active) {
+  select:not([multiple]):is(:not([size]), [size="1"]) {
+    appearance: auto;
+    background-image: none;
+  }
+}
