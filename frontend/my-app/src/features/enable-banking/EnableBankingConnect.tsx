@@ -8,6 +8,7 @@ import { readApiErrorMessage } from '@/features/auth/api-error'
 import { subscribeAccessToken } from '@/features/auth/storage'
 import { authAccountId } from '@/features/workspaces/workspace-state'
 import { useBanking, useBankAutoPreference } from './banking'
+import { DeleteBankConnectionDialog } from './DeleteBankConnectionDialog'
 
 const statusLabels = {
   not_connected: 'Not connected',
@@ -26,6 +27,7 @@ function Connection({ workspaceId, ownerId }: { workspaceId: number; ownerId: nu
   const { t } = useTranslation('finance')
   const bank = useBanking(workspaceId)
   const preference = useBankAutoPreference(ownerId, workspaceId)
+  const [deleting, setDeleting] = useState(false)
   const operation = useRef<AbortController | null>(null)
   const [busy, setBusy] = useState<'authorize' | null>(null)
   const connection = bank.data
@@ -84,11 +86,13 @@ function Connection({ workspaceId, ownerId }: { workspaceId: number; ownerId: nu
       <div className="flex flex-wrap gap-3">
         {connection?.status === 'connected' && <button type="button" disabled={busy !== null || bank.busy || ownerId === null} onClick={() => void perform('sync')} className="rounded-xl bg-white px-4 py-3 text-sm disabled:opacity-50">{bank.busy ? f('Syncing…') : t('bankSyncAction')}</button>}
         <button type="button" disabled={busy !== null || bank.busy || ownerId === null} onClick={() => void perform('authorize')} className="rounded-xl bg-[#193f33] px-4 py-3 text-sm text-white disabled:opacity-50">{busy === 'authorize' ? t('bankOpening') : connection && connection.status !== 'not_connected' ? t('bankReconnect') : t('bankConnect')}</button>
+        {connection && connection.status !== 'not_connected' && <button type="button" disabled={busy !== null || bank.busy} onClick={() => setDeleting(true)} className="rounded-xl bg-white px-4 py-3 text-sm text-red-800 disabled:opacity-50">{t('bankDeleteAction')}</button>}
       </div>
     </div>
     {connection?.status === 'connected' && <div className="mt-4 text-sm"><label className="flex items-center gap-2"><input type="checkbox" checked={preference.enabled} disabled={!connection.auto_sync_interval_seconds} onChange={event => preference.setEnabled(event.target.checked)} />{t('bankAutoRefresh')}</label>{!connection.auto_sync_interval_seconds && <p className="mt-1 text-xs">{t('bankProviderConfirmation')}</p>}<button type="button" disabled={bank.busy || busy !== null} onClick={() => bank.mutation.mutate('full')} className="mt-3 underline disabled:opacity-50">{t('bankFullSync')}</button></div>}
     {connection?.next_sync_at && <p role="status" className="mt-3 text-sm">{t('bankNextSync', { time: new Date(connection.next_sync_at).toLocaleString(getLocale()) })}</p>}
     {bank.mutation.error && <p role="alert" className="mt-3 text-sm text-red-800">{f(bank.mutation.error.message, true)}</p>}
+    {deleting && <DeleteBankConnectionDialog workspaceId={workspaceId} onClose={() => setDeleting(false)} />}
     {notice && <p role="status" className="mt-3 text-sm">{t('bankSyncSummary', { accounts: t('bankAccounts', { count: notice.accounts }), transactions: t('bankTransactions', { count: notice.transactions }) })}</p>}
     {error && <p role="alert" className="mt-3 text-sm text-red-800">{f(error, true)}</p>}
     {statusError && <p role="alert" className="mt-3 text-sm text-red-800">{f(statusError, true)}</p>}

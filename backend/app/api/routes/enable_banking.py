@@ -10,7 +10,7 @@ from app.database import AsyncSession, get_db_session
 from app.dependencies.auth import get_current_user
 from app.dependencies.workspace import get_current_workspace
 from app.models import Workspace
-from app.services import enable_banking_refresh, enable_banking_pending
+from app.services import enable_banking_refresh, enable_banking_pending, enable_banking_delete
 from app.models import EnableBankingConnection
 from sqlalchemy import select
 from app.services import enable_banking_service as service
@@ -45,6 +45,14 @@ async def pending_transactions(response: Response, workspace: Workspace = Depend
                                db: AsyncSession = Depends(get_db_session)):
     response.headers['Cache-Control'] = 'no-store'
     return await enable_banking_pending.pending(workspace, db)
+
+
+@router.delete('/enable-banking/connection', status_code=204)
+async def delete_connection(response: Response, workspace: Workspace = Depends(get_current_workspace),
+                            db: AsyncSession = Depends(get_db_session)):
+    await enable_banking_delete.disconnect(workspace, db)
+    response.delete_cookie(COOKIE, path='/enable-banking/callback', secure=True, httponly=True, samesite='none')
+    response.headers['Cache-Control'] = 'no-store'
 
 
 @router.post('/enable-banking/authorize')

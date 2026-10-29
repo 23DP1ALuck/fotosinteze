@@ -86,6 +86,7 @@ async def delete_account(account_id: int, current_user: dict, workspace: Workspa
         Account.account_id == account_id,
         Account.workspace_id == workspace.workspace_id,
         Account.connection_id.is_(None),
+        Account.banking_connection_id.is_(None),
         ~Account.transactions.any(),
     ))
     if result.rowcount == 0:
