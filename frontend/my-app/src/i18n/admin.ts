@@ -50,6 +50,7 @@ const messages = {
   "accounts": ["Accounts", "Konti", "Счета"],
   "transactions": ["Transactions", "Darījumi", "Транзакции"],
   "budgets": ["Budgets", "Budžeti", "Бюджеты"],
+  "monthlyReview": ["Monthly review", "Mēneša pārskats", "Обзор месяца"],
   "categories": ["Categories", "Kategorijas", "Категории"],
   "statistics": ["Statistics", "Statistika", "Статистика"],
   "expenseRequests": ["Expense requests", "Izdevumu pieprasījumi", "Заявки на расходы"],
