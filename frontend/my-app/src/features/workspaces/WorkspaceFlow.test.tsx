@@ -18,7 +18,7 @@ beforeEach(()=>{
   const finance = createFinanceTransport()
   vi.stubGlobal('fetch',vi.fn(async(url,init)=>{
     if(String(url).endsWith('/workspaces')) return Response.json(workspaces)
-    if(String(url).endsWith('/revolut/connection') || String(url).endsWith('/enable-banking/connection'))return Response.json({status:'not_connected',expires_at:null,last_sync_at:null})
+    if(String(url).endsWith('/enable-banking/connection'))return Response.json({status:'not_connected',expires_at:null,last_sync_at:null})
     const response = finance.respond(url, init)
     if (response) return response
     const id=Number(new Headers(init.headers).get('X-Workspace-ID'))
@@ -36,7 +36,9 @@ async function switchWorkspace(from:string,to:string){await userEvent.click(scre
 it('loads actual memberships and displays Personal, Business and membership roles',async()=>{
   await renderWorkspace()
   await userEvent.click(screen.getByRole('button',{name:'Accounts'}))
-  expect(await screen.findByRole('button',{name:'Connect Revolut sandbox'})).toBeInTheDocument()
+  expect(await screen.findByRole('button',{name:'Connect real Revolut'})).toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:/Revolut sandbox/})).not.toBeInTheDocument()
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/revolut/'))).toBe(false)
   await userEvent.click(screen.getByRole('button',{name:'Switch workspace, Personal'}))
   expect(screen.getByRole('button',{name:'Switch to Acme Studio'})).toHaveTextContent('Owner')
   expect(screen.getByRole('button',{name:'Switch to Beta Studio'})).toHaveTextContent('Employee')
@@ -106,7 +108,9 @@ it('shows saved budget progress on the dashboard and reloads edited limits', asy
   expect(await summary.findByText('Groceries')).toBeInTheDocument()
   expect(summary.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('value', '28.54')
   expect(summary.getByRole('progressbar', { name: 'Groceries budget used' })).toHaveAttribute('max', '400')
-  expect(summary.getByText(/1 Oct 2026 to 1 Nov 2026/)).toBeInTheDocument()
+  await userEvent.click(summary.getByRole('button', { name: 'View Groceries budget details' }))
+  expect(within(screen.getByRole('dialog', { name: 'Budget details' })).getByText('1 Oct 2026 – 31 Oct 2026')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Close budget details' }))
   await userEvent.click(summary.getByRole('button', { name: 'Manage budgets' }))
   await userEvent.click(await screen.findByRole('button', { name: 'Edit Groceries' }))
   const form = within(screen.getByRole('form', { name: 'Edit personal budget' }))
@@ -270,7 +274,7 @@ it('opens Accounts for a workspace without accounts and keeps navigation availab
   await renderWorkspace()
   expect(await screen.findByRole('region', { name: 'Account management' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Add account' })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Connect Revolut sandbox' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Connect real Revolut' })).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Revolut' })).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Dashboard' }))
   await screen.findByRole('heading', { name: 'A little clarity for your everyday.' })
@@ -292,13 +296,13 @@ it('keeps employees on the dashboard when their workspace has no accounts', asyn
   expect(screen.queryByRole('region', { name: 'Account management' })).not.toBeInTheDocument()
 })
 
-it('keeps real and sandbox Revolut connections in Personal Accounts', async () => {
+it('keeps only Enable Banking connections in Personal Accounts', async () => {
   await renderWorkspace()
   expect(screen.queryByRole('button', { name: 'Connect Revolut sandbox' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Connect real Revolut' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Revolut' })).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Accounts' }))
-  expect(await screen.findByRole('button', { name: 'Connect Revolut sandbox' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Connect Revolut sandbox' })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Connect real Revolut' })).toBeInTheDocument()
   await switchWorkspace('Personal', 'Acme Studio')
   await userEvent.click(screen.getByRole('button', { name: 'Accounts' }))

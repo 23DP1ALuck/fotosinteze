@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import sessionmanager
 
-from app.api.routes import auth, revolut, enable_banking, business_budgets
+from app.api.routes import auth, enable_banking, business_budgets
 
 from app.api.routes import transactions, dashboard, statistics
 from app.api.routes import departments, projects, expenses, categories, workspaces, budgets, accounts
@@ -27,7 +27,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan, title=settings.project_name)
 app.include_router(auth.router)
-app.include_router(revolut.router)
 app.include_router(enable_banking.router)
 app.include_router(transactions.router)
 app.include_router(dashboard.router)

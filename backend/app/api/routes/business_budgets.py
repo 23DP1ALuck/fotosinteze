@@ -1,5 +1,6 @@
 """Business budgets are scoped through their required, single target relation."""
 from app.services.name_uniqueness import check_unique_name
+from app.services.budget_category_uniqueness import check_budget_category
 import calendar
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
@@ -16,7 +17,7 @@ from app.models import Budget, BudgetPeriod, Category, Department, Project, Tran
 from app.models.category import CategoryType
 from app.services.workspace_access import get_workspace_membership
 
-router = APIRouter(prefix='/business-budgets', tags=['Business budgets'])
+router = APIRouter(prefix='/business-budgets', tags=['Business budgets'], responses={409: {'description': 'Budget name or category already in use in this workspace'}})
 TARGETS = {'CATEGORY': (Category, 'category_id'), 'DEPARTMENT': (Department, 'department_id'), 'PROJECT': (Project, 'project_id')}
 
 
@@ -65,10 +66,11 @@ async def context(workspace=Depends(get_current_workspace), user=Depends(get_cur
 async def catalog(workspace_id, db):
     result = {}
     for kind, (model, key) in TARGETS.items():
-        stmt = select(model).where(model.workspace_id == workspace_id).order_by(model.name)
+        scope = or_(model.workspace_id.is_(None), model.workspace_id == workspace_id) if kind == 'CATEGORY' else model.workspace_id == workspace_id
+        stmt = select(model).where(scope).order_by(model.name)
         if kind == 'CATEGORY':
             stmt = stmt.where(Category.type == CategoryType.expense)
-        result[kind] = [{'id': getattr(row, key), 'name': row.name} for row in (await db.scalars(stmt)).all()]
+        result[kind] = [{'id': getattr(row, key), 'name': row.name, **({'icon': row.icon} if kind == 'CATEGORY' else {})} for row in (await db.scalars(stmt)).all()]
     return result
 
 
@@ -77,7 +79,8 @@ async def visible_budgets(workspace, membership, db):
     # ambiguous legacy budget from exposing another workspace's progress.
     clauses = []
     for kind, (model, key) in TARGETS.items():
-        conditions = [getattr(Budget, key).in_(select(getattr(model, key)).where(model.workspace_id == workspace.workspace_id))]
+        scope = or_(model.workspace_id.is_(None), model.workspace_id == workspace.workspace_id) if kind == 'CATEGORY' else model.workspace_id == workspace.workspace_id
+        conditions = [getattr(Budget, key).in_(select(getattr(model, key)).where(scope))]
         conditions.extend(getattr(Budget, other).is_(None) for _, other in TARGETS.values() if other != key)
         if membership.role != WorkspaceRole.OWNER:
             if kind == 'CATEGORY':
@@ -133,8 +136,9 @@ async def save_budget(payload, ctx, budget_id=None):
             raise HTTPException(404, 'Budget not found')
     model, key = TARGETS[payload.target_type]
     target = await db.get(model, payload.target_id)
-    if target is None or target.workspace_id != workspace.workspace_id or (payload.target_type == 'CATEGORY' and target.type != CategoryType.expense):
+    if target is None or (target.workspace_id != workspace.workspace_id and not (payload.target_type == 'CATEGORY' and target.workspace_id is None)) or (payload.target_type == 'CATEGORY' and target.type != CategoryType.expense):
         raise HTTPException(400, 'Choose an expense category, department or project from this workspace')
+    await check_budget_category(workspace.workspace_id, payload.target_id if payload.target_type == 'CATEGORY' else None, db, budget_id)
     await check_unique_name(db, Budget.name, payload.name,
         Budget.workspace_id == workspace.workspace_id,
         Budget.budget_id != budget_id if budget_id is not None else True,

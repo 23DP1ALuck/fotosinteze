@@ -36,6 +36,7 @@ class Account(TestBase):
 
 class Category(TestBase):
     __tablename__ = "category"
+    workspace_id: Mapped[int | None]
     category_id: Mapped[int] = mapped_column(primary_key=True)
     type: Mapped[CategoryType] = mapped_column(Enum(CategoryType))
 
@@ -93,8 +94,8 @@ class TransactionServiceTest(unittest.IsolatedAsyncioTestCase):
             Account(account_id=1, workspace_id=10, balance=80),
             Account(account_id=2, workspace_id=10, balance=100),
             Account(account_id=3, workspace_id=20, balance=100),
-            Category(category_id=1, type=CategoryType.expense),
-            Category(category_id=2, type=CategoryType.income),
+            Category(category_id=1, type=CategoryType.expense, workspace_id=10),
+            Category(category_id=2, type=CategoryType.income, workspace_id=10),
             Transaction(transaction_id=1, workspace_id=10, account_id=1,
                         category_id=1, amount=20, description="Old", currency="EUR"),
         ])

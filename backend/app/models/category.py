@@ -19,10 +19,11 @@ class Category(Base):
 
     category_id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    icon: Mapped[str | None] = mapped_column(String(16), nullable=True)
     type: Mapped[CategoryType] = mapped_column(Enum(CategoryType), nullable=False)
 
-    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.workspace_id"))
-    workspace: Mapped["Workspace"] = relationship(back_populates="categories")
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.workspace_id"), nullable=True)
+    workspace: Mapped["Workspace | None"] = relationship(back_populates="categories")
     expenses: Mapped[List["Expense"]] = relationship(back_populates="category")
 
     transactions: Mapped[List["Transaction"]] = relationship(back_populates="category")

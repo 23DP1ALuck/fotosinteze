@@ -14,7 +14,7 @@ from app.models import Account, Category, EnableBankingConnection, Transaction, 
 from app.models.category import CategoryType
 from app.models.transaction import TransactionSourceEnum
 from app.models.workspace import WorkspaceTypeEnum
-from app.services import enable_banking_client as client, revolut_authorization_service as authorization
+from app.services import enable_banking_client as client, enable_banking_service as authorization
 from app.services.account_service import lock_main_accounts
 from app.services.enable_banking_service import BankSession
 

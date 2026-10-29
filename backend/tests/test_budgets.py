@@ -143,6 +143,7 @@ class BudgetEndpointTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(Decimal(response.json()["current_spent"]), Decimal("30"))
                 for transaction in transactions:
                     await self.db.delete(transaction)
+                await self.db.delete(await self.db.get(Budget, budget_id))
                 await self.db.commit()
 
     async def test_business_budgets_require_owner(self):

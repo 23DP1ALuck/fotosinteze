@@ -44,7 +44,7 @@ async def validate_expense_fields(request: CreateExpenseRequestDTO, workspace_id
     category = await db.get(Category, request.category_id)
     if category is None:
         raise HTTPException(status_code=404, detail='Category not found')
-    if category.workspace_id != workspace_id:
+    if category.workspace_id not in (None, workspace_id):
         raise HTTPException(status_code=400, detail='Category must belong to this workspace')
     if category.type != CategoryType.expense:
         raise HTTPException(status_code=400, detail='An expense category is required')

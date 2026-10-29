@@ -13,6 +13,11 @@ export type ApiAccount = z.infer<typeof accountSchema>
 export type AccountCreate = { name: string; currency: string; balance: string }
 export type AccountUpdate = { name?: string; balance?: string; is_main?: boolean }
 
+export class AccountRequestError extends Error {
+  readonly status: number
+  constructor(message: string, status: number) { super(message); this.name = 'AccountRequestError'; this.status = status }
+}
+
 async function request(workspaceId: number, path: string, init: RequestInit = {}) {
   let response: Response
   try { response = await authenticatedFetch(path, init, { workspaceId }) }
@@ -24,7 +29,7 @@ async function request(workspaceId: number, path: string, init: RequestInit = {}
     if (response.status === 401) throw new Error('Your session has expired. Please log in again.')
     if (response.status === 403) throw new Error(`You do not have permission to access or manage accounts in this workspace. ${await readApiErrorMessage(response)}`)
     if (response.status === 404) throw new Error('This account is no longer available in the selected workspace. Close its details and refresh accounts.')
-    throw new Error(await readApiErrorMessage(response))
+    throw new AccountRequestError(await readApiErrorMessage(response), response.status)
   }
   return response
 }
@@ -49,4 +54,8 @@ export async function updateAccount(workspaceId: number, accountId: number, inpu
 }
 export function formatAccountBalance(account: ApiAccount) {
   return new Intl.NumberFormat(getLocale(), { style: 'currency', currency: account.currency }).format(Number(account.balance))
+}
+
+export async function deleteAccount(workspaceId: number, accountId: number, signal?: AbortSignal) {
+  await request(workspaceId, `/accounts/${accountId}`, { method: 'DELETE', signal })
 }

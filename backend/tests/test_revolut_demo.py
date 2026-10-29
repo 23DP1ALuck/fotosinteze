@@ -1,17 +1,11 @@
-import unittest
 from decimal import Decimal
 from sqlalchemy import select
 from app.models import Account, Transaction
-from tests import test_revolut_authorization as authorization_tests
+from tests.bank_test_case import BankTestCase
 from app.services.revolut_demo import seed_demo, require_local_database
 
 
-class RevolutDemoTests(unittest.IsolatedAsyncioTestCase):
-    setUpClass = classmethod(authorization_tests.RevolutConnectionTests.setUpClass.__func__)
-    asyncSetUp = authorization_tests.RevolutConnectionTests.asyncSetUp
-    asyncTearDown = authorization_tests.RevolutConnectionTests.asyncTearDown
-    provider = authorization_tests.RevolutConnectionTests.provider
-
+class RevolutDemoTests(BankTestCase):
     async def test_demo_is_labelled_idempotent_and_preserves_existing_accounts(self):
         self.db.add(Account(name='Cash', currency='EUR', balance=50, workspace_id=1, is_main=True))
         await self.db.commit()

@@ -35,6 +35,9 @@ async def create_transaction(request: CreateTransactionRequest,
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
 
+    if category.workspace_id not in (None, active_workspace.workspace_id):
+        raise HTTPException(status_code=400, detail="Category must belong to this workspace")
+
     if len(request.description.strip()) == 0:
         raise HTTPException(status_code=400, detail="Description must not be empty")
 
@@ -76,8 +79,6 @@ async def create_transaction(request: CreateTransactionRequest,
     elif active_workspace.type == WorkspaceTypeEnum.BUSINESS:
         # Check business membership and related records before saving or changing the balance.
         membership = await get_workspace_membership(current_user, active_workspace.workspace_id, db)
-        if category.workspace_id != active_workspace.workspace_id:
-            raise HTTPException(status_code=400, detail="Category must belong to this workspace")
         department_id = await validate_business_assignments(
             request.department_id, request.project_id, request.expense_id,
             active_workspace, membership, db,
@@ -128,19 +129,19 @@ async def update_transaction(transaction_id: int,
     category = await db.get(Category, request.category_id)
     if category is None:
         raise HTTPException(status_code=404, detail="Category not found")
+    if category.workspace_id not in (None, active_workspace.workspace_id):
+        raise HTTPException(status_code=400, detail="Category must belong to this workspace")
     account = await find_account_by_id(request.account_id, active_workspace, db)
     if transaction.source == TransactionSourceEnum.BANK:
         original_category = await db.get(Category, transaction.category_id) if transaction.category_id else None
         if (request.account_id != transaction.account_id or request.amount != transaction.amount
                 or request.currency != transaction.currency or original_category is None
-                or category.workspace_id != active_workspace.workspace_id
+                or category.workspace_id not in (None, active_workspace.workspace_id)
                 or category.type != original_category.type):
             raise HTTPException(409, 'Bank transaction amounts, accounts, currency and direction are managed by sync')
 
     # Finish business access checks before changing either account balance.
     if active_workspace.type == WorkspaceTypeEnum.BUSINESS:
-        if category.workspace_id != active_workspace.workspace_id:
-            raise HTTPException(status_code=400, detail="Category must belong to this workspace")
         department_id = await validate_business_assignments(
             request.department_id, request.project_id, request.expense_id,
             active_workspace, membership, db,

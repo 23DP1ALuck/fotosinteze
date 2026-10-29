@@ -54,7 +54,7 @@ async def get_business_dashboard(workspace: Workspace, current_user: dict,
         Transaction.currency == workspace.base_currency,
         Transaction.created_at >= start,
         Transaction.created_at < end,
-        Category.workspace_id == workspace.workspace_id,
+        ((Category.workspace_id.is_(None)) | (Category.workspace_id == workspace.workspace_id)),
     ]
     if membership.role != WorkspaceRole.OWNER:
         filters.append(Transaction.department_id == membership.department_id)
