@@ -1,11 +1,17 @@
 import unittest
-from datetime import datetime
+from datetime import date, datetime
+from unittest.mock import patch
 from app.models import Budget, Transaction
 from app.models.transaction import TransactionSourceEnum
 import test_expenses
 
 class BusinessBudgetTests(unittest.IsolatedAsyncioTestCase):
-    asyncSetUp = test_expenses.ExpenseTests.asyncSetUp
+    async def asyncSetUp(self):
+        clock = patch('app.services.budget_service.date', wraps=date)
+        self.today = clock.start()
+        self.today.today.return_value = date(2026, 10, 1)
+        self.addCleanup(clock.stop)
+        await test_expenses.ExpenseTests.asyncSetUp(self)
     asyncTearDown = test_expenses.ExpenseTests.asyncTearDown
 
     def payload(self, **changes):
@@ -92,6 +98,25 @@ class BusinessBudgetTests(unittest.IsolatedAsyncioTestCase):
         await self.client.delete(f"/business-budgets/{monthly['id']}")
         weekly = await self.create(name='Weekly plan', period_start='2026-12-28', period_length='WEEKLY')
         self.assertEqual(weekly['period_end'], '2027-01-04')
+
+    async def test_expired_business_period_advances_and_resets_spending(self):
+        row = await self.create(period_start='2026-09-15')
+        self.db.add_all([
+            Transaction(amount=amount, created_at=datetime.fromisoformat(when), currency='EUR',
+                        description='Rollover', source=TransactionSourceEnum.MANUAL,
+                        account_id=1, category_id=1, workspace_id=1)
+            for amount, when in [(90, '2026-09-15'), (12, '2026-12-15')]
+        ])
+        await self.db.commit()
+        self.today.today.return_value = date(2026, 12, 15)
+        result = (await self.client.get('/business-budgets')).json()['budgets'][0]
+        self.assertEqual(result['period_start'], '2026-12-15')
+        self.assertEqual(result['period_end'], '2027-01-15')
+        self.assertEqual((result['spent'], result['remaining']), ('12.00', '88.00'))
+        await self.db.rollback()
+        saved = await self.db.get(Budget, row['id'])
+        await self.db.refresh(saved)
+        self.assertEqual(saved.period_start, date(2026, 12, 15))
 
     async def test_ambiguous_legacy_budget_is_not_exposed(self):
         self.identity = {'sub': '1'}

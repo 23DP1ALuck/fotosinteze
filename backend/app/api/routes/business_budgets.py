@@ -16,6 +16,7 @@ from app.dependencies.workspace import get_current_workspace
 from app.models import Budget, BudgetPeriod, Category, Department, Project, Transaction, WorkspaceRole
 from app.models.category import CategoryType
 from app.services.workspace_access import get_workspace_membership
+from app.services.budget_service import advance_budget_period
 
 router = APIRouter(prefix='/business-budgets', tags=['Business budgets'], responses={409: {'description': 'Budget name or category already in use in this workspace'}})
 TARGETS = {'CATEGORY': (Category, 'category_id'), 'DEPARTMENT': (Department, 'department_id'), 'PROJECT': (Project, 'project_id')}
@@ -97,7 +98,7 @@ async def serialize(row, workspace, membership, db):
     kind, key = next((kind, key) for kind, (_, key) in TARGETS.items() if getattr(row, key) is not None)
     model = TARGETS[kind][0]
     target = await db.get(model, getattr(row, key))
-    end = period_end(row.period_start, row.period_length, row.duration_days)
+    end = await advance_budget_period(row, db, period_end)
     stmt = select(func.coalesce(func.sum(Transaction.amount), 0)).join(Category, Transaction.category_id == Category.category_id).where(
         Transaction.workspace_id == workspace.workspace_id, Transaction.currency == row.currency,
         Category.type == CategoryType.expense, getattr(Transaction, key) == getattr(row, key),
