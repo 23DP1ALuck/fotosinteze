@@ -92,6 +92,11 @@ class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(await self.db.get(Account, 2))
         self.assertIsNotNone(await self.db.get(RevolutConnection, 1))
 
+    async def test_employee_cannot_read_company_accounts(self):
+        self.user = {'sub': '2'}
+        self.assertEqual((await self.client.get('/accounts')).status_code, 403)
+        self.assertEqual((await self.client.get('/accounts/1')).status_code, 403)
+
     async def test_reads_scope_and_business_access(self):
         response = await self.client.get('/accounts')
         self.assertEqual(response.status_code, 200, response.text)
@@ -100,9 +105,8 @@ class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.get('/accounts/1', headers={'Workspace-ID': '2'})).status_code, 404)
         self.user = {'sub': '2'}
         response = await self.client.get('/accounts')
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual([a['account_id'] for a in response.json()], [1])
-        self.assertEqual((await self.client.get('/accounts/1')).status_code, 200)
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual((await self.client.get('/accounts/1')).status_code, 403)
         self.assertEqual((await self.client.get('/accounts', headers={'Workspace-ID': '2'})).status_code, 403)
 
     async def test_manual_updates_and_protected_fields(self):
@@ -124,11 +128,9 @@ class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.put('/accounts/1', headers={'Workspace-ID': '2'},
                                                 json={'balance': 0})).status_code, 403)
 
-    async def test_employee_can_select_account_for_transaction_but_cannot_manage_it(self):
+    async def test_employee_cannot_manage_account(self):
         self.user = {'sub': '2'}
-        response = await self.client.get('/accounts')
-        self.assertEqual(response.status_code, 200, response.text)
-        account_id = response.json()[0]['account_id']
+        account_id = 1
         response = await self.client.post('/accounts', json={'name': 'New', 'currency': 'EUR', 'balance': 0})
         self.assertEqual(response.status_code, 403, response.text)
         for fields in ({'name': 'Renamed'}, {'balance': 0}):
@@ -183,7 +185,7 @@ class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
             response = await self.client.post('/accounts', json={**payload, **fields})
             self.assertEqual(response.status_code, 422, response.text)
         self.user = {'sub': '2'}
-        self.assertEqual((await self.client.get('/accounts/1')).status_code, 200)
+        self.assertEqual((await self.client.get('/accounts/1')).status_code, 403)
         self.assertEqual((await self.client.post('/accounts', json=payload)).status_code, 403)
 
     async def test_transfer_between_manual_and_connected_accounts(self):
@@ -230,7 +232,7 @@ class AccountRouteTests(unittest.IsolatedAsyncioTestCase):
         self.user = {'sub': '2'}
         response = await self.client.put('/accounts/1', json={'is_main': True})
         self.assertEqual(response.status_code, 403, response.text)
-        self.assertFalse((await self.client.get('/accounts/1')).json()['is_main'])
+        self.assertFalse((await self.db.get(Account, 1)).is_main)
 
     async def test_first_created_account_is_main_and_later_accounts_preserve_selection(self):
         headers = {'Workspace-ID': '2'}

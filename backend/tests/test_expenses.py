@@ -86,18 +86,29 @@ class ExpenseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 201, response.text)
         return response.json()['id']
 
+    async def test_reassignment_revokes_access_to_old_department_expense(self):
+        expense_id = await self.submit()
+        member = await self.db.get(WorkspaceUsers, (2, 1))
+        member.department_id = 2
+        await self.db.commit()
+        self.assertEqual((await self.client.get('/expenses')).json(), [])
+        for method in ('get', 'put', 'delete'):
+            response = await getattr(self.client, method)(f'/expenses/{expense_id}', **({'json': self.payload()} if method == 'put' else {}))
+            self.assertEqual(response.status_code, 403)
+
     async def test_submit_defaults_and_owner_visibility(self):
         expense_id = await self.submit(project_id=1)
         response = await self.client.get(f'/expenses/{expense_id}')
         self.assertEqual(response.status_code, 200, response.text)
         data = response.json()
-        self.assertEqual((data['submitted_by'], data['department_id'], data['status']), (2, 1, 'PENDING'))
+        self.assertEqual((data['submitted_by'], data['submitted_by_name'], data['department_id'], data['status']), (2, 'User 2', 1, 'PENDING'))
         self.assertIsNone(data['receipt_url'])
         self.assertIsNone(data['reviewed_by'])
         self.identity = {'sub': '1'}
         response = await self.client.get('/expenses')
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual([row['id'] for row in response.json()], [expense_id])
+        self.assertEqual(response.json()[0]['submitted_by_name'], 'User 2')
         self.assertEqual((await self.client.get(f'/expenses/{expense_id}')).status_code, 200)
 
     async def test_employee_expense_category_catalog_is_workspace_scoped(self):
@@ -125,8 +136,7 @@ class ExpenseTests(unittest.IsolatedAsyncioTestCase):
 
         self.identity = {'sub': '2'}
         employee = await self.client.get('/accounts')
-        self.assertEqual(employee.status_code, 200, employee.text)
-        self.assertEqual([row['workspace_id'] for row in employee.json()], [1])
+        self.assertEqual(employee.status_code, 403, employee.text)
 
     async def test_employee_cannot_read_change_delete_or_review_another_submission(self):
         expense_id = await self.submit()

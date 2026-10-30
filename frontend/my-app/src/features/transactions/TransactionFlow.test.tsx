@@ -259,24 +259,18 @@ it('refreshes dashboard totals when changing a category type', async () => {
   expect(screen.getByRole('row', { name: /Rimi.*28.54/ })).toHaveTextContent('+ €28.54')
 })
 
-it('lets an employee browse categories and save a transaction without showing category write controls', async () => {
+it('lets an employee browse categories without account or category management', async () => {
   const fallback = vi.mocked(fetch).getMockImplementation()!
   vi.stubGlobal('fetch', vi.fn(async (url, init) => String(url).endsWith('/workspaces') ? Response.json([{ id: 42, name: 'Studio', type: 'BUSINESS', role: 'EMPLOYEE' }]) : fallback(url, init)))
   mount()
   await userEvent.click(await screen.findByRole('button', { name: 'Categories' }))
   expect(screen.queryByRole('button', { name: 'Accounts' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Departments' })).not.toBeInTheDocument()
   await screen.findByText('Groceries')
   expect(screen.queryByRole('button', { name: 'Create category' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Edit Groceries' })).not.toBeInTheDocument()
-  await userEvent.click(screen.getByRole('button', { name: 'Add expense' }))
-  const modal = within(screen.getByRole('dialog', { name: 'Add expense' }))
-  await waitFor(() => expect(modal.getByLabelText('Account')).toBeEnabled())
-  await userEvent.selectOptions(modal.getByLabelText('Account'), '13')
-  await userEvent.selectOptions(modal.getByLabelText('Category'), '4')
-  await userEvent.type(modal.getByLabelText('Amount (EUR)'), '12')
-  await userEvent.click(modal.getByRole('button', { name: 'Save expense' }))
-  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add expense' })).not.toBeInTheDocument())
-  expect(screen.getByRole('status')).toHaveTextContent('Transaction saved.')
+  expect(screen.queryByRole('button', { name: 'Add expense' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Add income' })).not.toBeInTheDocument()
 })
 
 it('confirms deletion, refreshes history and balances, and allows cancelling first', async () => {
