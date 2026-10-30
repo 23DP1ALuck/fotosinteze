@@ -36,8 +36,23 @@ async def assert_budget_access(current_user: dict, workspace: Workspace, db: Asy
         await get_workspace_membership(current_user, workspace.workspace_id, db, owner_only=True)
 
 
+async def advance_budget_period(budget: Budget, db: AsyncSession,
+                                period_end=calculate_budget_period_bounds) -> date:
+    today = date.today()
+    start = budget.period_start
+    end = period_end(start, budget.period_length, budget.duration_days)
+    while end <= today:
+        start = end
+        end = period_end(start, budget.period_length, budget.duration_days)
+    if start != budget.period_start:
+        budget.period_start = start
+        budget.updated_at = datetime.now()
+        await db.commit()
+    return end
+
+
 async def budget_response(budget: Budget, db: AsyncSession) -> BudgetResponseDTO:
-    end : date = calculate_budget_period_bounds(budget.period_start, budget.period_length, budget.duration_days)
+    end = await advance_budget_period(budget, db)
     stmt = select(func.coalesce(func.sum(Transaction.amount), 0)).join(Category, Transaction.category_id == Category.category_id).where(
         Transaction.workspace_id == budget.workspace_id,
         Transaction.created_at >= budget.period_start,

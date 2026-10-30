@@ -1,8 +1,10 @@
 import unittest
 from datetime import date, datetime
 from decimal import Decimal
+from unittest.mock import patch
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.database import Base, get_db_session
@@ -17,6 +19,10 @@ from app.services.budget_service import calculate_budget_period_bounds
 
 class BudgetEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        clock = patch('app.services.budget_service.date', wraps=date)
+        self.today = clock.start()
+        self.today.today.return_value = date(2025, 1, 1)
+        self.addCleanup(clock.stop)
         self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
@@ -53,6 +59,7 @@ class BudgetEndpointTests(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
 
     async def test_spending_uses_saved_period_currency_and_optional_scope_filters(self):
+        self.today.today.return_value = date(2024, 1, 31)
         self.db.add_all([
             Budget(budget_id=1, workspace_id=1, category_id=1, project_id=10,
                    department_id=20, name="Food", limit_amount=100, currency="EUR",
@@ -101,6 +108,7 @@ class BudgetEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 403)
 
     async def test_unfiltered_budget_counts_only_expense_categories(self):
+        self.today.today.return_value = date(2024, 1, 1)
         self.db.add(Budget(workspace_id=1, name="General", limit_amount=100,
                            currency="EUR", period_start=date(2024, 1, 1),
                            period_length="WEEKLY"))
@@ -145,6 +153,64 @@ class BudgetEndpointTests(unittest.IsolatedAsyncioTestCase):
                     await self.db.delete(transaction)
                 await self.db.delete(await self.db.get(Budget, budget_id))
                 await self.db.commit()
+
+    async def test_expired_periods_advance_and_persist_before_calculating_spending(self):
+        cases = [
+            ('MONTHLY', None, '2024-12-15', date(2025, 3, 1), '2025-03-01'),
+            ('MONTHLY', None, '2024-01-31', date(2024, 2, 29), '2024-02-01'),
+            ('WEEKLY', None, '2024-12-25', date(2025, 1, 8), '2025-01-08'),
+            ('CUSTOM', 3, '2024-12-25', date(2025, 1, 5), '2025-01-03'),
+        ]
+        for period, duration, start, today, expected in cases:
+            with self.subTest(period=period, today=today):
+                self.today.today.return_value = date.fromisoformat(start)
+                payload = self.budget_input(period_start=start, period_length=period, duration_days=duration)
+                created = await self.client.post('/budgets', headers={'Workspace-ID': '1'}, json=payload)
+                self.assertEqual(created.status_code, 201, created.text)
+                budget_id = created.json()['budget_id']
+                self.db.add_all([
+                    Transaction(amount=amount, currency='EUR', description='Rollover',
+                                source=TransactionSourceEnum.MANUAL, account_id=1,
+                                workspace_id=1, category_id=1, created_at=datetime.fromisoformat(when))
+                    for amount, when in [(90, start), (12, expected)]
+                ])
+                await self.db.commit()
+                self.today.today.return_value = today
+                paths = ['/budgets', f'/budgets/{budget_id}'] if period == 'WEEKLY' else [f'/budgets/{budget_id}', '/budgets']
+                for path in paths:
+                    response = await self.client.get(path, headers={'Workspace-ID': '1'})
+                    self.assertEqual(response.status_code, 200, response.text)
+                    row = response.json() if isinstance(response.json(), dict) else response.json()[0]
+                    self.assertEqual(row['period_start'], expected)
+                    self.assertEqual(Decimal(row['current_spent']), Decimal('12'))
+                    await self.db.rollback()
+                    saved = await self.db.get(Budget, budget_id)
+                    await self.db.refresh(saved)
+                    self.assertEqual(saved.period_start.isoformat(), expected)
+                await self.client.delete(f'/budgets/{budget_id}', headers={'Workspace-ID': '1'})
+                for transaction in (await self.db.scalars(select(Transaction))).all():
+                    await self.db.delete(transaction)
+                await self.db.commit()
+
+    async def test_create_and_update_roll_expired_dates_but_keep_active_and_future_starts(self):
+        self.today.today.return_value = date(2025, 3, 15)
+        response = await self.client.post('/budgets', headers={'Workspace-ID': '1'},
+                                          json=self.budget_input())
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()['period_start'], '2025-03-01')
+        budget_id = response.json()['budget_id']
+        for start, expected in [('2025-02-01', '2025-03-01'),
+                                ('2025-03-10', '2025-03-10'),
+                                ('2025-04-01', '2025-04-01')]:
+            response = await self.client.put(f'/budgets/{budget_id}', headers={'Workspace-ID': '1'},
+                                             json=self.budget_input(period_start=start))
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()['period_start'], expected)
+            saved = await self.db.get(Budget, budget_id)
+            updated_at = saved.updated_at
+            response = await self.client.get(f'/budgets/{budget_id}', headers={'Workspace-ID': '1'})
+            self.assertEqual(response.json()['period_start'], expected)
+            self.assertEqual(saved.updated_at, updated_at)
 
     async def test_business_budgets_require_owner(self):
         membership = await self.db.get(WorkspaceUsers, (1, 2))
