@@ -6,7 +6,7 @@ import type { ProjectCatalog } from '@/features/projects/use-project-catalog'
 import { ExpenseRequests } from './ExpenseRequests'
 
 const catalog = { workspaceId: 42, departments: [], projects: [], loading: false, error: '', refresh() {}, upsert() {}, remove() {} } as ProjectCatalog
-const row = { id: 11, workspace_id: 42, submitted_by: 2, reviewed_by: null, amount: 25, currency: 'EUR', description: 'Taxi to client', receipt_url: null, status: 'PENDING', category_id: 9, department_id: 7, project_id: null, created_at: '2026-10-12T10:00:00', updated_at: '2026-10-12T10:00:00', reviewed_at: null }
+const row = { id: 11, workspace_id: 42, submitted_by: 2, submitted_by_name: 'Alex Smith', reviewed_by: null, amount: 25, currency: 'EUR', description: 'Taxi to client', receipt_url: null, status: 'PENDING', category_id: 9, department_id: 7, project_id: null, created_at: '2026-10-12T10:00:00', updated_at: '2026-10-12T10:00:00', reviewed_at: null }
 const account = { account_id: 5, name: 'Business cash', currency: 'EUR', balance: 1200, workspace_id: 42, connection_id: null }
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); clearSession() })
 function setupFetch(role: 'OWNER' | 'EMPLOYEE') {
@@ -37,9 +37,12 @@ it('submits an expense request and displays its pending status', async () => {
   const user = userEvent.setup()
   render(<ExpenseRequests workspaceId={42} onConnect={vi.fn()} catalog={catalog} onApproved={vi.fn()} />)
   expect(await screen.findByText('Taxi to client')).toBeInTheDocument()
+  expect(screen.getByText(/Submitted by Alex Smith/)).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Approve Taxi to client' })).not.toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: 'Submit expense' }))
   const form = within(screen.getByRole('form', { name: 'Submit expense request' }))
+  expect(form.queryByRole('combobox', { name: 'Department' })).not.toBeInTheDocument()
+  expect(form.getByText('My assigned department')).toBeInTheDocument()
   await user.type(form.getByLabelText('Amount (€)'), '42.50')
   await user.selectOptions(form.getByLabelText('Category'), '9')
   await user.type(form.getByLabelText('Description'), 'Team dinner')
@@ -170,10 +173,11 @@ it('preserves currency, department, project and receipt when editing a pending r
   await user.click(await screen.findByRole('button', { name: 'Edit Taxi to client' }))
   const form = within(screen.getByRole('form', { name: 'Edit expense request' }))
   expect(form.getByLabelText('Amount (USD)')).toHaveValue(25)
-  expect(form.getByLabelText('Department')).toHaveValue('7')
+  expect(form.getByText('Design')).toBeInTheDocument()
+  expect(form.queryByRole('combobox', { name: 'Department' })).not.toBeInTheDocument()
   expect(form.getByLabelText('Project')).toHaveValue('8')
   await user.click(form.getByRole('button', { name: 'Save changes' }))
   await waitFor(() => expect(screen.queryByRole('form')).not.toBeInTheDocument())
   const update = transport.mock.calls.find(([, init]) => init?.method === 'PUT')!
-  expect(JSON.parse(String(update[1]?.body))).toMatchObject({ amount: 25, currency: 'USD', category_id: 9, department_id: 7, project_id: 8, receipt_url: existing.receipt_url })
+  expect(JSON.parse(String(update[1]?.body))).toMatchObject({ amount: 25, currency: 'USD', category_id: 9, project_id: 8, receipt_url: existing.receipt_url })
 })

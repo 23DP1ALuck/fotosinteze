@@ -15,6 +15,7 @@ class ExpenseResponseDTO(BaseModel):
     description: str
     receipt_url: str | None
     submitted_by: int
+    submitted_by_name: str
     created_at: datetime
     updated_at: datetime
     reviewed_at: datetime | None = None
