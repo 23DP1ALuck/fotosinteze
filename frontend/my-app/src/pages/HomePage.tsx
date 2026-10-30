@@ -42,7 +42,7 @@ import type { ApiTransaction, TransactionFilters } from '@/features/transactions
 
 const percent = (value: number) => new Intl.NumberFormat(getLocale(), { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)
 
-const navigation = ['Dashboard', 'Accounts', 'Transactions', 'Budgets', 'Monthly review', 'Categories', 'Statistics'] as const
+const navigation = ['Dashboard', 'Accounts', 'Transactions', 'Budgets', 'Categories', 'Statistics', 'Monthly review'] as const
 const formatDate = (date: string) => new Intl.DateTimeFormat(getLocale(), { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${date}T12:00:00`))
 
 const cardClasses =
@@ -57,7 +57,7 @@ function WorkspaceDashboard({ workspace, workspaces, active, onSwitch, onCreate,
 }) {
   const { t } = useTranslation('pages')
   const isBusiness = workspace.kind === 'business'
-  const workspaceNavigation = isBusiness ? workspace.role === 'EMPLOYEE' ? ['Dashboard', 'Transactions', 'Expense requests', 'Budgets', 'Monthly review', 'Categories', 'Projects', 'Statistics'] : ['Dashboard', 'Accounts', 'Transactions', 'Expense requests', 'Budgets', 'Monthly review', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics'] : navigation
+  const workspaceNavigation = isBusiness ? workspace.role === 'EMPLOYEE' ? ['Dashboard', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Projects', 'Statistics', 'Monthly review'] : ['Dashboard', 'Accounts', 'Transactions', 'Expense requests', 'Budgets', 'Categories', 'Departments', 'Projects', 'Employees', 'Statistics', 'Monthly review'] : navigation
   const { user, logout } = useAuth()
   const backendWorkspaceId = Number(workspace.id)
   const projectCatalog = useProjectCatalog(backendWorkspaceId, isBusiness && active, workspace.role)
