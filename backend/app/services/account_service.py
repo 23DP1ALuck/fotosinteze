@@ -15,7 +15,7 @@ async def authorize_accounts(current_user: dict, workspace: Workspace, db: Async
 
 
 async def get_accounts(current_user: dict, workspace: Workspace, db: AsyncSession) -> list[CreateAccountResponse]:
-    await authorize_accounts(current_user, workspace, db, owner=False)
+    await authorize_accounts(current_user, workspace, db, owner=True)
     accounts = (await db.scalars(select(Account).where(
         Account.workspace_id == workspace.workspace_id
     ).order_by(Account.account_id))).all()
@@ -23,7 +23,7 @@ async def get_accounts(current_user: dict, workspace: Workspace, db: AsyncSessio
 
 
 async def get_account(account_id: int, current_user: dict, workspace: Workspace, db: AsyncSession) -> Account:
-    await authorize_accounts(current_user, workspace, db, owner=False)
+    await authorize_accounts(current_user, workspace, db, owner=True)
     account = await db.scalar(select(Account).where(
         Account.account_id == account_id, Account.workspace_id == workspace.workspace_id
     ))

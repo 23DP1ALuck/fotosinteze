@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import HTTPException
 from sqlalchemy import select, update
 from app.database import AsyncSession
-from app.models import Expense, Workspace, WorkspaceUsers, WorkspaceRole, Category
+from app.models import Expense, Workspace, WorkspaceUsers, WorkspaceRole, Category, User
 from app.models.category import CategoryType
 from app.models.expenses import ExpenseStatusEnum
 from app.dto import ExpenseResponseDTO, CreateExpenseRequestDTO, CreateTransactionRequest
@@ -12,13 +12,15 @@ from app.services.project_service import assert_project_access, load_project
 from app.services import transaction_service
 
 
-def expense_response(expense: Expense) -> ExpenseResponseDTO:
+async def expense_response(expense: Expense, db: AsyncSession, name: str | None = None) -> ExpenseResponseDTO:
+    if name is None:
+        name = await db.scalar(select(User.display_name).where(User.user_id == expense.submitted_by))
     return ExpenseResponseDTO(
         id=expense.expense_id, amount=expense.amount, currency=expense.currency,
         workspace_id=expense.workspace_id, department_id=expense.department_id,
         project_id=expense.project_id, category_id=expense.category_id,
         status=expense.status, description=expense.description,
-        receipt_url=expense.receipt_url, submitted_by=expense.submitted_by,
+        receipt_url=expense.receipt_url, submitted_by=expense.submitted_by, submitted_by_name=name,
         created_at=expense.created_at, updated_at=expense.updated_at,
         reviewed_at=expense.reviewed_at, reviewed_by=expense.reviewed_by,
     )
@@ -61,12 +63,12 @@ async def create_expense(request: CreateExpenseRequestDTO, workspace_id: int, cu
     db.add(expense)
     await db.commit()
     await db.refresh(expense)
-    return expense_response(expense)
+    return await expense_response(expense, db)
 
 
 def assert_expense_access(expense: Expense, membership: WorkspaceUsers) -> None:
     # Owners see all workspace requests; employees see only their own submissions.
-    if membership.role != WorkspaceRole.OWNER and expense.submitted_by != membership.user_id:
+    if membership.role != WorkspaceRole.OWNER and (expense.submitted_by != membership.user_id or expense.department_id != membership.department_id):
         raise HTTPException(status_code=403, detail='No access to this expense')
 
 
@@ -89,16 +91,16 @@ async def get_expense_by_id(expense_id: int, workspace_id: int, current_user: di
     membership = await get_workspace_membership(current_user, workspace_id, db)
     expense = await load_expense(expense_id, workspace_id, db)
     assert_expense_access(expense, membership)
-    return expense_response(expense)
+    return await expense_response(expense, db)
 
 
 async def get_expenses(workspace_id: int, current_user: dict, db: AsyncSession) -> list[ExpenseResponseDTO]:
     membership = await get_workspace_membership(current_user, workspace_id, db)
     stmt = select(Expense).where(Expense.workspace_id == workspace_id).order_by(Expense.expense_id)
     if membership.role != WorkspaceRole.OWNER:
-        stmt = stmt.where(Expense.submitted_by == membership.user_id)
-    expenses = (await db.scalars(stmt.execution_options(populate_existing=True))).all()
-    return [expense_response(expense) for expense in expenses]
+        stmt = stmt.where(Expense.submitted_by == membership.user_id, Expense.department_id == membership.department_id)
+    rows = (await db.execute(stmt.add_columns(User.display_name).join(User, User.user_id == Expense.submitted_by).execution_options(populate_existing=True))).all()
+    return [await expense_response(expense, db, name) for expense, name in rows]
 
 
 async def update_expense(expense_id: int, request: CreateExpenseRequestDTO, workspace_id: int, current_user: dict, db: AsyncSession) -> ExpenseResponseDTO:
@@ -117,7 +119,7 @@ async def update_expense(expense_id: int, request: CreateExpenseRequestDTO, work
         raise HTTPException(status_code=409, detail='Expense was already reviewed')
     await db.commit()
     await db.refresh(expense)
-    return expense_response(expense)
+    return await expense_response(expense, db)
 
 
 async def delete_expense(expense_id: int, workspace_id: int, current_user: dict, db: AsyncSession) -> None:
@@ -176,4 +178,4 @@ async def review_expense(expense_id: int, approve: bool, account_id: int | None,
         await db.rollback()
         raise
     await db.refresh(expense)
-    return expense_response(expense)
+    return await expense_response(expense, db)

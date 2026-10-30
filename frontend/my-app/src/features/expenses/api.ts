@@ -4,7 +4,7 @@ import { authenticatedFetch } from '@/features/auth/authenticated-fetch'
 import { readApiErrorMessage } from '@/features/auth/api-error'
 
 const expenseSchema = z.object({
-  id: z.number().int().positive(), workspace_id: z.number().int().positive(), submitted_by: z.number().int().positive(),
+  id: z.number().int().positive(), workspace_id: z.number().int().positive(), submitted_by: z.number().int().positive(), submitted_by_name: z.string(),
   reviewed_by: z.number().int().positive().nullable(), amount: z.coerce.number().positive(),
   currency: z.string().length(3), description: z.string(), receipt_url: z.string().nullable(), status: z.enum(['PENDING', 'APPROVED', 'REJECTED']),
   category_id: z.number().int().positive(), department_id: z.number().int().positive().nullable(),
